@@ -36,7 +36,8 @@ Bản thân `core_network` phụ thuộc `dio` nhưng không phụ thuộc `retr
 ## 2. Đặt endpoint trong package sở hữu
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_api_constants.dart
+// modules/auth/data/lib/src/utils/auth_constants.dart
+/// REST endpoints owned by `data_auth`.
 class AuthApiConstants {
   AuthApiConstants._();
 
@@ -45,7 +46,7 @@ class AuthApiConstants {
 }
 ```
 
-Hằng số endpoint nằm cùng package sở hữu chúng, không bao giờ ở `core_common` — đúng luật sở hữu như với storage key (RULE-09). Một file endpoint dùng chung sẽ cho phép mọi tầng đọc, và gõ nhầm, route của package khác.
+Hằng số endpoint nằm cùng package sở hữu chúng, không bao giờ ở `core_common` — đúng luật sở hữu như với storage key (RULE-09). Cùng file đó chứa `AuthStorageKeys` của package: RULE-09 cho phép endpoint và key nằm chung một `<owner>_constants.dart`. Một file endpoint dùng chung sẽ cho phép mọi tầng đọc, và gõ nhầm, route của package khác.
 
 ## 3. Khai service Retrofit
 
@@ -53,25 +54,22 @@ Khai abstract class kèm `part '<file>.g.dart';`:
 
 ```dart
 // modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
+/// Type-safe HTTP calls through Retrofit. Returns the `BaseEntity<T>` envelope;
+/// the repository turns it into a `Result<T>`.
 @RestApi()
 abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
       _AuthRemoteDataSource;
 
-  /// Authenticates user with provided credentials.
-  ///
-  /// A `401` here means wrong credentials, not an expired session — so it
-  /// must not start a token refresh.
+  /// A `401` here means wrong credentials, not an expired session, so it must
+  /// not start a token refresh.
   @POST(AuthApiConstants.LOGIN)
   @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
-  /// Refreshes the current authentication token.
-  ///
-  /// Runs *inside* a refresh, or at boot: a `401` from it reacting with
-  /// another refresh would wait on itself forever, and a timeout raising the
-  /// retry dialog would block boot on the user's answer. It fails fast
-  /// instead, and the caller decides.
+  /// Runs inside a refresh or at boot, so it neither refreshes on a `401`
+  /// (it would wait on itself) nor raises the retry dialog (it would block
+  /// boot on the user's answer): it fails fast and the caller decides.
   @POST(AuthApiConstants.REFRESH_TOKEN)
   @Extra({
     NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
@@ -102,6 +100,9 @@ void initMicroPackage() {}
 
 @module
 abstract class AuthDataDiModule {
+  /// Builds the Retrofit client from the shared [Dio] that `core_network`
+  /// registers, so the data source inherits its interceptor chain. Built here,
+  /// not inside the repository, so a test can pass a fake in.
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);
@@ -224,6 +225,9 @@ const factory BaseEntity({
   @JsonKey(name: 'message') String? message,
 }) = _BaseEntity<T>;
 
+/// Whether the envelope reports success: any 2xx. A create answered `201`
+/// or an action answered `204` is as successful as a `200`; only an
+/// envelope reporting a 1xx, 3xx, 4xx or 5xx is [hasError].
 bool get isSuccess =>
     statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
     statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
@@ -286,7 +290,7 @@ Hai đường certificate phản ánh đúng những gì Dio báo: certificate m
 
 ### Hợp đồng đăng nhập của sample
 
-`feature_auth` trong sample đăng nhập vào một backend REST mà repository này không kèm theo. `AuthRemoteDataSource` (`modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart`) gọi hai endpoint, khai trong `AuthApiConstants` (`modules/auth/data/lib/src/utils/auth_api_constants.dart`) và nối vào `BASE_URL`:
+`feature_auth` trong sample đăng nhập vào một backend REST mà repository này không kèm theo. `AuthRemoteDataSource` (`modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart`) gọi hai endpoint, khai trong `AuthApiConstants` (`modules/auth/data/lib/src/utils/auth_constants.dart`) và nối vào `BASE_URL`:
 
 | Lời gọi | Request | Response |
 |:--|:--|:--|
@@ -303,7 +307,6 @@ Backend trả lời lời gọi đăng nhập như sau thì app sample đăng nh
     "id": "u_123",
     "email": "ada@example.com",
     "name": "Ada",
-    "role": "customer",
     "token": "<access token>"
   }
 }
@@ -316,8 +319,7 @@ Envelope là `BaseEntity<UserModel>` (ở trên) và `data` là `UserModel` (`mo
 | `statusCode` | int, tùy chọn (mặc định `200`) | phải là mã 2xx (`isSuccess`); giá trị khác là response bị từ chối, kể cả khi HTTP status là `200` |
 | `message` | string, tùy chọn | chỉ là chẩn đoán cho log; người dùng không bao giờ đọc nó (RULE-34) |
 | `data.id` | string, **bắt buộc** | id người dùng; body thiếu nó thì không parse được |
-| `data.email`, `data.name` | string, tùy chọn | được chép sang `UserEntity` |
-| `data.role` | string, tùy chọn | `customer`, `owner` hoặc `none`; cách viết khác thành `UserRole.unknown`; vắng thì giữ `null` |
+| `data.email`, `data.name` | string, tùy chọn | được chép sang `UserEntity`; mọi trường khác trong `data` bị bỏ qua |
 | `data.token` | string, **bắt buộc khi đăng nhập**, tùy chọn khi gia hạn | credential của phiên: `AuthRepositoryImpl` ghi nó vào secure storage và `AuthInterceptor` gửi nó dưới dạng `Authorization: Bearer <token>` ở các request sau. Nó không bao giờ tới `UserEntity`. Thiếu nó thì đăng nhập bị từ chối; một lần gia hạn thiếu nó giữ token đã lưu |
 
 Đăng nhập chỉ thành công khi lời gọi không lỗi, `statusCode` là mã 2xx, có `data` **và** `data.token` không rỗng (`AuthRepositoryImpl._authenticate`): một envelope không có token là một lỗi (`RESPONSE_REJECTED`) và không lưu gì, vì một người dùng "đã đăng nhập" mà không có credential sẽ không khôi phục được ở lần khởi động sau. Email được trim trước khi gửi (một dấu cách cuối do autocomplete của bàn phím sẽ thành một danh tính khác); mật khẩu được gửi đúng như đã gõ. Người dùng đọc gì, bằng chính câu chữ của sample (một toast do app shell hiện từ `ISessionState.sessionFailures`, không phải do page):
@@ -325,17 +327,16 @@ Envelope là `BaseEntity<UserModel>` (ở trên) và `data` là `UserModel` (`mo
 | Backend trả lời | Failure | Người dùng đọc |
 |:--|:--|:--|
 | HTTP `401` | `AuthFailure(401)` | "Invalid credentials", và ô mật khẩu bị xóa |
-| HTTP `404` | `ServerFailure(404)` | "User not found" |
 | HTTP `5xx` | `ServerFailure(status)` | "The server is unavailable right now. Please try again later." |
-| HTTP `403`, mọi `4xx` khác | `AuthFailure(403)` / `ServerFailure(status)` | "Something went wrong" |
+| HTTP `403` (tài khoản bị khoá), `404`, mọi `4xx` khác | `AuthFailure(403)` / `ServerFailure(status)` | "Something went wrong" |
 | HTTP `200` với `statusCode` ngoài 2xx, không có `data`, hoặc (khi đăng nhập) không có `data.token` | `ServerFailure(RESPONSE_REJECTED)` | "Something went wrong" |
 | body không parse được (thiếu `data.id`, `data` không phải object) | `ServerFailure(UNKNOWN)`, đồng thời báo cho `IErrorReporter` nếu app có đăng ký | "Something went wrong" |
 | không tới được host | `NetworkFailure(CONNECTION_ERROR)` | trước hết là hộp thoại thử lại; sau **Cancel**, "No internet connection. Check your connection and try again." |
 | `BASE_URL` rỗng (`env.dev` đã commit) | `NetworkFailure(NETWORK_UNKNOWN)` | "A network error occurred. Please try again." — đường dẫn `/user/login` không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
 
-Lời gọi đăng nhập được đánh dấu `EXTRA_CAN_REFRESH_TOKEN: false`, nên `401` ở đó là sai mật khẩu chứ không phải phiên hết hạn (bước 6). Việc gia hạn chạy khi app khởi động mà có token đã lưu, và khi một request khác nhận `401`. Một câu trả lời gia hạn không có token (backend không xoay token) giữ token đã lưu và cập nhật dữ liệu người dùng đã lưu; nó không đăng xuất người dùng. Không có token đã lưu thì repository trả lời "đã đăng xuất" mà không gọi server. `401`, `403` hoặc body bị từ chối từ `/user/refresh-token` kết thúc phiên và xóa credential đã lưu; một lỗi không tới được server thì giữ phiên, và app mở ra ở trạng thái đã đăng nhập bằng người dùng lưu ở lần đăng nhập cuối (bước 9).
+Lời gọi đăng nhập được đánh dấu `EXTRA_CAN_REFRESH_TOKEN: false`, nên `401` ở đó là sai mật khẩu chứ không phải phiên hết hạn (bước 6). Việc gia hạn chạy khi app khởi động mà có token đã lưu, và khi một request khác nhận `401`. Một câu trả lời gia hạn không có token (backend không xoay token) giữ token đã lưu; nó không đăng xuất người dùng. Không có token đã lưu thì repository trả lời "đã đăng xuất" mà không gọi server. Khi server từ chối gia hạn thì token đã lưu bị bỏ: lúc app khởi động, `401` hoặc `403` làm việc đó trong repository, còn sau một `401` giữa phiên thì tầng transport kết thúc phiên qua gateway (ở đó body bị từ chối cũng tính là một lần từ chối). Một lỗi không tới được server thì giữ token và phiên; sample không lưu người dùng nào ngoài token, nên một app *khởi động* khi offline không có ai để hiển thị và mở ra ở màn hình đăng nhập cho tới khi một lần khởi động sau gia hạn được (bước 9).
 
-Để thử app mà không phải viết backend, chạy một HTTP server bất kỳ trả lời lời gọi đăng nhập như trên rồi đặt `BASE_URL` trỏ tới nó trong `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` cho thấy app sẽ nhận được gì). `env.dev` được commit, nên chỉ đặt URL vào đó, không bao giờ đặt credential. Android emulator tới máy chủ qua `10.0.2.2`, không phải `localhost`, và repository này không đặt cho phép cleartext traffic nào cho Android, nên URL `http://` thuần bị chặn ở đó cho tới khi bạn thêm — hãy dùng `https://` hoặc cho phép trong manifest của app bạn. Repository cố ý không có mock backend: template chỉ ra hình dạng và để transport cho bạn. Muốn đăng nhập vào một API khác, giữ `IAuthRepository`, `LoginParams` và `UserEntity` rồi đổi những gì nằm sau chúng: đường dẫn trong `AuthApiConstants`, tên `@JsonKey` trong `UserModel`, hoặc cả `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/` test repository với một data source giả, nên các test đó không cần server.
+Để thử app mà không phải viết backend, chạy một HTTP server bất kỳ trả lời lời gọi đăng nhập như trên rồi đặt `BASE_URL` trỏ tới nó trong `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` cho thấy app sẽ nhận được gì). `env.dev` được commit, nên chỉ đặt URL vào đó, không bao giờ đặt credential. Android emulator tới máy chủ qua `10.0.2.2`, không phải `localhost`, và repository này không đặt cho phép cleartext traffic nào cho Android, nên URL `http://` thuần bị chặn ở đó cho tới khi bạn thêm — hãy dùng `https://` hoặc cho phép trong manifest của app bạn. Repository cố ý không có mock backend: template chỉ ra hình dạng và để transport cho bạn. Muốn đăng nhập vào một API khác, giữ `IAuthRepository`, `LoginParams` và `UserEntity` rồi đổi những gì nằm sau chúng: đường dẫn trong `AuthApiConstants`, các trường của `UserModel` (kèm `@JsonKey(name: '…')` ở chỗ tên trên đường truyền khác), hoặc cả `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/auth_data_test.dart` chạy repository và session gateway với một remote data source giả cùng một storage trong bộ nhớ dưới `AuthLocalDataSource` thật, nên các test đó không cần server.
 
 ## 9. Cắm luồng refresh token
 

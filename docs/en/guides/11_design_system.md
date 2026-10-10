@@ -65,6 +65,7 @@ Open [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/l
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
 class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
+  // …
   // Core colors
   final Color primary;
   final Color primaryContainer;
@@ -81,7 +82,7 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   final Color textSecondary;
   final Color textDisabled;
   final Color textInverse;
-  // …borders, status colours, shadow, scrim, the two gradient lists
+  // …borders, status colours, shadow, scrim, the gradient list
 }
 ```
 
@@ -108,8 +109,11 @@ Both palettes are `static final` fields in [`theme/theme_system_extensions.dart`
 static final ThemeSystemExtension light = const ThemeSystemExtension(
   primary: Color(0xff0A7E8C),
   primaryContainer: Color(0xff7C3AED),
-  background: Color(0xffF8FAFC),
-  surface: Color(0xffFFFFFF),
+  secondary: Color(0xff1E293B), // iOS slate secondary
+  secondaryContainer: Color(0xffF1F5F9), // iOS slate container
+  background: Color(0xffF8FAFC), // Light iOS layout background
+  surface: Color(0xffFFFFFF), // Frosted glass layout surface
+  surfaceVariant: Color(0xffF1F5F9),
   textPrimary: Color(0xff0F172A),
   // …
 );
@@ -117,8 +121,12 @@ static final ThemeSystemExtension light = const ThemeSystemExtension(
 /// Dark theme palette.
 static final ThemeSystemExtension dark = const ThemeSystemExtension(
   primary: Color(0xff22D3EE),
-  background: Color(0xff0B0F19),
-  surface: Color(0xff151F32),
+  primaryContainer: Color(0xffA78BFA),
+  secondary: Color(0xff94A3B8),
+  secondaryContainer: Color(0xff1E293B),
+  background: Color(0xff0B0F19), // Dark iOS midnight background
+  surface: Color(0xff151F32), // Glassmorphism dark card surface
+  surfaceVariant: Color(0xff1E293B),
   textPrimary: Color(0xffF8FAFC),
   // …
 );
@@ -136,9 +144,7 @@ theme: ThemeProfile(
 ),
 ```
 
-Every colour token of `PaletteToken` (`primary`, `background`, the text colours, `success`, `error` …) is overridable; `ThemeProvider` builds both palettes once (`withOverrides`) and derives the `ColorScheme` and the extension from the result, so `context.colors.primary`, `Theme.of(context).colorScheme.primary` and the gradients agree. `textPrimary` reaches all 15 styles of the text theme (the theme is coloured first, then the sizes are scaled), so an override shows in every `Text` that takes its style from the theme. `shadow` and `scrim` are not overridable — `AppShadows` is context-free and a scrim is black with alpha on purpose — and the two gradients derive from `primary`, `primaryContainer`, `info` and `error`. Run `composer sync` after the edit so the app README's report lists the section as set ([`13_app_composition.md`](13_app_composition.md)).
-
-One token exists only for a sample screen: `liquidOnboardingColors`, the splash gradient (`AppGradients.liquidOnboarding`). Delete the splash sample and remove that token from the extension (field, `copyWith`, `lerp`, both palettes, `withOverrides`) and from `AppGradients` rather than leaving a dead colour behind.
+Every colour token of `PaletteToken` (`primary`, `background`, the text colours, `success`, `error` …) is overridable; `ThemeProvider` builds both palettes once (`withOverrides`) and derives the `ColorScheme` and the extension from the result, so `context.colors.primary`, `Theme.of(context).colorScheme.primary` and the gradients agree. `textPrimary` reaches all 15 styles of the text theme (the theme is coloured first, then the sizes are scaled), so an override shows in every `Text` that takes its style from the theme. `shadow` and `scrim` are not overridable — `AppShadows` is context-free and a scrim is black with alpha on purpose — and the gradient derives from `primary` and `primaryContainer`. Run `composer sync` after the edit so the app README's report lists the section as set ([`13_app_composition.md`](13_app_composition.md)).
 
 ### Read the colours in a widget
 
@@ -147,7 +153,7 @@ One token exists only for a sample screen: `liquidOnboardingColors`, the splash 
 Container(
   color: context.colors.surface,
   child: Text(
-    context.l10nHome.home, // a feature's localized getter — never a literal
+    context.l10nHome.userLoggedIn, // a feature's localized getter — never a literal
     style: TextStyle(color: context.colors.textPrimary),
   ),
 )
@@ -199,7 +205,7 @@ final defaultTheme = applyFont(
 );
 ```
 
-**Why bundled, not `google_fonts`.** `google_fonts` registers one family *per weight*, so a style whose weight changes later — `copyWith(fontWeight: FontWeight.bold)`, which the app-bar title and the samples do — keeps the regular file and the engine fakes the bold. One family with a file per weight lets Flutter pick the real face for any `fontWeight`. It also works offline and downloads nothing at runtime. The licence travels with the files: `assets/fonts/plus_jakarta_sans/OFL.txt`, registered with `LicenseRegistry` by `registerBaseUiLicenses()` (called in `runShellApp`), so it appears on `showLicensePage`.
+**Why bundled, not `google_fonts`.** `google_fonts` registers one family *per weight*, so a style whose weight changes later — `copyWith(fontWeight: FontWeight.bold)`, which the app-bar title does — keeps the regular file and the engine fakes the bold. One family with a file per weight lets Flutter pick the real face for any `fontWeight`. It also works offline and downloads nothing at runtime. The licence travels with the files: `assets/fonts/plus_jakarta_sans/OFL.txt`, registered with `LicenseRegistry` by `registerBaseUiLicenses()` (called in `runShellApp`), so it appears on `showLicensePage`.
 
 **Another font:** put its files under `platform/ui/design_system/assets/fonts/<name>/` with its licence, list each weight under `flutter: fonts:` (a weight the design uses but you do not ship is synthesised from the nearest one), run `dart run build_runner build --workspace` so `FontFamily` gains the new constant, and point `applyFont` at it — keep the `geometry.merge`, it is where the sizes come from. Update the licence registration to the new licence file.
 
@@ -221,7 +227,7 @@ That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take 
 ```dart
 // platform/ui/design_system/lib/src/styles/app_text_styles.dart
 static TextStyle bodyMediumStyle(BuildContext context) =>
-    _textTheme(context).bodyMedium!; // _textTheme = Theme.of(context).textTheme
+    _textTheme(context).bodyMedium!;
 ```
 
 > [!CAUTION]
@@ -248,8 +254,12 @@ To retune the scale, edit the `raw*` constant — every accessor derives from it
 // platform/ui/design_system/lib/src/styles/app_radius.dart
 static double md(BuildContext context) => context.r(rawMd);
 
+// …
+
 static BorderRadius mdRadius(BuildContext context) =>
     BorderRadius.all(Radius.circular(md(context)));
+
+// …
 
 static const double rawMd = 8;
 ```
@@ -473,17 +483,16 @@ It splits by the first rule that applies:
 // modules/auth/feature/lib/src/pages/login_page.dart
 child: SingleChildScrollView(
   padding: EdgeInsets.all(AppSpacing.xl(context)),
-  // On a tablet or desktop window the form keeps a readable width
-  // instead of stretching across the screen.
   child: AdaptiveContent(
-    child: Consumer<AuthProvider>(
+    child: Form(
+      key: _formKey,
       // …
     ),
   ),
 ),
 ```
 
-It caps its child at `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 — and places it at the top centre of the space left. On a phone the window is narrower than the cap, so nothing changes. `maxWidth` is in **window pixels and never scaled**: it answers how long a line may get, which the reader's eye settles, not the artboard — wrapped in `context.w`, it would grow with the very ratio it exists to stop. `padding`, like any reusable widget's parameter, is used as given: scale it at the call site.
+On a tablet or desktop window the login form keeps a readable width instead of stretching across the screen. `AdaptiveContent` caps its child at `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 — and places it at the top centre of the space left. On a phone the window is narrower than the cap, so nothing changes. `maxWidth` is in **window pixels and never scaled**: it answers how long a line may get, which the reader's eye settles, not the artboard — wrapped in `context.w`, it would grow with the very ratio it exists to stop. `padding`, like any reusable widget's parameter, is used as given: scale it at the call site.
 
 ### The reference: navigation chrome per window class
 
@@ -501,28 +510,27 @@ if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
   );
 }
 
+// The rail costs width a wide window has to spare, not height it has not.
 final extended = sizeClass.isAtLeast(WindowSizeClass.large);
-// The rail sits at the start edge: the left in LTR, the right in RTL
-// (a `Row` follows the text direction). It pads for the insets on its
-// outer side only; the side facing the content is the content's to pad.
-final isRtl = Directionality.of(context) == TextDirection.rtl;
 return Scaffold(
-  body: Row(
-    children: [
-      SafeArea(
-        left: !isRtl,
-        right: isRtl,
-        child: NavigationRail(
+  body: SafeArea(
+    top: false,
+    bottom: false,
+    child: Row(
+      children: [
+        NavigationRail(
           // …
           extended: extended,
           // …
         ),
-      ),
-      Expanded(child: navigationShell),
-    ],
+        Expanded(child: navigationShell),
+      ],
+    ),
   ),
 );
 ```
+
+The row sits in a `SafeArea` that pads the left and right only: a cutout or system bar beside the rail is cleared in either text direction, while `top` and `bottom` stay off, left to the tab pages.
 
 The whole page, and what the dashboard must not own: [`../architecture/05_features.md`](../architecture/05_features.md#4-feature_dashboard-is-chrome-only).
 
@@ -565,7 +573,7 @@ Material(elevation: AppElevation.raised(context), child: …)
 
 ## 9. Change gradients and shadows
 
-`AppGradients` reads live theme colours, so gradients recolour with the palette automatically:
+`AppGradients` reads live theme colours, so the gradient recolours with the palette automatically:
 
 ```dart
 // platform/ui/design_system/lib/src/styles/app_gradients.dart
@@ -579,7 +587,7 @@ static LinearGradient primaryGradient(BuildContext context) {
 }
 ```
 
-To change a gradient, edit the colour **list** in the palette (`primaryGradientColors`, `liquidOnboardingColors`), not the widget.
+To change the gradient, edit the colour **list** in the palette (`primaryGradientColors`), not the widget.
 
 `AppShadows` is the odd one out — its getters take no `BuildContext`. The shadow colour is the palette's `shadow` token (black in both palettes), read from `ThemeSystemExtension.light`, and each size applies its own alpha:
 

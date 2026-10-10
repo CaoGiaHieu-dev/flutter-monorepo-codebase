@@ -122,7 +122,7 @@ const AppProfile appProfile = AppProfile(
 );
 ```
 
-What a section cannot say is refused where it can be: `DisplayProfile(textScaleMax: 1.5)` does not compile (`const_eval_throws_exception` — RULE-38), a `NetworkProfile` header named `authorization`, `cookie`, `set-cookie`, `proxy-authorization` or `content-type` makes the default client throw at boot (RULE-66), and a `LocaleProfile` that offers no shipped language or whose fallback it does not offer throws at boot naming the field. The palette's `shadow` and `scrim`, and the two gradients, are not overridable: the gradients derive from `primary`, `primaryContainer`, `info` and `error`.
+What a section cannot say is refused where it can be: `DisplayProfile(textScaleMax: 1.5)` does not compile (`const_eval_throws_exception` — RULE-38), a `NetworkProfile` header named `authorization`, `cookie`, `set-cookie`, `proxy-authorization` or `content-type` makes the default client throw at boot (RULE-66), and a `LocaleProfile` that offers no shipped language or whose fallback it does not offer throws at boot naming the field. The palette's `shadow` and `scrim`, and the gradient, are not overridable: the gradient derives from `primary` and `primaryContainer`.
 
 `authorizedHosts` is a set of bare host names (`files.example.com`: no scheme, port or path). The bearer token goes only to the host of `BASE_URL` and to these; a request to any other host (a CDN, a presigned storage URL) leaves without credentials ([`08_networking.md`](08_networking.md) § 6).
 

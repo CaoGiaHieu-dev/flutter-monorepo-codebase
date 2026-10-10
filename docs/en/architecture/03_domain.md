@@ -149,7 +149,7 @@ Future<R> whenAsync<R>({
 ```dart
 @Freezed(genericArgumentFactories: true)
 abstract class BaseEntity<T> with _$BaseEntity<T> {
-  const BaseEntity._();
+  const BaseEntity._(); // private constructor for getters
 
   const factory BaseEntity({
     @JsonKey(name: 'statusCode') @Default(200) int statusCode,
@@ -157,6 +157,9 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
+  /// Whether the envelope reports success: any 2xx. A create answered `201`
+  /// or an action answered `204` is as successful as a `200`; only an
+  /// envelope reporting a 1xx, 3xx, 4xx or 5xx is [hasError].
   bool get isSuccess =>
       statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
       statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
@@ -173,6 +176,10 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ```dart
 abstract class BaseUseCase<RType, Params> {
+  /// Execute the use case with given parameters
+  ///
+  /// Parameters are expected to be already validated at construction time.
+  /// Returns Result<RType> containing either Success with data or Failure with error.
   FutureOr<Result<RType>> call(Params params);
 }
 ```
@@ -183,7 +190,7 @@ Use `NoParams()` when an operation takes no input.
 
 ### Cache sample
 
-The second sample domain package, `domain_cache` (`modules/cache/domain`), is a smaller slice — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, and `GetCacheEntryUseCase` / `SaveCacheEntryUseCase`. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
+The second sample domain package, `domain_cache` (`modules/cache/domain`), is the smallest slice — `CacheEntryEntity` and `ICacheEntryRepository`, with no params class and no use case on top: the contract is all `data_cache` has to implement. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
 
 ---
 
@@ -191,27 +198,26 @@ The second sample domain package, `domain_cache` (`modules/cache/domain`), is a 
 
 | File | Contents |
 |:---|:---|
-| `entities/user_entity.dart` | `UserEntity` (Freezed) |
-| `entities/user_role.dart` | `UserRole` enum — `customer`, `owner`, `none`, `unknown` |
+| `entities/user_entity.dart` | `UserEntity` (Freezed) — `id`, `email`, `name` |
 | `params/login_params.dart` | `LoginParams` |
-| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken`, `restoreSession` |
-| `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RestoreSessionUseCase` |
+| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken` |
+| `usecases/` | `LoginUseCase` — the only one |
 
 ### A use case, in full
 
 `modules/auth/domain/lib/src/usecases/login_usecase.dart`:
 
 ```dart
+/// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }
 ```
 
@@ -219,31 +225,9 @@ Three things to copy from this:
 
 1. **`@injectable`** — a use case is a factory, never a singleton.
 2. **Constructor injection** — the repository interface arrives through the constructor. Never call `getIt<T>()` inside a use case.
-3. **No validation, no unwrapping** — a use case passes its params straight through. `LoginParams` does not validate itself either; it only carries the input, which the login form (`AuthFormWidget` in `feature_auth`) validated before building it. A rule that must hold whatever the caller is belongs in the use case, returned as a `Failure` — the repository already returns `Result<T>`, so there is nothing to unwrap.
+3. **No validation, no unwrapping** — a use case passes its params straight through. `LoginParams` does not validate itself either; it only carries the input, which the login page (`LoginPage` in `feature_auth`) checked — both fields filled — before building it. A rule that must hold whatever the caller is belongs in the use case, returned as a `Failure` — the repository already returns `Result<T>`, so there is nothing to unwrap.
 
-A use case with no input takes `NoParams` and looks the same:
-
-```dart
-@injectable
-class LogoutUseCase extends BaseUseCase<void, NoParams> {
-  LogoutUseCase(this._authRepository);
-
-  final IAuthRepository _authRepository;
-
-  @override
-  Future<Result<void>> call(NoParams params) {
-    return _authRepository.logout();
-  }
-}
-```
-
-### `UserRole` has an `unknown` member on purpose
-
-```dart
-enum UserRole { customer, owner, none, unknown }
-```
-
-The enum is plain Dart: how a backend spells a role on the wire is a transport concern, so the domain names no JSON value. `unknown` is the landing slot `UserModel` (in `data_auth`) maps an unrecognised role string to, so a role the server adds later is read instead of throwing.
+A use case with no input takes `NoParams` and looks the same, apart from the parameter type: `BaseUseCase<List<ThingEntity>, NoParams>`, called as `_getThings(const NoParams())`. The sample ships none: `AuthProvider` calls `IAuthRepository.logout()` and `refreshToken()` itself, so `LoginUseCase` is the module's only use case and there is no wrapper that merely forwards a call.
 
 ---
 
@@ -280,14 +264,10 @@ The `I` prefix marks interfaces only (RULE-78); constants live in the package's 
 ```dart
 @freezed
 abstract class UserEntity with _$UserEntity {
-  const UserEntity._();          // ← required to add getters/methods
+  const UserEntity._();
 
-  const factory UserEntity({
-    required String id,
-    String? email,
-    String? name,
-    UserRole? role,
-  }) = _UserEntity;
+  const factory UserEntity({required String id, String? email, String? name}) =
+      _UserEntity;
 }
 ```
 

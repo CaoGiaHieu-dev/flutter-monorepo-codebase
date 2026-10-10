@@ -70,8 +70,8 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 
 | Loại hằng số | Nơi nó thuộc về | Vì sao không phải ở đây |
 |:--|:--|:--|
-| Key storage (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | cùng chỗ với class sở hữu giá trị đó — xem [hướng dẫn storage](../guides/06_storage.md) | Liệt kê chung một chỗ thì mọi package đọc và ghi đè được key storage của mọi feature khác. |
-| Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
+| Key storage (`TOKEN`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | cùng chỗ với class sở hữu giá trị đó — xem [hướng dẫn storage](../guides/06_storage.md) | Liệt kê chung một chỗ thì mọi package đọc và ghi đè được key storage của mọi feature khác. |
+| Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
 Ba file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — tất cả trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`), `ProfileConstants` (các define build-time mà boot đọc) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mọi mã lỗi phi-HTTP mà platform gán, chia theo dải: `1xxx` mạng (`NETWORK_ERROR`, `NO_INTERNET`, `CONNECTION_TIMEOUT`, `REQUEST_CANCELLED`, …), `2xxx` storage, `3xxx` validation, `4xxx` parsing, `5xxx` cache, `6xxx` dịch vụ ngoài, `7xxx` response envelope (`RESPONSE_REJECTED`, `EMPTY_RESPONSE`) và `UNKNOWN` 9999 — tất cả nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
@@ -165,6 +165,13 @@ void didChangePlatformBrightness() {
   notifyListeners();
 }
 
+/// Detaches the platform-brightness observer and releases the notifier.
+///
+/// Marked `@disposeMethod` so GetIt calls it when the container is reset —
+/// without it a `resetDependencies()` in tests would leave every previous
+/// instance registered as a [WidgetsBindingObserver], accumulating across
+/// resets. In a running app this never fires: the singleton lives for the
+/// whole process.
 @disposeMethod
 @override
 void dispose() {
@@ -234,10 +241,15 @@ Giá trị mặc định của các widget này nằm ở `platform/ui/ui_kit/li
 class SharedUiConstants {
   SharedUiConstants._();
 
+  /// Default show/hide duration of a dialog raised through `AppOverlay`.
   static const Duration DIALOG_TRANSITION_DURATION = Duration(
     milliseconds: 200,
   );
+
+  /// Default visible duration for a toast raised by `AppOverlay.showToast`.
   static const Duration TOAST_DURATION = Duration(seconds: 3);
+
+  /// Default height of `CustomButton.rectangle`.
   static const double BUTTON_HEIGHT = 48;
   // … kích thước và alpha mặc định của các widget còn lại
 }
@@ -345,7 +357,6 @@ class ApiClient {
   final NetworkProfile _profile;
   final LocaleProfile _locale;
 
-  // The profiles are optional: a client built by hand takes the template defaults.
   ApiClient(
     this._config, [
     this._profile = const NetworkProfile(),
@@ -358,7 +369,7 @@ class ApiClient {
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
     baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: _profile.connectTimeout, // 20 s unless the app sets it
+    connectTimeout: _profile.connectTimeout,
     receiveTimeout: _profile.receiveTimeout,
     sendTimeout: _profile.sendTimeout,
     followRedirects: _profile.followRedirects,
@@ -387,6 +398,7 @@ dio.interceptors.add(
     getToken: _config.getToken,
     getLocale: _config.getLocale,
     defaultLanguageCode: _locale.fallback,
+    authorizedHosts: _profile.authorizedHosts,
   ),
 );
 
@@ -436,6 +448,9 @@ if (needAuthentication) {
       });
     }
   } else {
+    // A `401` from a host that never saw the token says nothing about the
+    // session: it must not start a refresh, and a refresh that fails
+    // would sign the user out over somebody else's server.
     options.extra[NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] = false;
   }
 }
@@ -481,7 +496,7 @@ static Map<String, dynamic> redactHeaders(Map<String, dynamic> headers) {
   return {
     for (final entry in headers.entries)
       entry.key: redactedKeys.contains(entry.key.toLowerCase())
-          ? '***REDACTED***'
+          ? _mask
           : entry.value,
   };
 }
@@ -494,15 +509,31 @@ Body cũng được che, ở mọi độ sâu — request login mang password tr
 ```dart
 // platform/infra/network/lib/src/network_config.dart
 abstract class NetworkConfig {
+  /// Callback to get the current authentication token.
   String? Function() get getToken;
+
+  /// Callback to get the current locale/language code.
   String? Function() get getLocale;
 
+  /// Callback to display the retry confirmation dialog to the user.
   void onRetryCallback({
     required VoidCallback onRetry,
     required VoidCallback onCancel,
   });
 
+  /// Refreshes the expired session and returns the new bearer token, or `null`
+  /// when the refresh fails.
+  ///
+  /// Return `null` from this getter to disable automatic refresh entirely — in
+  /// that case a `401` is surfaced to the caller unchanged, which is the
+  /// behaviour of a client that has no refresh endpoint.
+  ///
+  /// Implementations must not issue the refresh call through an authenticated
+  /// client; see [RefreshTokenInterceptor] for the recursion guard.
   Future<String?> Function()? get onRefreshToken => null;
+
+  /// Invoked once when [onRefreshToken] could not produce a new token, so the
+  /// app can clear the session and send the user back to the login screen.
   Future<void> Function()? get onRefreshFailed => null;
 }
 ```
@@ -526,21 +557,32 @@ class NetworkConfigImpl implements NetworkConfig {
   /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
-  /// Whether a session owner is composed — *without* resolving it:
-  /// resolving the gateway while `Dio` is being built closes a dependency
-  /// cycle.
+  /// Whether a session owner is composed — *without* resolving it.
+  ///
+  /// `ApiClient` reads [onRefreshToken] while `Dio` is being constructed, and
+  /// the gateway's own dependency chain (`IAuthRepository` →
+  /// `AuthRemoteDataSource`) needs that same `Dio`. Resolving the gateway
+  /// here closed the loop: GetIt threw "Circular dependency detected" and
+  /// the app booted to an error screen. The lookup itself stays lazy, inside
+  /// the callbacks, which run long after construction.
   bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
   @override
   String? Function() get getToken =>
       () => _session?.readToken();
 
-  /// The app's language, resolved like `LanguageProvider` resolves it, so the
-  /// server always gets a language the app offers.
+  /// The app's language, resolved like `LanguageProvider` resolves it — a
+  /// stored choice, else the app's initial or the device's language when
+  /// supported, else the profile's fallback — so the server always gets a
+  /// language the app offers.
   @override
   String? Function() get getLocale =>
       () => _languages.resolve(_languageStorage.getLanguage()).languageCode;
 
+  /// Returning null here is load-bearing: `ApiClient` adds
+  /// `RefreshTokenInterceptor` **only** when this is non-null. With no auth
+  /// module there is no session to renew, so a 401 should fail outright
+  /// rather than pass through an interceptor that can never succeed.
   @override
   Future<String?> Function()? get onRefreshToken =>
       _hasSession ? _refreshSession : null;
@@ -567,37 +609,25 @@ Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
   if (result.isSuccess) return _local.getUserToken();
   final failure = result.errorOrNull;
-  if (isTransientFailure(failure)) {
-    throw StateError(
-      'Session renewal did not reach the server: '
-      '${failure?.message}',
-    );
+  if (_isTransient(failure)) {
+    throw StateError('Session renewal got no answer: ${failure?.message}');
   }
   return null;
 }
 
-// modules/auth/data/lib/src/session/transient_failure.dart
-/// Whether [failure] says nothing about the session's validity — the
-/// request never got the server's verdict — so the session must be kept.
-///
-/// Only a failure that never reached a decision counts: no network
-/// ([NetworkFailure]), a certificate or pin rejection
-/// ([ErrorCodes.BAD_CERTIFICATE], raised by the handshake before any request
-/// is sent), a real HTTP 5xx, or a cancelled request. Every other
-/// failure means the server answered and refused — a 401/403, another 4xx,
-/// or a 200 whose envelope reports an error (`ErrorCodes.RESPONSE_REJECTED`).
-///
-/// Shared by the two places that decide whether a user stays signed in:
-/// [AuthSessionGatewayImpl.refreshToken] (a `401` mid-session) and
-/// `AuthRepositoryImpl.restoreSession` (app start).
-bool isTransientFailure(AppFailure<dynamic>? failure) {
+@override
+Future<void> clearSession() => _local.clearUserToken();
+
+/// No network, a bad certificate, a cancelled request or a real HTTP 5xx say
+/// nothing about the session. Anything else means the server answered and
+/// refused: a 4xx, or a 200 whose envelope reports an error.
+static bool _isTransient(AppFailure<dynamic>? failure) {
   if (failure is NetworkFailure) return true;
-  if (failure is! ServerFailure) return false;
-  final code = failure.code;
-  if (code == null) return false;
-  return (code >= 500 && code < 600) ||
-      code == ErrorCodes.REQUEST_CANCELLED ||
-      code == ErrorCodes.BAD_CERTIFICATE;
+  final code = failure is ServerFailure ? failure.code : null;
+  return code != null &&
+      ((code >= 500 && code < 600) ||
+          code == ErrorCodes.REQUEST_CANCELLED ||
+          code == ErrorCodes.BAD_CERTIFICATE);
 }
 ```
 
@@ -679,13 +709,27 @@ Khi pinning được cài, manifest của app đã quyết định nó, theo t�
 
 ```dart
 // platform/foundation/common/lib/src/config/app_initializer.dart
-switch (profile.facts.sslPinning.decisionFor(flavor)) {
-  case PinnedSsl(:final hashes):
-    HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
-  case DisabledSsl(:final reason):
-    // WARNING: "SSL pinning is disabled for flavor <f>: <reason>. Traffic is NOT pinned."
-  case null:
-    // ERROR naming flavors.<f>.ssl_pinning — unreachable once `validate` (P04) passed
+static void _applyDeclaredPinning(AppProfile profile, Flavor flavor) {
+  final decision = profile.facts.sslPinning.decisionFor(flavor);
+  switch (decision) {
+    case PinnedSsl(:final hashes):
+      HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
+    case DisabledSsl(:final reason):
+      DynamicLogger.log(
+        'SSL pinning is disabled for flavor ${flavor.name}: $reason. '
+        'Traffic is NOT pinned.',
+        tag: 'Security',
+        level: LogLevel.WARNING,
+      );
+    case null:
+      DynamicLogger.log(
+        'SSL pinning has no decision for flavor ${flavor.name} in '
+        'apps/${profile.facts.id}/app_manifest.yaml '
+        '(flavors.${flavor.name}.ssl_pinning). Traffic is NOT pinned.',
+        tag: 'Security',
+        level: LogLevel.ERROR,
+      );
+  }
 }
 ```
 
@@ -764,6 +808,7 @@ if (masterKey == null) {
 ```dart
 // platform/infra/storage/lib/src/obfuscated_bytes.dart
 class ObfuscatedBytes {
+  /// Masks [original]. The caller should zero [original] afterwards.
   ObfuscatedBytes(List<int> original)
     : _mask = _randomMask(original.length),
       _masked = Uint8List(original.length) {
@@ -791,9 +836,10 @@ static Future<String?> readKeyWithRetry(
     try {
       return await storage.read(key: keyId);
     } catch (e) {
-      final lastAttempt = attempt >= StorageConstants.MASTER_KEY_READ_ATTEMPTS;
+      final lastAttempt =
+          attempt >= StorageConstants.MASTER_KEY_READ_ATTEMPTS;
       // … ghi log: WARNING khi thử lại, ERROR ở lần cuối …
-      if (lastAttempt) rethrow; // không xoá gì, không sinh key mới
+      if (lastAttempt) rethrow;
       await Future<void>.delayed(retryDelay * attempt);
     }
   }
@@ -835,7 +881,7 @@ Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManag
 
 | Chủ sở hữu | Package | Key | Backend |
 |:--|:--|:--|:--|
-| `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
+| `AuthLocalDataSource` | `data_auth` | `token` | secure |
 | `ThemeStorageImpl` | `platform_shell_adapters` | `themeMode` | pref |
 | `LanguageStorageImpl` | `platform_shell_adapters` | `locale` | pref |
 | `AppBootStorage` | `platform_shell_adapters` | `viewed_onboard` | pref |
@@ -902,10 +948,17 @@ Future<void> run(Migrator m, int from, int to) async {
     return;
   }
 
-  // A downgrade from a schema this build has no step for is refused.
   final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
   if (newestKnown == null || newestKnown < from) {
-    throw UnsupportedError('Cannot downgrade the schema from version $from …');
+    throw UnsupportedError(
+      'Cannot downgrade the schema from version $from to $to: this build '
+      'registers no IDatabaseMigration for version $from '
+      '(${newestKnown == null ? 'it registers none' : 'its newest is version $newestKnown'}), '
+      'so it cannot reverse that schema. The database is left untouched. '
+      'Downgrades need an explicit IDatabaseMigration.downgrade step for '
+      'every version being left; otherwise reinstall a build with schema '
+      'version $from or later.',
+    );
   }
 
   for (final migration in _migrations.reversed) {
@@ -943,7 +996,10 @@ beforeOpen: (OpeningDetails details) async {
 
   // Write-Ahead Logging lets readers run concurrently with a writer,
   // which a read pool (readPool > 0) requires, and avoids "database is locked"
-  // under contention.
+  // under contention. It changes the on-disk layout by adding `-wal` and
+  // `-shm` sidecar files; SQLite converts an existing database
+  // automatically and reversibly. In-memory databases (tests) ignore
+  // this and stay in `memory` journal mode.
   await database.customStatement('PRAGMA journal_mode = WAL');
 
   // Wait for a held lock instead of failing instantly with SQLITE_BUSY.
@@ -959,7 +1015,7 @@ beforeOpen: (OpeningDetails details) async {
 
 `beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
 
-WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
+WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — nên một test khẳng định WAL phải chạy trên **file thật** (test của chính template không còn khẳng định các pragma; [`07_database.md`](../guides/07_database.md) § 12 nói khi nào nên thêm).
 
 Tập trung hoá vì đúng một lý do: một package tự viết `MigrationStrategy` riêng mà quên `foreign_keys = ON` sẽ mất toàn vẹn tham chiếu mà không có lỗi nào báo.
 

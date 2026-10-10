@@ -55,22 +55,16 @@ Adjust the `path:` to your package's depth. Leave the versions off: they live on
 Never in `core_common`, never in `core_storage` (RULE-09, RULE-44). The worked example is the auth token, which really exists in the repo:
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_storage_keys.dart
-/// Physical storage keys owned exclusively by `feature_auth`'s data layer.
-///
-/// Package-internal by convention — no other package's pubspec declares a
-/// dependency on `data_auth`, so nothing outside this package can reach
-/// [AuthLocalDataSource] (or these keys) even though the barrel re-exports
-/// them. Never reference these keys from another package.
+// modules/auth/data/lib/src/utils/auth_constants.dart
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
-Conventions: private constructor, `UPPER_SNAKE_CASE`, one class per owner. The shell's own owners follow it in `platform/shell/adapters/lib/src/utils/` (`ThemeStorageKeys`, `LanguageStorageKeys`, `AppBootStorageKeys`). A key is a physical name already written on users' devices: renaming one orphans what is stored under it.
+The same file holds `AuthApiConstants`, the package's endpoints: RULE-09 allows keys and endpoints in one `<owner>_constants.dart`, or one file each. Conventions: private constructor, `UPPER_SNAKE_CASE`, one keys class per owner. The shell's own owners follow it in `platform/shell/adapters/lib/src/utils/` (`ThemeStorageKeys`, `LanguageStorageKeys`, `AppBootStorageKeys`). A key is a physical name already written on users' devices: renaming one orphans what is stored under it.
 
 ## 4. Declare the `StorageValue` inside the owner
 
@@ -88,11 +82,6 @@ class AuthLocalDataSource {
     _storageManager.getStorage(StorageType.secure),
     AuthStorageKeys.TOKEN,
   );
-
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
 ```
 
 The fields are `private` + `late final`: nobody outside the class can reach the raw `StorageValue`, only the methods you choose to expose.
@@ -100,13 +89,13 @@ The fields are `private` + `late final`: nobody outside the class can reach the 
 ## 5. Register the owner as a singleton and hydrate it
 
 ```dart
-  /// Hydrates the in-memory cache from disk at startup so synchronous
-  /// getters below return correct values immediately.
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
 ```
+
+An owner with several values hydrates them together: `await Future.wait([_a.readFromStorage(), _b.readFromStorage()])`.
 
 > [!CAUTION]
 > Register the owner as `@singleton` / `@lazySingleton` — **never `@injectable`** (RULE-45). `@injectable` is a factory: every injection point builds a *new* instance whose in-memory cache is empty. Synchronous getters then return `null` even though the value is on disk. Pair it with `@PostConstruct(preResolve: true)`, so DI awaits the disk read before the graph is handed to the app.
@@ -172,8 +161,12 @@ late final _viewedOnboard = StorageValue<bool>(
   },
 );
 
+// …
+
 bool get viewedOnboard => _viewedOnboard.value ?? false;
 
+/// Records that the entry location has been shown. The in-memory value
+/// changes at once; the returned future completes when it is persisted.
 Future<void> markOnboardViewed() => _viewedOnboard.save(true);
 ```
 
@@ -191,7 +184,9 @@ The theme is the live example of the first kind:
 ```dart
 // platform/foundation/contracts/lib/src/i_theme_storage.dart — no storage types leak through it
 abstract class IThemeStorage {
+  /// Gets the current ThemeMode from storage.
   ThemeMode getThemeMode();
+  /// Saves the given ThemeMode to storage.
   void saveThemeMode(ThemeMode mode);
 }
 ```

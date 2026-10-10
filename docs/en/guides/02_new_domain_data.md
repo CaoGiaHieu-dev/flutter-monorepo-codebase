@@ -66,31 +66,20 @@ Real code from
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'user_role.dart';
-
 part 'user_entity.freezed.dart';
 
-/// SAMPLE — the user as the auth module models it.
-///
-/// Add the fields your product needs; whatever you add here is visible to
-/// everything that can see this entity, which is why the cross-module
-/// contract carries a narrower `SessionPrincipal` instead of this type.
-///
-/// No `fromJson`: parsing a payload is the data layer's job (`UserModel`).
+/// SAMPLE — the user as the auth module models it. No `fromJson`: parsing a
+/// payload is the data layer's job (`UserModel`).
 @freezed
 abstract class UserEntity with _$UserEntity {
   const UserEntity._();
 
-  const factory UserEntity({
-    required String id,
-    String? email,
-    String? name,
-    UserRole? role,
-  }) = _UserEntity;
+  const factory UserEntity({required String id, String? email, String? name}) =
+      _UserEntity;
 }
 ```
 
-Entities carry **business** fields only — no `statusCode`, no `message`, no transport concerns.
+Entities carry **business** fields only — no `statusCode`, no `message`, no transport concerns. Whatever you add is visible to everything that can see the entity, which is why the cross-module session contract carries a narrower `SessionPrincipal` (`AuthStatusStreamImpl` does the narrowing) instead of this type.
 
 ## 4. Write the params
 
@@ -104,8 +93,6 @@ part 'login_params.freezed.dart';
 
 @freezed
 abstract class LoginParams with _$LoginParams {
-  /// Input is validated by the login form before this is built; the params
-  /// object itself only carries it.
   const factory LoginParams({required String email, required String password}) =
       _LoginParams;
 }
@@ -150,14 +137,13 @@ import '../repositories/i_auth_repository.dart';
 /// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }
 ```
 
@@ -180,73 +166,28 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'user_model.freezed.dart';
 part 'user_model.g.dart';
 
+/// The login / refresh payload. `token` is the session credential: it is read
+/// here, handed to the local data source and never reaches [UserEntity].
 @freezed
 abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
   const UserModel._();
 
   const factory UserModel({
-    @JsonKey(name: 'id') required String id,
-    @JsonKey(name: 'email') String? email,
-    @JsonKey(name: 'name') String? name,
-
-    /// The role as the backend spells it (`customer`, `owner`, `none`).
-    ///
-    /// Kept as the wire string here and mapped in [toEntity]: the spelling is
-    /// the transport's concern, so `domain_auth`'s [UserRole] carries no
-    /// JSON annotation.
-    @JsonKey(name: 'role') String? role,
-
-    /// Session credential from the login/refresh response.
-    ///
-    /// Deliberately absent from [UserEntity]: a token is something the
-    /// transport hands back, not part of who the user is. It is read once
-    /// here, handed to the local data source, and never travels upward.
-    @JsonKey(name: 'token') String? token,
+    required String id,
+    String? email,
+    String? name,
+    String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
 
-  /// The backend's spelling of each [UserRole]. [UserRole.unknown] has none:
-  /// it is what an unrecognised value maps to.
-  static const Map<UserRole, String> _roleNames = {
-    UserRole.customer: 'customer',
-    UserRole.owner: 'owner',
-    UserRole.none: 'none',
-  };
-
   @override
-  UserEntity toEntity() {
-    return UserEntity(
-      id: id,
-      email: email,
-      name: name,
-      role: role == null ? null : _roleFromName(role!),
-    );
-  }
-
-  factory UserModel.fromEntity(UserEntity entity) {
-    return UserModel(
-      id: entity.id,
-      email: entity.email,
-      name: entity.name,
-      role: switch (entity.role) {
-        null => null,
-        final role => _roleNames[role] ?? role.name,
-      },
-    );
-  }
-
-  static UserRole _roleFromName(String name) {
-    for (final entry in _roleNames.entries) {
-      if (entry.value == name) return entry.key;
-    }
-    return UserRole.unknown;
-  }
+  UserEntity toEntity() => UserEntity(id: id, email: email, name: name);
 }
 ```
 
-`@JsonKey` absorbs the server's naming so the entity never has to. A value the server spells its own way (here the role) stays a wire string in the model and is mapped in `toEntity()`, so the domain enum carries no JSON annotation; an unrecognised value maps to `UserRole.unknown` instead of throwing.
+The model has the shape of the payload; `toEntity()` is the boundary where it narrows — here `token` is dropped, because a credential is something the transport hands back, not part of who the user is. The field names above match the backend's, so there is nothing to annotate; when the server spells one differently, add `@JsonKey(name: '…')` to that field in the model and the entity never sees the wire name.
 
 ## 8. Write the data source
 
@@ -276,19 +217,19 @@ If your package persists key-value data, it declares its **own** `StorageValue` 
 `StorageManager`. `core_storage` provides the mechanism only; it defines no keys.
 
 Keys go in `utils/` — real code from
-[`modules/auth/data/lib/src/utils/auth_storage_keys.dart`](../../../modules/auth/data/lib/src/utils/auth_storage_keys.dart):
+[`modules/auth/data/lib/src/utils/auth_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_constants.dart),
+which holds the package's endpoints (`AuthApiConstants`) and its keys in one file (RULE-09):
 
 ```dart
-/// Physical storage keys owned exclusively by `feature_auth`'s data layer.
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
-The owner then builds its values and hydrates them at boot
+The owner then builds its value and hydrates it at boot
 ([`auth_local_data_source.dart`](../../../modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart)):
 
 ```dart
@@ -303,18 +244,15 @@ class AuthLocalDataSource {
     AuthStorageKeys.TOKEN,
   );
 
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
-
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
   // …
 }
 ```
+
+A second key adds a second `StorageValue` field, and `initialize()` hydrates both with `Future.wait`.
 
 > [!CAUTION]
 > A storage owner must be a **singleton** (`@lazySingleton` / `@singleton`) with
@@ -345,8 +283,8 @@ class CacheEntryRepositoryImpl extends BaseRepository
   }
 
   @override
-  Future<Result<void>> save(CacheEntryParams params) {
-    return execute<void, void>(() => _local.save(params.key, params.value));
+  Future<Result<void>> save(String key, String value) {
+    return execute<void, void>(() => _local.save(key, value));
   }
 }
 ```
@@ -362,19 +300,19 @@ return execute<BaseEntity<UserModel>, UserEntity>(
   request,
   successCondition: (response) {
     final user = response.data;
-    if (!response.isSuccess || user == null) return false;
-    return !requiresToken || hasToken(user);
+    return response.isSuccess &&
+        user != null &&
+        (!requiresToken || _hasToken(user));
   },
   onSuccess: (response) async {
     final user = response.data!;
-    if (hasToken(user)) await _local.saveUserToken(user.token);
-    await _local.saveUserData(user);
+    if (_hasToken(user)) await _local.saveUserToken(user.token!);
   },
   mapper: (response) => response.data!.toEntity(),
 );
 ```
 
-The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is the envelope and `mapper` unwraps it. `successCondition` turns a 200 with an error body (or no `data`) into a `Failure` before `mapper` runs — which is what makes the `!` safe — and `onSuccess` runs only after it passes. A rejected response fails with `ErrorCodes.RESPONSE_REJECTED`, carrying the envelope's `message`; a `null` result for a non-nullable `T` fails with `ErrorCodes.EMPTY_RESPONSE`.
+The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is the envelope and `mapper` unwraps it. `successCondition` turns a 200 with an error body (or no `data`) into a `Failure` before `mapper` runs — which is what makes the `!` safe — and `onSuccess` runs only after it passes. A sign-in answer without a token is no session, so `login` passes `requiresToken: true` and `successCondition` fails it; a renewal that omits the token keeps the stored one. A rejected response fails with `ErrorCodes.RESPONSE_REJECTED`, carrying the envelope's `message`; a `null` result for a non-nullable `T` fails with `ErrorCodes.EMPTY_RESPONSE`.
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in

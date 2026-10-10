@@ -102,7 +102,9 @@ Widget build(BuildContext context, GoRouterState state) {
   return BlocProvider(
     // Auth is optional: an app composed without `feature_auth` registers
     // no ISessionStatusStream, and Home then shows the signed-out state.
-    create: (_) => getIt<HomeProfileBloc>(param1: getItOrNull<ISessionStatusStream>()),
+    create: (_) => getIt<HomeProfileBloc>(
+      param1: getItOrNull<ISessionStatusStream>(),
+    ),
     child: const HomePage(),
   );
 }

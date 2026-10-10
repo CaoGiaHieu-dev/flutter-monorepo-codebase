@@ -73,15 +73,20 @@ then treats every user as signed out (RULE-14). Bind each further interface with
 ```dart
 @module
 abstract class AuthDiModule {
+  /// The neutral session stream other features listen to.
   @singleton
-  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
+      impl;
 
+  /// The shell-facing session view: boot sequencing and the failure channel.
   @lazySingleton
   ISessionState bindISessionState(AuthProvider provider) => provider;
 
+  /// `GoRouter.refreshListenable`: routing reacts to sign-in and sign-out.
   @lazySingleton
-  ISessionRefreshListenable bindISessionRefreshListenable(AuthProvider provider) =>
-      provider;
+  ISessionRefreshListenable bindISessionRefreshListenable(
+    AuthProvider provider,
+  ) => provider;
 }
 ```
 
@@ -97,8 +102,12 @@ client from the shared `Dio`:
 ```dart
 @module
 abstract class AuthDataDiModule {
+  /// Builds the Retrofit client from the shared [Dio] that `core_network`
+  /// registers, so the data source inherits its interceptor chain. Built here,
+  /// not inside the repository, so a test can pass a fake in.
   @lazySingleton
-  AuthRemoteDataSource authRemoteDataSource(Dio dio) => AuthRemoteDataSource(dio);
+  AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+      AuthRemoteDataSource(dio);
 }
 ```
 

@@ -88,7 +88,7 @@ class AuthPath {
 | `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |
 
-Every one with user-facing strings also registers its `IFeatureLocalization` — all but `feature_dashboard`, which has none. `ISessionGateway` is registered by `data_auth`, not by the feature. `feature_onboarding` imports `auth_api` and `home_api`, `feature_settings` imports `auth_api` — the only cross-module edges, each to an API package, never to another feature.
+Every one with user-facing strings also registers its `IFeatureLocalization` — all but `feature_dashboard` and `feature_splash`, which have none. `ISessionGateway` is registered by `data_auth`, not by the feature. `feature_onboarding` imports `auth_api` and `home_api`, `feature_settings` imports `auth_api` — the only cross-module edges, each to an API package, never to another feature.
 
 `feature_auth` and `feature_home` are deliberately built on **different** state approaches so the template demonstrates both. See [state management](../guides/03_state_management.md) — and read the honest comparison there before choosing, because the two branches are not equally equipped.
 
@@ -124,55 +124,62 @@ class DashboardRouteModuleImpl implements IDashboardRouteModule {
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart
 @override
 Widget build(BuildContext context) {
-  final index = navigationShell.currentIndex;
-  final tabs = destinations;
-  if (tabs.length < 2) return Scaffold(body: navigationShell);
+  // A bar or rail needs at least two destinations.
+  if (destinations.length < 2) return Scaffold(body: navigationShell);
 
-  final selected = index.clamp(0, tabs.length - 1);
-  // This is where a neutral [NavDestination] becomes one app's widget —
-  // the same modules feed both forms below, unchanged.
-  final items = [for (final tab in tabs) tab.destination(context)];
-
-  // A phone keeps the bottom bar (the shell locks phone-sized displays to
-  // portrait). From a medium window up — a tablet in either orientation,
-  // an unfolded foldable, a desktop window — the tabs move to a side
-  // rail, which costs width the window has to spare instead of height it
-  // has not.
+  final items = [for (final tab in destinations) tab.destination(context)];
+  final selected = navigationShell.currentIndex;
   final sizeClass = context.windowSizeClass;
+
   if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selected,
         onTap: _onSelect,
-        items: [for (final d in items) _itemOf(d)],
+        // `shifting` (Flutter's default from the fourth tab) hides the
+        // labels of unselected tabs.
+        type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
+        items: [
+          for (final d in items)
+            BottomNavigationBarItem(
+              icon: Icon(d.icon),
+              activeIcon: Icon(d.selectedIcon ?? d.icon),
+              label: d.label,
+            ),
+        ],
       ),
     );
   }
 
+  // The rail costs width a wide window has to spare, not height it has not.
   final extended = sizeClass.isAtLeast(WindowSizeClass.large);
-  // The rail sits at the start edge: the left in LTR, the right in RTL
-  // (a `Row` follows the text direction). It pads for the insets on its
-  // outer side only; the side facing the content is the content's to pad.
-  final isRtl = Directionality.of(context) == TextDirection.rtl;
   return Scaffold(
-    body: Row(
-      children: [
-        SafeArea(
-          left: !isRtl,
-          right: isRtl,
-          child: NavigationRail(
+    body: SafeArea(
+      top: false,
+      bottom: false,
+      child: Row(
+        children: [
+          NavigationRail(
             selectedIndex: selected,
             onDestinationSelected: _onSelect,
             extended: extended,
             labelType: extended
                 ? NavigationRailLabelType.none
                 : NavigationRailLabelType.all,
-            destinations: [for (final d in items) _railItemOf(d)],
+            destinations: [
+              for (final d in items)
+                NavigationRailDestination(
+                  icon: Icon(d.icon),
+                  selectedIcon: Icon(d.selectedIcon ?? d.icon),
+                  label: Text(d.label),
+                ),
+            ],
           ),
-        ),
-        Expanded(child: navigationShell),
-      ],
+          Expanded(child: navigationShell),
+        ],
+      ),
     ),
   );
 }
@@ -195,10 +202,13 @@ A feature registers one implementation and gets a branch plus a nav item:
 
 ```dart
 // modules/home/feature/lib/src/routing/home_nav_destination.dart
+/// SAMPLE: a module contributing one primary navigation destination. It
+/// describes the destination ([NavDestination]) instead of building a widget,
+/// so the dashboard can render it as a bottom bar or a rail.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
-  int get order => 0;                       // ascending sort key, unique per tab
+  int get order => 0;
 
   @override
   String get path => HomePath.HOME;
@@ -215,7 +225,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-Tapping the tab the user is already on returns that branch to its first page (`navigationShell.goBranch(index, initialLocation: …)` in the dashboard).
+`order` is the ascending sort key and must be unique per tab. Tapping the tab the user is already on returns that branch to its first page (`navigationShell.goBranch(index, initialLocation: …)` in the dashboard).
 
 Use `INavDestinationModule` **only** for primary bottom-nav destinations that need their own `StatefulShellBranch`. A screen pushed on top of a tab is an ordinary route inside that branch.
 
@@ -270,17 +280,17 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 > [!CAUTION]
 > **Do not wrap again inside the page.** If the route already provides the controller, a second `BlocProvider` / `ChangeNotifierProvider` in `HomePage.build` creates a *different* instance. The page then renders one object while events go to another — state appears frozen, and neither instance is disposed properly.
 
-A global controller needs no wrapper at all. `AuthProvider` is `@lazySingleton`, so `LoginRoute` builds `const LoginPage()` directly and the page reads it with `Consumer<AuthProvider>`:
+A global controller needs no wrapper at all. `AuthProvider` is `@lazySingleton`, so `LoginRoute` builds `const LoginPage()` directly and the page reads it with `context.read<AuthProvider>()` and a `Selector`:
 
 ```dart
+@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
+
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const LoginPage();
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }
 ```
 
@@ -391,7 +401,7 @@ A `core_di` contract may not name a type from a
 `domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
 type,
 [`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), and the auth
-feature narrows its entity to it at the boundary (`AuthStatusStreamImpl.toPrincipal`). The contract is
+feature narrows its entity to it at the boundary (`AuthStatusStreamImpl.updateAuthStatus`). The contract is
 deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
 rest.
 

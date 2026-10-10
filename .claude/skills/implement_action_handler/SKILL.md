@@ -39,8 +39,12 @@ dependencies only — `arch_check` R3). If the module has no API package yet,
 ```dart
 import 'package:flutter/widgets.dart';
 
+/// Auth actions another feature may trigger (settings' logout row).
+///
+/// Resolve with `getItOrNull<IAuthActionHandler>()` and hide the action when
+/// it is null: `feature_auth` implements it and is removable (RULE-12).
 abstract class IAuthActionHandler {
-  /// Signs the user out; completes once the stored session is cleared.
+  /// Signs the user out; the app shell navigates to sign-in on its own.
   Future<void> logout(BuildContext context);
 }
 ```
@@ -57,7 +61,7 @@ the interface in `modules/<owner>/feature/lib/src/handlers/<name>_action_handler
 import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
-import 'package:provider/provider.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 import '../provider/auth_provider.dart';
 

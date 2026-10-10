@@ -45,7 +45,7 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-06 | Every `package:` import under `lib/` is declared in that package's `dependencies:` (never only `dev_dependencies`); a declared dependency nothing imports is removed | One shared `package_config.json` hides an undeclared import until extraction | arch_check R5 (undeclared), CI unused-deps step (declared, never imported) | `dart tools/arch_check/check.dart` · `dart tools/unused_checker/check_unused_packages.dart` | [§2](#2-explicit-dependency-declaration) |
 | RULE-07 | `platform_kernel` stays pure Dart — no Flutter or Flutter-bound package, no transport or persistence library (`dio`, `retrofit`, `drift`, `http`), no engine-only `dart:` library, in imports, `dependencies:`, `dev_dependencies:` or tests | It is every package's dependency list | arch_check R9 | `dart tools/arch_check/check.dart` | [architecture/02_core §1](../architecture/02_core.md) |
 | RULE-08 | `core_di` holds product-neutral contracts only: no `domain_*` dependency, a contract carries its own value type (`SessionPrincipal`), returns plain `Widget`s, and prefers a Dart 3 `sealed class` over Freezed | A domain type in the hub makes every consumer depend on one module | arch_check R1 (dependency half), review | `dart tools/arch_check/check.dart` | [§15](#15-cross-feature-communication) |
-| RULE-09 | A package's public constants live in its own `utils/` (routes `*_path.dart`, keys `*_storage_keys.dart`, endpoints `*_api_constants.dart`) as `UPPER_SNAKE_CASE`; design tokens stay in `styles/`; no shared cross-domain constants file | A constant has exactly one owner | arch_check R4 (a public `static const` outside `utils/` / `styles/`), review (naming, other declaration forms, a shared constants file) | `dart tools/arch_check/check.dart` | [§3](#3-constants-live-in-utils) |
+| RULE-09 | A package's public constants live in its own `utils/` (routes `*_path.dart`, keys `*_storage_keys.dart`, endpoints `*_api_constants.dart`, or both in one `<owner>_constants.dart`) as `UPPER_SNAKE_CASE`; design tokens stay in `styles/`; no shared cross-domain constants file | A constant has exactly one owner | arch_check R4 (a public `static const` outside `utils/` / `styles/`), review (naming, other declaration forms, a shared constants file) | `dart tools/arch_check/check.dart` | [§3](#3-constants-live-in-utils) |
 
 ### 10–19 · Dependency injection
 
@@ -262,18 +262,17 @@ Applied conventions:
 | Kind | Location | Real example |
 |---|---|---|
 | Route paths | `lib/src/utils/<feature>_path.dart` | `modules/home/feature/lib/src/utils/home_path.dart` |
-| Storage keys | `lib/src/utils/<owner>_storage_keys.dart` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| API endpoints | `lib/src/utils/<owner>_api_constants.dart` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
+| Storage keys | `lib/src/utils/<owner>_storage_keys.dart` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| API endpoints (alone, or with the keys in a small package) | `lib/src/utils/<owner>_api_constants.dart`, or `<owner>_constants.dart` for both | `modules/auth/data/lib/src/utils/auth_constants.dart` (`AuthApiConstants` and `AuthStorageKeys`) |
 
 Constant classes use a private constructor and `UPPER_SNAKE_CASE` members:
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_constants.dart
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
@@ -308,6 +307,11 @@ class AuthLocalDataSource {
     _storageManager.getStorage(StorageType.secure),
     AuthStorageKeys.TOKEN,
   );
+
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
+  @PostConstruct(preResolve: true)
+  Future<void> initialize() => _token.readFromStorage();
 ```
 
 > [!CAUTION]
@@ -319,7 +323,7 @@ Current owners:
 
 | Owner | Package | Keys | Backend |
 |---|---|---|---|
-| `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
+| `AuthLocalDataSource` | `data_auth` | `token` | secure |
 | `ThemeStorageImpl` | app shell (`platform_shell_adapters`) | `themeMode` | pref |
 | `LanguageStorageImpl` | app shell (`platform_shell_adapters`) | `locale` | pref |
 | `AppBootStorage` | app shell (`platform_shell_adapters`) | `viewed_onboard` | pref |
@@ -645,9 +649,11 @@ Registry: RULE-08 · RULE-14 · RULE-25 · RULE-54.
 // modules/auth/feature/lib/di/module.dart
 @module
 abstract class AuthDiModule {
+  /// The neutral session stream other features listen to.
   @singleton
   ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
       impl;
+  // …
 }
 ```
 
@@ -658,7 +664,7 @@ This lets the owner inject the concrete type through its constructor while every
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 
-**`core_di` contracts stay neutral** (RULE-08). A contract never names a `domain_*` type — it declares a smaller, contract-owned value type (`SessionPrincipal`), which the owner maps to at its boundary (`AuthStatusStreamImpl.toPrincipal`). It returns plain Flutter types (`IAppTreeWrapper.wrap()` returns a `Widget`), so neither state library is forced on the other. It prefers a Dart 3 `sealed class` to Freezed (`SessionFailure`): `core_di` runs only injectable's codegen, and a `part` file on a contract would make every consumer wait on `build_runner`. Global UI state (theme, language, deep links) uses one neutral utility: `ChangeNotifier` / `ValueNotifier` or a plain `Stream`. So no feature is forced to import a state library it does not use.
+**`core_di` contracts stay neutral** (RULE-08). A contract never names a `domain_*` type — it declares a smaller, contract-owned value type (`SessionPrincipal`), which the owner maps to at its boundary (`AuthStatusStreamImpl.updateAuthStatus`). It returns plain Flutter types (`IAppTreeWrapper.wrap()` returns a `Widget`), so neither state library is forced on the other. It prefers a Dart 3 `sealed class` to Freezed (`SessionFailure`): `core_di` runs only injectable's codegen, and a `part` file on a contract would make every consumer wait on `build_runner`. Global UI state (theme, language, deep links) uses one neutral utility: `ChangeNotifier` / `ValueNotifier` or a plain `Stream`. So no feature is forced to import a state library it does not use.
 
 ---
 
@@ -761,7 +767,7 @@ Registry: RULE-38 · RULE-39 · RULE-30 (directional insets).
 
 ```bash
 cd platform/shell/app_shell && flutter test test/accessibility_test.dart
-cd modules/auth/feature && flutter test test/login_page_text_scale_test.dart
+cd modules/auth/feature && flutter test test/login_page_test.dart
 cd modules/dashboard/feature && flutter test test/dashboard_text_scale_test.dart
 cd platform/ui/ui_kit && flutter test test/default_sizes_test.dart test/semantics_test.dart test/accessibility_states_test.dart test/modal_overlay_test.dart
 cd platform/ui/design_system && flutter test test/palette_test.dart test/palette_contrast_test.dart

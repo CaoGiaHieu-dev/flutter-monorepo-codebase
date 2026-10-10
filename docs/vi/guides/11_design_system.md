@@ -66,6 +66,7 @@ Mở [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/l
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
 class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
+  // …
   // Core colors
   final Color primary;
   final Color primaryContainer;
@@ -82,7 +83,7 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   final Color textSecondary;
   final Color textDisabled;
   final Color textInverse;
-  // …viền, màu trạng thái, shadow, scrim, hai danh sách gradient
+  // …viền, màu trạng thái, shadow, scrim, danh sách gradient
 }
 ```
 
@@ -109,8 +110,11 @@ Cả hai bảng màu là field `static final` trong [`theme/theme_system_extensi
 static final ThemeSystemExtension light = const ThemeSystemExtension(
   primary: Color(0xff0A7E8C),
   primaryContainer: Color(0xff7C3AED),
-  background: Color(0xffF8FAFC),
-  surface: Color(0xffFFFFFF),
+  secondary: Color(0xff1E293B), // iOS slate secondary
+  secondaryContainer: Color(0xffF1F5F9), // iOS slate container
+  background: Color(0xffF8FAFC), // Light iOS layout background
+  surface: Color(0xffFFFFFF), // Frosted glass layout surface
+  surfaceVariant: Color(0xffF1F5F9),
   textPrimary: Color(0xff0F172A),
   // …
 );
@@ -118,8 +122,12 @@ static final ThemeSystemExtension light = const ThemeSystemExtension(
 /// Dark theme palette.
 static final ThemeSystemExtension dark = const ThemeSystemExtension(
   primary: Color(0xff22D3EE),
-  background: Color(0xff0B0F19),
-  surface: Color(0xff151F32),
+  primaryContainer: Color(0xffA78BFA),
+  secondary: Color(0xff94A3B8),
+  secondaryContainer: Color(0xff1E293B),
+  background: Color(0xff0B0F19), // Dark iOS midnight background
+  surface: Color(0xff151F32), // Glassmorphism dark card surface
+  surfaceVariant: Color(0xff1E293B),
   textPrimary: Color(0xffF8FAFC),
   // …
 );
@@ -137,9 +145,7 @@ theme: ThemeProfile(
 ),
 ```
 
-Mọi token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) đều ghi đè được; `ThemeProvider` dựng cả hai palette một lần (`withOverrides`) và suy ra `ColorScheme` cùng extension từ kết quả, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `textPrimary` đi tới cả 15 style của text theme (theme được tô màu trước, rồi mới scale cỡ chữ), nên một override hiện ra ở mọi `Text` lấy style từ theme. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`. Chạy `composer sync` sau khi sửa để báo cáo trong README của app liệt kê section đó là đã đặt ([`13_app_composition.md`](13_app_composition.md)).
-
-Chỉ có một token tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn token đó khỏi extension (field, `copyWith`, `lerp`, cả hai bảng màu, `withOverrides`) và khỏi `AppGradients` thay vì để lại màu chết.
+Mọi token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) đều ghi đè được; `ThemeProvider` dựng cả hai palette một lần (`withOverrides`) và suy ra `ColorScheme` cùng extension từ kết quả, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `textPrimary` đi tới cả 15 style của text theme (theme được tô màu trước, rồi mới scale cỡ chữ), nên một override hiện ra ở mọi `Text` lấy style từ theme. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn gradient suy ra từ `primary` và `primaryContainer`. Chạy `composer sync` sau khi sửa để báo cáo trong README của app liệt kê section đó là đã đặt ([`13_app_composition.md`](13_app_composition.md)).
 
 ### Đọc màu trong widget
 
@@ -148,7 +154,7 @@ Chỉ có một token tồn tại vì màn hình mẫu: `liquidOnboardingColors`
 Container(
   color: context.colors.surface,
   child: Text(
-    context.l10nHome.home, // getter đã dịch của feature — không bao giờ là chuỗi cứng
+    context.l10nHome.userLoggedIn, // getter đã dịch của feature — không bao giờ là chuỗi cứng
     style: TextStyle(color: context.colors.textPrimary),
   ),
 )
@@ -200,7 +206,7 @@ final defaultTheme = applyFont(
 );
 ```
 
-**Vì sao đóng gói, không dùng `google_fonts`.** `google_fonts` đăng ký mỗi *độ đậm* thành một family riêng, nên một style đổi độ đậm về sau — `copyWith(fontWeight: FontWeight.bold)`, như tiêu đề app bar và các sample đang làm — vẫn giữ file nét thường và engine tự giả lập nét đậm. Một family với mỗi độ đậm một file cho phép Flutter chọn đúng mặt chữ cho bất kỳ `fontWeight` nào. Cách này cũng chạy offline và không tải gì lúc runtime. Giấy phép đi kèm file font: `assets/fonts/plus_jakarta_sans/OFL.txt`, được `registerBaseUiLicenses()` (gọi trong `runShellApp`) đăng ký với `LicenseRegistry`, nên hiện trên `showLicensePage`.
+**Vì sao đóng gói, không dùng `google_fonts`.** `google_fonts` đăng ký mỗi *độ đậm* thành một family riêng, nên một style đổi độ đậm về sau — `copyWith(fontWeight: FontWeight.bold)`, như tiêu đề app bar đang làm — vẫn giữ file nét thường và engine tự giả lập nét đậm. Một family với mỗi độ đậm một file cho phép Flutter chọn đúng mặt chữ cho bất kỳ `fontWeight` nào. Cách này cũng chạy offline và không tải gì lúc runtime. Giấy phép đi kèm file font: `assets/fonts/plus_jakarta_sans/OFL.txt`, được `registerBaseUiLicenses()` (gọi trong `runShellApp`) đăng ký với `LicenseRegistry`, nên hiện trên `showLicensePage`.
 
 **Dùng font khác:** đặt các file vào `platform/ui/design_system/assets/fonts/<tên>/` kèm giấy phép, khai từng độ đậm trong `flutter: fonts:` (độ đậm nào thiết kế dùng mà không có file sẽ được tổng hợp từ file gần nhất), chạy `dart run build_runner build --workspace` để `FontFamily` có hằng số mới, rồi trỏ `applyFont` vào nó — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Đổi luôn phần đăng ký giấy phép sang file giấy phép mới.
 
@@ -222,7 +228,7 @@ Dùng `sp`, nên chữ đi theo các bound scale chữ của app ([§6](#6-đặ
 ```dart
 // platform/ui/design_system/lib/src/styles/app_text_styles.dart
 static TextStyle bodyMediumStyle(BuildContext context) =>
-    _textTheme(context).bodyMedium!; // _textTheme = Theme.of(context).textTheme
+    _textTheme(context).bodyMedium!;
 ```
 
 > [!CAUTION]
@@ -249,8 +255,12 @@ Muốn chỉnh lại thang, hãy sửa hằng số `raw*` — mọi accessor đ�
 // platform/ui/design_system/lib/src/styles/app_radius.dart
 static double md(BuildContext context) => context.r(rawMd);
 
+// …
+
 static BorderRadius mdRadius(BuildContext context) =>
     BorderRadius.all(Radius.circular(md(context)));
+
+// …
 
 static const double rawMd = 8;
 ```
@@ -474,17 +484,16 @@ Nó chia theo quy tắc đầu tiên khớp:
 // modules/auth/feature/lib/src/pages/login_page.dart
 child: SingleChildScrollView(
   padding: EdgeInsets.all(AppSpacing.xl(context)),
-  // On a tablet or desktop window the form keeps a readable width
-  // instead of stretching across the screen.
   child: AdaptiveContent(
-    child: Consumer<AuthProvider>(
+    child: Form(
+      key: _formKey,
       // …
     ),
   ),
 ),
 ```
 
-Nó chặn widget con ở `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 — và đặt ở chính giữa phía trên của khoảng còn lại. Trên điện thoại, cửa sổ hẹp hơn mức chặn nên không gì thay đổi. `maxWidth` tính bằng **pixel cửa sổ và không bao giờ scale**: nó trả lời một dòng được dài tới đâu, điều mà mắt người đọc quyết định chứ không phải khung thiết kế — bọc trong `context.w` thì nó sẽ lớn theo chính cái tỉ lệ mà nó sinh ra để chặn. `padding`, như mọi tham số của widget dùng lại, được dùng đúng như nhận: hãy scale nó tại nơi gọi.
+Trên cửa sổ tablet hoặc desktop, form đăng nhập giữ một bề rộng dễ đọc thay vì giãn ra khắp màn hình. `AdaptiveContent` chặn widget con ở `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 — và đặt ở chính giữa phía trên của khoảng còn lại. Trên điện thoại, cửa sổ hẹp hơn mức chặn nên không gì thay đổi. `maxWidth` tính bằng **pixel cửa sổ và không bao giờ scale**: nó trả lời một dòng được dài tới đâu, điều mà mắt người đọc quyết định chứ không phải khung thiết kế — bọc trong `context.w` thì nó sẽ lớn theo chính cái tỉ lệ mà nó sinh ra để chặn. `padding`, như mọi tham số của widget dùng lại, được dùng đúng như nhận: hãy scale nó tại nơi gọi.
 
 ### Mẫu tham chiếu: chrome điều hướng theo lớp cửa sổ
 
@@ -502,28 +511,27 @@ if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
   );
 }
 
+// The rail costs width a wide window has to spare, not height it has not.
 final extended = sizeClass.isAtLeast(WindowSizeClass.large);
-// The rail sits at the start edge: the left in LTR, the right in RTL
-// (a `Row` follows the text direction). It pads for the insets on its
-// outer side only; the side facing the content is the content's to pad.
-final isRtl = Directionality.of(context) == TextDirection.rtl;
 return Scaffold(
-  body: Row(
-    children: [
-      SafeArea(
-        left: !isRtl,
-        right: isRtl,
-        child: NavigationRail(
+  body: SafeArea(
+    top: false,
+    bottom: false,
+    child: Row(
+      children: [
+        NavigationRail(
           // …
           extended: extended,
           // …
         ),
-      ),
-      Expanded(child: navigationShell),
-    ],
+        Expanded(child: navigationShell),
+      ],
+    ),
   ),
 );
 ```
+
+Hàng này nằm trong một `SafeArea` chỉ đệm bên trái và bên phải: vết cắt hay thanh hệ thống nằm cạnh rail được tránh ở cả hai chiều chữ, còn `top` và `bottom` để tắt, dành cho các trang tab tự xử lý.
 
 Toàn bộ page, và những gì dashboard không được sở hữu: [`../architecture/05_features.md` §4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome).
 
@@ -580,7 +588,7 @@ static LinearGradient primaryGradient(BuildContext context) {
 }
 ```
 
-Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`primaryGradientColors`, `liquidOnboardingColors`), không sửa widget.
+Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`primaryGradientColors`), không sửa widget.
 
 `AppShadows` là ngoại lệ — getter của nó không nhận `BuildContext`. Màu shadow là token `shadow` của palette (đen ở cả hai palette), đọc từ `ThemeSystemExtension.light`, và mỗi cỡ áp alpha riêng của nó:
 

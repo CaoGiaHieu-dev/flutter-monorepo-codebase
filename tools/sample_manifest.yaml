@@ -136,7 +136,7 @@ packages:
   domain_auth:
     kind: sample
     path: modules/auth/domain
-    demonstrates: Pure-Dart entities, params, repository contract and use cases.
+    demonstrates: Pure-Dart entity, params, repository contract and the login use case.
   data_auth:
     kind: sample
     path: modules/auth/data
@@ -147,7 +147,7 @@ packages:
   domain_cache:
     kind: sample
     path: modules/cache/domain
-    demonstrates: The domain half of a locally persisted slice — entity, params, contract, two use cases.
+    demonstrates: The domain half of a locally persisted slice — an entity and a repository contract, no use case.
   data_cache:
     kind: sample
     path: modules/cache/data

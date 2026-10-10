@@ -46,7 +46,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-06 | Mọi import `package:` dưới `lib/` phải khai trong `dependencies:` của package đó (không chỉ `dev_dependencies`); dependency đã khai mà không ai import thì bị xoá | Một `package_config.json` dùng chung che giấu import chưa khai tới lúc tách package | arch_check R5 (chưa khai), bước unused-deps của CI (đã khai, không hề import) | `dart tools/arch_check/check.dart` · `dart tools/unused_checker/check_unused_packages.dart` | [§2](#2-khai-báo-dependency-tường-minh) |
 | RULE-07 | `platform_kernel` giữ Dart thuần — không package Flutter hay gắn với Flutter, không thư viện transport hay lưu trữ (`dio`, `retrofit`, `drift`, `http`), không thư viện `dart:` chỉ dành cho engine, trong import, `dependencies:`, `dev_dependencies:` hay test | Danh sách dependency của nó là của mọi package | arch_check R9 | `dart tools/arch_check/check.dart` | [architecture/02_core §1](../architecture/02_core.md) |
 | RULE-08 | `core_di` chỉ chứa contract trung lập sản phẩm: không dependency `domain_*`, contract mang value type riêng (`SessionPrincipal`), trả `Widget` thuần, và ưu tiên `sealed class` Dart 3 thay vì Freezed | Một type domain trong hub khiến mọi bên tiêu thụ phụ thuộc một module | arch_check R1 (nửa dependency), review | `dart tools/arch_check/check.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
-| RULE-09 | Hằng số công khai của package nằm trong `utils/` của chính nó (route `*_path.dart`, khoá `*_storage_keys.dart`, endpoint `*_api_constants.dart`) dạng `UPPER_SNAKE_CASE`; design token ở `styles/`; không có file hằng số dùng chung xuyên domain | Mỗi hằng số có đúng một chủ | arch_check R4 (`static const` công khai nằm ngoài `utils/` / `styles/`), review (cách đặt tên, các dạng khai báo khác, file hằng số dùng chung) | `dart tools/arch_check/check.dart` | [§3](#3-hằng-số-nằm-trong-utils) |
+| RULE-09 | Hằng số công khai của package nằm trong `utils/` của chính nó (route `*_path.dart`, khoá `*_storage_keys.dart`, endpoint `*_api_constants.dart`, hoặc cả hai trong một `<owner>_constants.dart`) dạng `UPPER_SNAKE_CASE`; design token ở `styles/`; không có file hằng số dùng chung xuyên domain | Mỗi hằng số có đúng một chủ | arch_check R4 (`static const` công khai nằm ngoài `utils/` / `styles/`), review (cách đặt tên, các dạng khai báo khác, file hằng số dùng chung) | `dart tools/arch_check/check.dart` | [§3](#3-hằng-số-nằm-trong-utils) |
 
 ### 10–19 · Dependency injection
 
@@ -263,18 +263,17 @@ Quy ước đang áp dụng:
 | Loại | Vị trí | Ví dụ thật |
 |---|---|---|
 | Route path | `lib/src/utils/<feature>_path.dart` | `modules/home/feature/lib/src/utils/home_path.dart` |
-| Storage key | `lib/src/utils/<owner>_storage_keys.dart` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| API endpoint | `lib/src/utils/<owner>_api_constants.dart` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
+| Storage key | `lib/src/utils/<owner>_storage_keys.dart` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| API endpoint (riêng, hoặc cùng key trong package nhỏ) | `lib/src/utils/<owner>_api_constants.dart`, hoặc `<owner>_constants.dart` cho cả hai | `modules/auth/data/lib/src/utils/auth_constants.dart` (`AuthApiConstants` và `AuthStorageKeys`) |
 
 Class hằng số dùng private constructor và thành viên `UPPER_SNAKE_CASE`:
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_constants.dart
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
@@ -309,6 +308,11 @@ class AuthLocalDataSource {
     _storageManager.getStorage(StorageType.secure),
     AuthStorageKeys.TOKEN,
   );
+
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
+  @PostConstruct(preResolve: true)
+  Future<void> initialize() => _token.readFromStorage();
 ```
 
 > [!CAUTION]
@@ -320,7 +324,7 @@ Các owner hiện có:
 
 | Owner | Package | Key | Backend |
 |---|---|---|---|
-| `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
+| `AuthLocalDataSource` | `data_auth` | `token` | secure |
 | `ThemeStorageImpl` | app shell (`platform_shell_adapters`) | `themeMode` | pref |
 | `LanguageStorageImpl` | app shell (`platform_shell_adapters`) | `locale` | pref |
 | `AppBootStorage` | app shell (`platform_shell_adapters`) | `viewed_onboard` | pref |
@@ -646,9 +650,11 @@ Bảng đăng ký: RULE-08 · RULE-14 · RULE-25 · RULE-54.
 // modules/auth/feature/lib/di/module.dart
 @module
 abstract class AuthDiModule {
+  /// The neutral session stream other features listen to.
   @singleton
   ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
       impl;
+  // …
 }
 ```
 
@@ -659,7 +665,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 
 Đừng dùng Action Handler cho điều hướng thuần (dùng Navigator) hay cho logic thuần Domain (dùng UseCase).
 
-**Contract của `core_di` giữ trung lập** (RULE-08). Contract không bao giờ nêu tên một type `domain_*` — nó khai một value type nhỏ hơn, do contract sở hữu (`SessionPrincipal`), mà chủ sở hữu ánh xạ sang ở biên của mình (`AuthStatusStreamImpl.toPrincipal`). Nó trả về type Flutter thuần (`IAppTreeWrapper.wrap()` trả `Widget`) để không thư viện state nào bị ép lên bên kia, và ưu tiên `sealed class` của Dart 3 hơn Freezed (`SessionFailure`): `core_di` chỉ chạy codegen của injectable, và một file `part` trên contract sẽ bắt mọi bên tiêu thụ chờ `build_runner`. State UI toàn cục (theme, ngôn ngữ, deep link) dùng một tiện ích trung lập duy nhất — `ChangeNotifier` / `ValueNotifier` hoặc `Stream` thuần — để không feature nào bị ép import thư viện state nó không dùng.
+**Contract của `core_di` giữ trung lập** (RULE-08). Contract không bao giờ nêu tên một type `domain_*` — nó khai một value type nhỏ hơn, do contract sở hữu (`SessionPrincipal`), mà chủ sở hữu ánh xạ sang ở biên của mình (`AuthStatusStreamImpl.updateAuthStatus`). Nó trả về type Flutter thuần (`IAppTreeWrapper.wrap()` trả `Widget`) để không thư viện state nào bị ép lên bên kia, và ưu tiên `sealed class` của Dart 3 hơn Freezed (`SessionFailure`): `core_di` chỉ chạy codegen của injectable, và một file `part` trên contract sẽ bắt mọi bên tiêu thụ chờ `build_runner`. State UI toàn cục (theme, ngôn ngữ, deep link) dùng một tiện ích trung lập duy nhất — `ChangeNotifier` / `ValueNotifier` hoặc `Stream` thuần — để không feature nào bị ép import thư viện state nó không dùng.
 
 ---
 
@@ -762,7 +768,7 @@ Bảng đăng ký: RULE-38 · RULE-39 · RULE-30 (inset theo hướng).
 
 ```bash
 cd platform/shell/app_shell && flutter test test/accessibility_test.dart
-cd modules/auth/feature && flutter test test/login_page_text_scale_test.dart
+cd modules/auth/feature && flutter test test/login_page_test.dart
 cd modules/dashboard/feature && flutter test test/dashboard_text_scale_test.dart
 cd platform/ui/ui_kit && flutter test test/default_sizes_test.dart test/semantics_test.dart test/accessibility_states_test.dart test/modal_overlay_test.dart
 cd platform/ui/design_system && flutter test test/palette_test.dart test/palette_contrast_test.dart

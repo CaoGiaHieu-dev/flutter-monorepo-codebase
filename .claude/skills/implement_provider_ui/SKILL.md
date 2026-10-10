@@ -95,7 +95,7 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
   with `errorStateBuilder`. `ProductErrorState.fromFailure` above is a static you write; model the union on
   `modules/auth/feature/lib/src/provider/auth_error_state.dart` and the mapping on
   `AuthProvider.mapAuthFailure`: one variant per case the screen words differently, plus
-  `failed({int? code})` for "anything else".
+  `failed({int? code})` for "anything else" (`AuthErrorState` has just two: `invalidCredentials` and `failed`).
 
 ## 4. Render with `BaseViewWidget`
 

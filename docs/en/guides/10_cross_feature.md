@@ -78,7 +78,12 @@ The contract carries [`SessionPrincipal`](../../../platform/foundation/contracts
 Real code from [`modules/auth/feature/lib/src/session/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/session/auth_status_stream_impl.dart):
 
 ```dart
-/// Implementation of [ISessionStatusStream] provided by `feature_auth`.
+/// [ISessionStatusStream] provided by `feature_auth`: the neutral stream other
+/// features listen to (home's BLoC), whatever state library the owner uses.
+///
+/// Registered as the concrete `@singleton`; `AuthDiModule` binds the interface
+/// to this same instance, so the owner writes through [updateAuthStatus] and
+/// everyone else reads the read-only interface.
 @singleton
 class AuthStatusStreamImpl implements ISessionStatusStream {
   final _controller = StreamController<SessionPrincipal?>.broadcast();
@@ -90,28 +95,22 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
   @override
   SessionPrincipal? get currentUser => _currentUser;
 
-  /// Called by `feature_auth` when the session settles.
+  /// The one place [UserEntity] is narrowed to the shared [SessionPrincipal],
+  /// so the entity can grow without leaking to consumers.
   void updateAuthStatus(UserEntity? user) {
-    final principal = toPrincipal(user);
-    _currentUser = principal;
-    if (!_controller.isClosed) _controller.add(principal);
+    _currentUser = user == null
+        ? null
+        : SessionPrincipal(
+            id: user.id,
+            displayName: user.name,
+            email: user.email,
+          );
+    _controller.add(_currentUser);
   }
 
-  /// Closes the stream; listeners receive `done`. GetIt calls it when the
-  /// singleton is disposed (`getIt.reset()`, a test's tear-down).
+  /// GetIt calls it when the singleton is disposed.
   @disposeMethod
   Future<void> dispose() => _controller.close();
-
-  /// The one place `UserEntity` is narrowed for the outside world.
-  static SessionPrincipal? toPrincipal(UserEntity? user) {
-    if (user == null) return null;
-    return SessionPrincipal(
-      id: user.id,
-      displayName: user.name,
-      email: user.email,
-      roles: {if (user.role != null) user.role!.name},
-    );
-  }
 }
 ```
 
@@ -123,9 +122,12 @@ Real code from [`modules/auth/feature/lib/di/module.dart`](../../../modules/auth
 @InjectableInit.microPackage()
 void initMicroPackage() {}
 
+/// GetIt resolves the exact registered type, so each extra interface an
+/// implementation serves is bound here (RULE-14). A binding matches its
+/// target's scope: [AuthProvider] is lazy, so its bindings are too.
 @module
 abstract class AuthDiModule {
-  /// Neutral auth-state stream other features listen to.
+  /// The neutral session stream other features listen to.
   @singleton
   ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
       impl;
@@ -231,9 +233,12 @@ The interface — real code from the auth module's API package, [`modules/auth/a
 ```dart
 import 'package:flutter/widgets.dart';
 
+/// Auth actions another feature may trigger (settings' logout row).
+///
+/// Resolve with `getItOrNull<IAuthActionHandler>()` and hide the action when
+/// it is null: `feature_auth` implements it and is removable (RULE-12).
 abstract class IAuthActionHandler {
-  /// Signs the user out; completes once the stored session is cleared. The
-  /// app shell navigates to sign-in on its own — the caller does not.
+  /// Signs the user out; the app shell navigates to sign-in on its own.
   Future<void> logout(BuildContext context);
 }
 ```
@@ -244,7 +249,7 @@ The implementation — real code from [`modules/auth/feature/lib/src/handlers/au
 import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
-import 'package:provider/provider.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 import '../provider/auth_provider.dart';
 

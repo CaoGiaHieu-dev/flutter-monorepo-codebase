@@ -26,29 +26,38 @@ ViewModel không tự viết các câu lệnh đóng mở loading hay map kết 
 ```dart
 // modules/auth/feature/lib/src/provider/auth_provider.dart (abridged)
 Future<void> login(String email, String password) async {
+  // One sign-in at a time: a second submit (the keyboard's Done pressed
+  // twice) would race two outcomes.
+  if (isLoading) return;
   await executeOperation(
     OperationConfig(
       operation: () =>
           _loginUseCase(LoginParams(email: email, password: password)),
-      onSuccess: (user) async {
-        DynamicLogger.log('Login successful for user: ${user?.name}');
-      },
-      // Map lỗi Domain sang error state của feature.
+      onSuccess: _authStream.updateAuthStatus,
+      onFailure: (failure) => _failures.add(
+        mapAuthFailure(failure) == const AuthErrorState.invalidCredentials()
+            ? const SessionInvalidCredentialsFailure()
+            : SessionServerFailure(code: failure.code),
+      ),
       errorStateBuilder: mapAuthFailure,
     ),
   );
 }
 
-/// ErrorHandler: HTTP 401/403 tới dưới dạng AuthFailure, mọi 4xx/5xx khác là
-/// ServerFailure; lỗi mạng không có HTTP status.
-static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
+// …
+
+/// A 401 is a credential problem; every other failure keeps only its code.
+/// A network failure has no HTTP status, so it is never read as one, and a
+/// 403 is a locked account, not a wrong password.
+static AuthErrorState mapAuthFailure(AppFailure<dynamic> failure) {
   return switch (failure) {
     AuthFailure(code: 401) => const AuthErrorState.invalidCredentials(),
-    ServerFailure(code: 404) => const AuthErrorState.userNotFound(),
     _ => AuthErrorState.failed(code: failure.code),
   };
 }
 ```
+
+`onSuccess` đưa user cho session stream, `onFailure` phát failure cho app shell, còn `errorStateBuilder` map `AppFailure` sang error state của feature mà trang đọc. Câu chặn `if (isLoading) return;` giữ cho lần submit thứ hai không chạy đua với lần đầu.
 
 Hành vi cần biết (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
@@ -125,32 +134,32 @@ Hãy dùng **`ProviderStateListener`** (hoặc `MultiProviderStateListener` vớ
 
 ```dart
 // modules/auth/feature/lib/src/pages/login_page.dart (abridged)
-void _onLoginFailed(BuildContext context, ErrorState? error, String? _) {
-  if (error == const AuthErrorState.invalidCredentials()) {
-    _passwordController.clear();
-  }
-}
-
 @override
 Widget build(BuildContext context) {
   return ProviderStateListener<AuthProvider, UserEntity>(
-    onError: _onLoginFailed,
+    onError: (context, error, _) {
+      if (error == const AuthErrorState.invalidCredentials()) {
+        _passwordController.clear();
+      }
+    },
     child: Scaffold(
-      body: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
-          return AuthFormWidget(
-            emailController: _emailController,
-            passwordController: _passwordController,
-            submitButtonText: context.l10nAuth.signIn,
-            isLoading: authProvider.isLoading,
-            onSubmit: _onLoginPressed,
-          );
-        },
-      ),
+      // …
+                    Selector<AuthProvider, bool>(
+                      selector: (_, auth) => auth.isLoading,
+                      builder: (context, isLoading, _) =>
+                          CustomButton.rectangle(
+                            disable: isLoading,
+                            onPressed: _submit,
+                            // …
+                          ),
+                    ),
+      // …
     ),
   );
 }
 ```
+
+`Selector` chỉ rebuild nút khi `isLoading` đổi. Trang không tự bọc provider: `AuthProvider` toàn cục được `AuthTreeWrapper` gắn một lần.
 
 > Trang này chỉ xóa ô mật khẩu: app shell (`NavigatorWrapperWidget`) **đã** hiện mọi lỗi đăng nhập dưới dạng toast đã dịch, qua `ISessionState`, nên thêm toast ở đây sẽ lặp lại. Muốn toast riêng, gọi `AppOverlay.showToast(content: ...)` với chuỗi đã dịch.
 
@@ -168,17 +177,16 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 
+/// Why a sign-in failed, as far as the screen words it differently. Carries no
+/// text (RULE-34): the shell shows a translated toast for the session failure.
 @freezed
 abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
 
-  const factory AuthErrorState.userNotFound() = _UserNotFound;
-
-  /// Mọi trường hợp còn lại — offline, timeout, 5xx, tài khoản bị khóa (403).
-  /// [code] là `ErrorCodes` / HTTP status của failure, dùng để chọn câu
-  /// đã dịch.
+  /// Anything else — offline, a timeout, a 5xx, a locked account. [code] is the
+  /// failure's `ErrorCodes` / HTTP status.
   const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```

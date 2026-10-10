@@ -68,6 +68,7 @@ A `Table` references no database, so it is a standalone file:
 // modules/cache/data/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
+/// Example table — string payloads keyed by a unique id.
 class CacheEntries extends Table {
   TextColumn get key => text()();
 
@@ -86,19 +87,28 @@ class CacheEntries extends Table {
 // modules/cache/data/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
+/// Data access object for [CacheEntries].
 @DriftAccessor(tables: [CacheEntries])
 class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
     with _$CacheEntriesDaoMixin {
   CacheEntriesDao(super.attachedDatabase);
 
+  /// Inserts or replaces a cache row.
   Future<void> upsert(String key, String value) {
     return into(cacheEntries).insertOnConflictUpdate(
-      CacheEntriesCompanion.insert(key: key, value: value, updatedAt: Value(DateTime.now())),
+      CacheEntriesCompanion.insert(
+        key: key,
+        value: value,
+        updatedAt: Value(DateTime.now()),
+      ),
     );
   }
 
+  /// Reads the row for [key], or `null` when missing.
   Future<CacheEntry?> getEntry(String key) {
-    return (select(cacheEntries)..where((t) => t.key.equals(key))).getSingleOrNull();
+    return (select(
+      cacheEntries,
+    )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
 }
 ```
@@ -109,9 +119,12 @@ It must be `part of` **your** database library, never someone else's.
 
 ```dart
 // modules/cache/data/lib/src/utils/cache_constants.dart
+/// Constants owned exclusively by `data_cache`.
 class CacheConstants {
   CacheConstants._();
 
+  /// SQLite file of this package's [CacheDatabase], named after its owner:
+  /// each package that persists data opens its own file.
   static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }
 ```
@@ -134,39 +147,44 @@ import 'tables/cache_entries_table.dart';
 part 'cache_database.g.dart';
 part 'dao/cache_entries_dao.dart';
 
+/// SAMPLE — the database owned by `data_cache`, holding only its own tables.
+///
+/// Drift binds tables at compile time and a DAO must be a `part of` its
+/// database, so each package that persists data declares its own database
+/// next to its tables, DAO and data source; deleting the package deletes the
+/// database with it. `core_database` supplies only the mechanism
+/// ([DriftDatabaseOpener], [driftMigrationStrategy], [IDatabaseMigration],
+/// [IDatabaseHandle]).
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(
-    super.e,
-    Iterable<IDatabaseMigration> migrations, [
-    this.schemaVersion = _currentSchemaVersion,
-  ]) : _migrations = migrations;
+  CacheDatabase._(super.e, this._migrations, [this.schemaVersion = 1]);
 
-  /// The schema version this build ships. Bump it together with a new
-  /// [IDatabaseMigration]; see [migration].
-  static const int _currentSchemaVersion = 1;
-
+  /// Schema steps contributed for this database, collected by the DI module.
   final Iterable<IDatabaseMigration> _migrations;
 
+  /// Bump it together with a new [IDatabaseMigration] whose `version` is the
+  /// new number; nothing else in this file changes.
+  @override
+  final int schemaVersion;
+
+  /// Opens the database on a background isolate, with corruption recovery
+  /// ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
-    String fileName = CacheConstants.DATABASE_FILE_NAME,
-    int readPool = DatabaseConstants.DEFAULT_READ_POOL,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
     return DriftDatabaseOpener.open(
       (executor) => CacheDatabase._(executor, migrations),
-      fileName: fileName,
-      readPool: readPool,
+      fileName: CacheConstants.DATABASE_FILE_NAME,
     );
   }
 
-  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
-  /// newer build would, so the contributed [migrations] actually run.
+  /// In-memory database for tests. [executor] and [schemaVersion] let an
+  /// upgrade test reopen a hand-written old file so the [migrations] run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
-    int schemaVersion = _currentSchemaVersion,
+    int schemaVersion = 1,
   ]) {
     return CacheDatabase._(
       executor ?? NativeDatabase.memory(),
@@ -174,9 +192,6 @@ class CacheDatabase extends _$CacheDatabase {
       schemaVersion,
     );
   }
-
-  @override
-  final int schemaVersion;
 
   @override
   MigrationStrategy get migration =>
@@ -208,6 +223,12 @@ void initMicroPackage() {}
 
 @module
 abstract class DataCacheDiModule {
+  /// Opens [CacheDatabase] while the module initialises, which runs the
+  /// collected migrations — so every step must be registered by then.
+  /// `@Order(1)` makes a step declared in this package (default order 0)
+  /// register before the open; a step from another package needs an earlier
+  /// DI group. The collection is typed to [CacheDatabase], so another
+  /// package's steps never reach it.
   @Order(1)
   @preResolve
   @lazySingleton
@@ -215,6 +236,8 @@ abstract class DataCacheDiModule {
     migrations: getAllOrEmpty<IDatabaseMigration<CacheDatabase>>(),
   );
 
+  /// Data sources take this handle instead of [CacheDatabase], so each gets
+  /// only the DAO it asks for.
   @lazySingleton
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
@@ -236,12 +259,16 @@ abstract class DataCacheDiModule {
 
 ```dart
 // modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
+/// Signatures speak in [CacheEntryModel], never in Drift's generated row
+/// class, so Drift stays an implementation detail of `data_cache`.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
 
   Future<CacheEntryModel?> getEntry(String key);
 }
 
+/// SAMPLE — takes [IDatabaseHandle] rather than [CacheDatabase] (only the one
+/// DAO it asks for) and converts Drift rows to models here.
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -281,7 +308,7 @@ A schema change is **three edits made together**; miss one and the upgrade silen
 install and an upgraded one differ:
 
 1. Edit the table. A column added to an existing table must be `nullable()` or have `withDefault(...)`.
-2. Bump the schema version (`_currentSchemaVersion`, the value `schemaVersion` returns) to the new number (Drift runs `onUpgrade` only when the stored `user_version` is below it).
+2. Bump the schema version (the private constructor's default, `[this.schemaVersion = 1]`, which `open` uses and `schemaVersion` returns) to the new number (Drift runs `onUpgrade` only when the stored `user_version` is below it).
 3. Contribute one `IDatabaseMigration<YourDatabase>` whose `version` is that number, registered **typed** to
    your database, then run `build_runner`:
 
@@ -327,10 +354,10 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration<CacheDatabase> {
 ## Tests
 
 `CacheDatabase.forTesting()` is an in-memory database on the current isolate (no file, no isolate). Put the
-tests in the owning package's `test/`, following `modules/cache/data/test/` (`cache_database_test.dart`: DAO
-round-trips, migration wiring, real-file WAL / foreign keys, an old file upgrading and a failing step leaving it
-as it was; `database_handle_test.dart`). Test pragmas on a real
-file: an in-memory database reports `journal_mode = memory`.
+tests in the owning package's `test/`, following `modules/cache/data/test/` (`cache_database_test.dart`: an old
+file upgrading through its step and keeping its rows; `cache_entry_repository_test.dart`: a real in-memory round
+trip through the repository, and a throwing data source becoming a `Failure`). Test pragmas on a real
+file: an in-memory database reports `journal_mode = memory` (the sample's tests do not assert them).
 
 **Test an upgrade.** `CacheDatabase.forTesting(executor, steps, schemaVersion)` takes the schema version the build
 under test ships. Write the **old** schema by hand — never derive it from the current table class, which
@@ -350,7 +377,7 @@ test('v1 -> v2 adds expires_at and keeps the rows', () async {
 
   final database = CacheDatabase.forTesting(
     NativeDatabase(
-      File('${dir.path}/cache.sqlite'),
+      File('${dir.path}${Platform.pathSeparator}cache.sqlite'),
       setup: (raw) {
         raw.execute(
           'CREATE TABLE cache_entries '
@@ -367,7 +394,7 @@ test('v1 -> v2 adds expires_at and keeps the rows', () async {
 
   final columns = await database.customSelect('PRAGMA table_info(cache_entries)').get();
   expect(columns.map((row) => row.data['name']), contains('expires_at'));
-  expect(await database.cacheEntriesDao.getValue('k'), 'v');
+  expect((await database.cacheEntriesDao.getEntry('k'))?.value, 'v');
 });
 ```
 

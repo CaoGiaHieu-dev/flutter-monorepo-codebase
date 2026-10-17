@@ -196,7 +196,9 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   (`SessionServerFailure`); an app started offline opens on the login screen (the token stays stored).
 - `checkAppContract`'s `C11` covers every location the shell navigates to — each tab's `path` and the
   path of `ISignInLocation`, `IPostSignInLocation` and `IAppEntryLocation` — not only
-  `RouterProfile.fallbackPath`. `AuthNavigatorImpl` and `HomeNavigatorImpl` are `@LazySingleton`s, like
+  `RouterProfile.fallbackPath` — and it reads each one as the router does (`/home/` and `home` open
+  `/home`), so it neither flags a location the app can open nor misreports a relative one as `C07`.
+  `AuthNavigatorImpl` and `HomeNavigatorImpl` are `@LazySingleton`s, like
   the generated navigator. `CustomInputField` takes `autofillHints`; the login fields declare email and
   password, so password managers and OS autofill recognise them.
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. Lock files are

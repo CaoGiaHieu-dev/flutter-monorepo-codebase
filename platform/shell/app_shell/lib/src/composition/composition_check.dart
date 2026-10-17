@@ -1,6 +1,7 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_network/core_network.dart';
+import 'package:go_router/go_router.dart' show RouteConfiguration;
 
 import '../navigation/app_router.dart';
 import '../utils/shell_contract_constants.dart';
@@ -279,8 +280,15 @@ Iterable<ProfileProblem> _structure(
       if (config != null && config.routes.isEmpty) {
         throw StateError('the router has no routes');
       }
+      // Normalised as the router's parser does first (a leading slash
+      // added, a trailing one dropped), so a location the app can open is
+      // never reported — and a relative one does not trip go_router's
+      // matcher assert, which the catch below would misreport as C07.
       bool isUnrouted(String path) =>
-          config != null && config.findMatch(Uri.parse(path)).isError;
+          config != null &&
+          config
+              .findMatch(RouteConfiguration.normalizeUri(Uri.parse(path)))
+              .isError;
 
       final fallback = profile.router.fallbackPath;
       if (fallback != null && isUnrouted(fallback)) {

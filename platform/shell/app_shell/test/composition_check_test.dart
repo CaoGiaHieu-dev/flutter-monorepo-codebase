@@ -514,6 +514,50 @@ void main() {
       ]);
     });
 
+    // The router normalises a location before matching it, so `/home/` and
+    // `home` open `/home`: neither is a C11, nor a C07 from the matcher.
+    for (final path in ['/home/', 'home']) {
+      test('`$path` is read as the router reads it', () {
+        registerRequiredShell();
+        getIt
+          ..registerSingleton<IFeatureRouteModule>(aRoute('/home'))
+          ..registerSingleton<IPostSignInLocation>(
+            FakePostSignInLocation(path),
+          );
+
+        final report = _check(
+          testProfile(
+            capabilities: declare(provided: const {'routes', 'post_sign_in'}),
+          ),
+        );
+
+        expect(report.problems, isEmpty);
+      });
+    }
+
+    test('the sign-in and entry locations are checked too', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute('/home'))
+        ..registerSingleton<ISignInLocation>(FakeSignInLocation('/sign-in'))
+        ..registerSingleton<IAppEntryLocation>(FakeEntryLocation('/welcome'));
+
+      // `sign_in` alone breaks the `session` bundle (C04); only C11 matters.
+      final report = _check(
+        testProfile(
+          capabilities: declare(provided: const {'routes', 'sign_in', 'entry'}),
+        ),
+      );
+
+      expect(
+        report.problems.where((p) => p.code == 'C11').map((p) => p.description),
+        [
+          contains('`FakeSignInLocation.path` is `/sign-in`'),
+          contains('`FakeEntryLocation.path` is `/welcome`'),
+        ],
+      );
+    });
+
     test('no fallback path is nothing to check', () {
       registerRequiredShell();
       getIt.registerSingleton<IFeatureRouteModule>(aRoute('/home'));

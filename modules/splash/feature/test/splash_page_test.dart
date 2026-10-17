@@ -1,3 +1,4 @@
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:feature_splash/feature_splash.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,5 +17,29 @@ void main() {
 
     expect(find.byType(SplashPage), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('the spinner tells a screen reader it is loading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ResponsiveInit(
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SplashScreenImpl().build(),
+        ),
+      ),
+    );
+
+    final page = tester.element(find.byType(SplashPage));
+    expect(
+      tester
+          .widget<CircularProgressIndicator>(
+            find.byType(CircularProgressIndicator),
+          )
+          .semanticsLabel,
+      AppLocalizations.of(page)!.loading,
+    );
   });
 }

@@ -173,7 +173,7 @@ a platform-touching change touches (RULE-83). A DI change is proven by the smoke
 | Translated string, ARB key, new locale | `localize_feature` | `09_localization_theming` |
 | Theme, palette, tokens | — | `09_localization_theming`, `11_design_system` |
 | Tablet / foldable / split-screen layout | — | `11_design_system` § 7 |
-| Docs, a rule, the changelog, a vi translation | `update_docs` | `CONTRIBUTING` § 5 |
+| Docs, a rule, a vi translation | `update_docs` | `CONTRIBUTING` § 5 |
 | Crash reporting, analytics | — | `../architecture/06_app_shell` § 2 |
 | Work in a partial checkout (one module) | — | `12_module_isolation` § 2 |
 
@@ -222,7 +222,7 @@ A module's contracts *for other features* (its navigator, action handlers) live 
   a vi file, stamp it (`--stamp-translations`). State a rule only in the registry; everywhere else
   cite `RULE-NN` and link. Contract: [`CONTRIBUTING.md` § 5](CONTRIBUTING.md#5-documentation-contract).
 - **Commits:** Conventional Commits — `<type>(<scope>): <summary>`, lowercase, no trailing period;
-  body says why. User-visible changes get a line under `Unreleased` in `CHANGELOG.md`.
+  body says why.
 - **Generated regions are off-limits:** `composer:managed` blocks (root `workspace:`, app path deps,
   `injection.dart`, the `facts` region of `lib/app/app_profile.dart`, the README `report` region, the
   `.gitignore` `runners` region), the generated runners, `*.g.dart`, `*.freezed.dart`, `*.module.dart`, `*.config.dart`, barrel exports.

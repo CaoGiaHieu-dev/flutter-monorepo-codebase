@@ -456,7 +456,6 @@ The Dart package names (the root `codebase`, the apps `mobile_app` and `admin_ap
 | `.github/CODEOWNERS` | every `@your-org/<team>`: GitHub silently ignores a team that does not exist, so the rule looks enforced and is not |
 | `.github/ISSUE_TEMPLATE/config.yml` | the three `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` links |
 | `LICENSE`, the title and footer of `README.md` / `README.vi.md`, `CLAUDE.md` | the author's name and the project title |
-| `CHANGELOG.md` | the `[Unreleased]` link at the bottom, and the template's own history |
 | `tools/code_review/` | the project name in `review_prompt.md` and the report footer in `lib/services/language_service.dart` (the optional AI review). The report language defaults to `en` (`reportLanguage` in `code_review_config.json`; `.github/workflows/code_review.yml` uses it for pull requests) |
 | `.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml` | the labels `bug`, `enhancement` and `triage` must exist in your repository; create them, or edit `labels:` — a label that does not exist is not applied |
 | `azure-ci-cd.yml` | the pool name `codebase`: a self-hosted pool you create (only if you use Azure) |

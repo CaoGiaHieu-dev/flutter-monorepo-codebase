@@ -192,7 +192,6 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── .gitignore                     # Generated code, secrets, build output
 ├── analysis_options.yaml          # Lints for the whole workspace — the only one (RULE-71)
 ├── azure-ci-cd.yml                # Azure DevOps pipeline
-├── CHANGELOG.md                   # Notable changes per release (Keep a Changelog)
 ├── CLAUDE.md                      # Agent brief for Claude Code — rules live in docs/en/reference/01_rules.md
 ├── CODE_OF_CONDUCT.md             # Contributor Covenant 2.1
 ├── CONTRIBUTING.md                # Setup, commits, the checks before a PR, the documentation contract
@@ -668,7 +667,6 @@ The documentation is organised by **what you are trying to do**, not by layer.
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, branch/commit conventions, the checks to run before a PR |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 and how to report a conduct issue |
 | [SECURITY.md](SECURITY.md) | Supported versions and how to report a vulnerability privately |
-| [CHANGELOG.md](CHANGELOG.md) | Notable changes per release (Keep a Changelog, SemVer tags `vX.Y.Z`) |
 | [LICENSE](LICENSE) | BSD 3-Clause License |
 
 ---

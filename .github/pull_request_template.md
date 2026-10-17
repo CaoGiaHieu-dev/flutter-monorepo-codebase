@@ -37,7 +37,6 @@ Tick what applies; delete lines that do not.
 - [ ] Every imported package is declared in `dependencies`; versions changed only in `pubspec_dependencies.yaml`
 - [ ] No hand edits to composer-managed regions, generated files or barrel exports; barrels regenerated after codegen
 - [ ] Docs updated in **both** `docs/en` and `docs/vi` (and `README.md` / `README.vi.md` if touched)
-- [ ] `CHANGELOG.md` has an `Unreleased` entry for a user-visible change
 
 ## Notes for reviewers
 

@@ -32,7 +32,6 @@ optional: write commands bare and add `fvm ` yourself if you use it.
     `module_generator`, `fastlane`, `ci`, `docs_check`, … Omit it for cross-cutting changes.
   - The body says **why**, and lists each distinct change as a bullet when there are several.
 - Keep a PR to one concern. Fill in the [PR template](.github/pull_request_template.md).
-- User-visible changes get a line under `Unreleased` in [CHANGELOG.md](CHANGELOG.md).
 
 ## 3. Checks to run before opening a PR
 

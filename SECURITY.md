@@ -3,7 +3,7 @@
 ## Supported versions
 
 This repository is a template, not a released library. Only the latest `main` receives security
-fixes; tagged releases (`vX.Y.Z`, see [CHANGELOG.md](CHANGELOG.md)) are snapshots and are not
+fixes; tagged releases (`vX.Y.Z`) are snapshots and are not
 patched after the fact. A project generated from the template owns its own copy — pull fixes from
 `main` into it yourself.
 

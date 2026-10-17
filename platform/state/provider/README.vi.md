@@ -140,6 +140,9 @@ Widget build(BuildContext context) {
     onError: (context, error, _) {
       if (error == const AuthErrorState.invalidCredentials()) {
         _passwordController.clear();
+        // Clearing counts as an edit: without this the emptied field
+        // would show "required" next to the shell's toast.
+        _formKey.currentState?.clearError();
       }
     },
     child: Scaffold(

@@ -126,6 +126,9 @@ class CustomButton extends StatelessWidget {
           (isTransparent ? Colors.transparent : colors.surfaceVariant),
       disabledTextColor: colors.textSecondary,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      // Desktop themes default to a compact density, which would take 8 dp
+      // off [height].
+      visualDensity: VisualDensity.standard,
       padding: EdgeInsets.zero,
       child: Padding(padding: padding, child: child),
     );

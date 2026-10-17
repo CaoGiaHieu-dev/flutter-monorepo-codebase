@@ -146,7 +146,7 @@ flutter analyze
 
 - [ ] **RULE-50** — controller kế thừa `BaseProvider` / `BaseBloc` (`BaseCubit` chỉ khi không có event)
 - [ ] **RULE-51 · RULE-52** — event BLoC là subclass `part` private; mọi handler `on<Event>` là `async (event, emit)` (`arch_check` R18 đọc điều này)
-- [ ] **RULE-53** — state `BlocViewState<T>` được chốt qua `emitResult`; code generic ghi rõ đối số kiểu
+- [ ] **RULE-53** — state `BlocViewState<T>` chốt một `Result` của use case thì đi qua `emitResult` (state ánh xạ từ stream được emit tay); code generic ghi rõ đối số kiểu
 - [ ] **RULE-54** — state xuyên feature là interface `Stream` / `ValueListenable` trung lập, đăng ký kép
 - [ ] **RULE-30** — mọi kích thước đi qua `BuildContext`; giá trị cần sau `await` đã được đọc trước nó (R7 và R20 bắt các dạng literal, không bắt giá trị đi qua biến)
 - [ ] **RULE-31** — widget tái sử dụng dùng tham số đúng như nhận; không gì bị scale hai lần

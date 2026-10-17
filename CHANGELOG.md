@@ -187,6 +187,11 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   one old-file upgrade test and one repository round trip; the Home title, the settings row icons and
   the dashboard's RTL special case are gone; a 404 on sign-in is a server failure with its code
   (`SessionServerFailure`); an app started offline opens on the login screen (the token stays stored).
+- `checkAppContract`'s `C11` covers every location the shell navigates to — each tab's `path` and the
+  path of `ISignInLocation`, `IPostSignInLocation` and `IAppEntryLocation` — not only
+  `RouterProfile.fallbackPath`. `AuthNavigatorImpl` and `HomeNavigatorImpl` are `@LazySingleton`s, like
+  the generated navigator. `CustomInputField` takes `autofillHints`; the login fields declare email and
+  password, so password managers and OS autofill recognise them.
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. Lock files are
   generated and git-ignored (see above); versions come from the `pubspec_dependencies.yaml`
   catalog. Fastlane runs through Bundler, from the repository root or `apps/mobile`.
@@ -230,6 +235,13 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Fixed
 
+- The sample login call sends no bearer token (`EXTRA_NEED_AUTHENTICATION: false`): a token kept from an
+  offline start no longer rides along on sign-in. A rejected password is cleared without a "This field
+  is required" error under the emptied field. The splash spinner carries the translated `loading` label.
+- `CustomButton` keeps its 48 dp height under a desktop theme's compact density (Windows, macOS, Linux,
+  and the web in a desktop browser), which took 8 dp off.
+- Tests for `DatabaseHandle.transaction` and the `foreign_keys` / WAL pragmas on a real file
+  (`core_database`), and for the auth Retrofit client's per-call flags and JSON keys.
 - Gate 5 no longer fails on a fresh checkout: the fastlane guide names the git-ignored `Gemfile.lock` files, which are now allowlisted with a reason.
 - The generated feature navigator keeps its imports sorted whatever the feature is called (a name sorting before `injectable` used to trip `directives_ordering`).
 - The `code_review` workflow parses the report in any language, so the default English report is posted.

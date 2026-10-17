@@ -54,7 +54,7 @@ dev_dependencies:
 
 ### Step 2: Declare the key in the owning package's `utils/`
 
-`<package>/lib/src/utils/<owner>_storage_keys.dart` — `UPPER_SNAKE_CASE`, private constructor (RULE-09):
+`<package>/lib/src/utils/<owner>_storage_keys.dart` (or the owner's `<owner>_constants.dart`, as `auth_constants.dart` does) — `UPPER_SNAKE_CASE`, private constructor (RULE-09):
 
 ```dart
 /// Physical storage keys owned exclusively by `data_profile`.

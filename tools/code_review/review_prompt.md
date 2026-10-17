@@ -34,7 +34,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 
 ### 10–19 · Dependency injection
 - **RULE-10** — screen controllers (Provider, Bloc, Cubit) are `@injectable` factories; only `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider` and `AuthProvider` are `@lazySingleton`.
-- **RULE-11** — constructor injection only; no `getIt<T>()` inside a ViewModel, Bloc, Repository, UseCase or widget — the lookup sites are a route module's `build` and the shell's composition code.
+- **RULE-11** — constructor injection only; no `getIt<T>()` inside a ViewModel, Bloc, Repository, UseCase or widget — the lookup sites are a route module's `build` and the shell's composition code; an optional contract implemented only under `modules/` (RULE-12) is resolved with `getItOrNull` / `getAllOrEmpty` where it is used, a page's `build` or callback included.
 - **RULE-12** *[gate]* — a contract implemented only under `modules/` (a `core_di` contract or an `<id>_api` type) is resolved outside its own module with `getItOrNull` / `getAllOrEmpty` + a fallback; never `getIt` / `getAll`, never a required constructor parameter of an injectable class.
 - **RULE-13** *[gate]* — no eager `@Singleton` depends on a type a later DI group registers; use `@LazySingleton`.
 - **RULE-14** *[gate for a contract an app declares `provided`]* — a second interface on one implementation is bound through a `@module` (GetIt never resolves supertypes).
@@ -77,7 +77,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 - **RULE-50** — Provider screens extend `BaseProvider<T>` and use `executeOperation(...)` for work that can fail (no manual `isLoading` flags or `try`/`catch` around a use case); BLoC screens use `BaseBloc` + Freezed events, `BaseCubit` only when there are no events.
 - **RULE-51** — Freezed event subclasses are private (`= _HomeProfileStarted`), wired with `part` / `part of`.
 - **RULE-52** *[gate for an inline closure or a same-file tear-off that is not `async`]* — every `on<Event>` handler is `async (event, emit)`; never a sync closure calling unawaited async work; a handler declared in another file is yours to check.
-- **RULE-53** — a `BlocViewState<T>` state settles through `emitResult` (`BlocResultMixin` / `CubitResultMixin`); a custom state ends every branch in a terminal state; generic code writes `BlocViewState<T>.loading()`, not `const BlocViewState.loading()`.
+- **RULE-53** — a `BlocViewState<T>` state that settles a use case's `Result` does so through `emitResult` (`BlocResultMixin` / `CubitResultMixin`); a state mapped from a stream (`HomeProfileBloc`) is emitted by hand; a custom state ends every branch in a terminal state; generic code writes `BlocViewState<T>.loading()`, not `const BlocViewState.loading()`.
 - **RULE-54** — cross-feature state is a neutral `Stream` / `ValueListenable` interface, never a Bloc or Provider instance; the owner registers the concrete `@singleton` and binds the interface in a `@module`.
 
 ### 60–69 · Testing, logging and error reporting

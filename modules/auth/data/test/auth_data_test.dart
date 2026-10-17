@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:core_network/core_network.dart';
 import 'package:core_storage/core_storage.dart';
 import 'package:data_auth/data_auth.dart';
@@ -7,9 +11,9 @@ import 'package:domain_core/domain_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The data layer end to end, with hand-written fakes (RULE-61) for the
-/// transport and the platform storage: the repository's `execute()` shape, the
-/// local data source's `StorageValue`, and what the session gateway tells the
-/// transport after a failed renewal.
+/// transport and the platform storage: the Retrofit client's flags and JSON,
+/// the repository's `execute()` shape, the local data source's `StorageValue`,
+/// and what the session gateway tells the transport after a failed renewal.
 void main() {
   late _MemoryStorage secure;
   late _FakeRemote remote;
@@ -30,6 +34,36 @@ void main() {
     local = AuthLocalDataSource(StorageManager(_MemoryStorage(), secure));
     repository = AuthRepositoryImpl(remote, local);
     gateway = AuthSessionGatewayImpl(local, repository);
+  });
+
+  test('the Retrofit client sends each call\'s flags and parses the '
+      'envelope', () async {
+    final adapter = _StubAdapter({
+      'statusCode': 200,
+      'data': {'id': 'u1', 'name': 'Ada', 'token': 'tok-1'},
+    });
+    final client = AuthRemoteDataSource(
+      Dio(BaseOptions(baseUrl: 'https://api.test'))
+        ..httpClientAdapter = adapter,
+    );
+
+    final signedIn = await client.login(const {'email': 'a', 'password': 'b'});
+    await client.refreshToken();
+
+    expect(
+      signedIn.data,
+      const UserModel(id: 'u1', name: 'Ada', token: 'tok-1'),
+    );
+    final [login, renewal] = adapter.requests;
+    // Public: no bearer, and its 401 is a wrong password, not an expiry.
+    expect(login.extra, {
+      NetworkConstants.EXTRA_NEED_AUTHENTICATION: false,
+      NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+    });
+    expect(renewal.extra, {
+      NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+      NetworkConstants.EXTRA_CAN_RETRY: false,
+    });
   });
 
   group('login', () {
@@ -141,18 +175,32 @@ void main() {
         remote.respond = () async =>
             const BaseEntity<UserModel>(statusCode: 401, message: 'revoked');
         expect(await gateway.refreshToken(), isNull);
+
+        // The transport then ends the session through the gateway.
+        await gateway.clearSession();
+        expect(gateway.readToken(), isNull);
       },
     );
 
-    test('no answer (5xx, offline) throws: keep the session', () async {
-      remote.respond = () async => throw _badResponse(503);
-      await expectLater(gateway.refreshToken(), throwsStateError);
-
-      remote.respond = () async => throw DioException(
-        requestOptions: RequestOptions(path: '/refresh'),
-        type: DioExceptionType.connectionError,
-      );
-      await expectLater(gateway.refreshToken(), throwsStateError);
+    test('no answer (5xx, offline, cancelled, a rejected certificate) '
+        'throws: keep the session', () async {
+      final options = RequestOptions(path: '/refresh');
+      for (final error in [
+        _badResponse(500),
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+        ),
+        DioException(requestOptions: options, type: DioExceptionType.cancel),
+        DioException(requestOptions: options, error: const TlsException('pin')),
+      ]) {
+        remote.respond = () async => throw error;
+        await expectLater(
+          gateway.refreshToken(),
+          throwsStateError,
+          reason: '$error',
+        );
+      }
       expect(gateway.readToken(), 'stale');
     });
   });
@@ -165,6 +213,33 @@ DioException _badResponse(int status) {
     type: DioExceptionType.badResponse,
     response: Response(requestOptions: options, statusCode: status),
   );
+}
+
+/// Answers every request with [body] and keeps what was sent.
+class _StubAdapter implements HttpClientAdapter {
+  _StubAdapter(this.body);
+
+  final Map<String, Object?> body;
+  final requests = <RequestOptions>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return ResponseBody.fromString(
+      jsonEncode(body),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _FakeRemote implements AuthRemoteDataSource {

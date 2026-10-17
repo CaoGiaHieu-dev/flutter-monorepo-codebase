@@ -248,6 +248,22 @@ void main() {
       expect(deeplinks.initCalls, 1);
     });
 
+    testWidgets('a signed-in user on a first launch skips onboarding', (
+      tester,
+    ) async {
+      final session = _Session(_ada);
+      addTearDown(session.dispose);
+      final (router, _) = await _boot(
+        tester,
+        viewedOnboard: false,
+        session: session,
+        signIn: FakeSignInLocation('/login'),
+        postSignIn: FakePostSignInLocation('/landing'),
+      );
+
+      expect(_location(router), '/landing');
+    });
+
     testWidgets('with no IPostSignInLocation, AppRouter.fallbackLocation', (
       tester,
     ) async {

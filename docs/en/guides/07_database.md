@@ -12,7 +12,7 @@ You give a package its own relational database: tables, a DAO, a data source tha
 > [!NOTE]
 > The chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` — is the `cache` module (`modules/cache/domain` + `modules/cache/data`), wired up to the repository contract, but **no feature and no use case in this template consumes it**: `domain_cache` is an entity and a repository interface, nothing more. It exists as a working reference for the shape below, and as the fixture the database tests run against.
 >
-> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply` (without `--apply` it only previews). The two database tests go with it, and the repository test is the only one that runs `core_database`'s `DatabaseHandle` — so give it another fixture before deleting if you want to keep that coverage.
+> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply` (without `--apply` it only previews). The two database tests go with it; `core_database`'s own tests keep covering `DatabaseHandle` and the migration runner.
 
 ---
 
@@ -424,16 +424,17 @@ The existing tests are split to follow the code:
 
 | Package | File | Covers |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry, and the upgrade against a real file: every step replays and keeps the rows, a failing step rolls the earlier ones back |
+| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry, and the upgrade against a real file: every step replays and keeps the rows, a failing step rolls the earlier ones back, and the opened file has `foreign_keys` on and the WAL journal |
 | `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
 | `core_database` | `database_connection_factory_test.dart` | Read-pool connections carry the busy timeout, which `beforeOpen` sets on the writer only |
+| `core_database` | `database_handle_test.dart` | `DatabaseHandle.transaction` commits its block and returns its value; a block that throws rolls back what it wrote |
 | `data_cache` | `cache_database_test.dart` | One **real-file** upgrade: a hand-written old-version file (`user_version = 1`) reopened as version 2 replays its step and keeps its rows |
 | `data_cache` | `cache_entry_repository_test.dart` | The repository over a real in-memory database (`DatabaseHandle` → DAO → model → entity): a saved value comes back as an entity and a missing key as `null`; a throwing data source becomes a `Failure`, never an exception |
 
 Two habits worth copying:
 
 - **Test the corruption predicate directly.** It decides whether a user's database may be moved aside — verifying it only through a real corrupt file is not enough.
-- **Test pragmas on a real file.** An in-memory database reports `journal_mode = memory`, so it cannot prove WAL is on. The template's own tests no longer assert the pragmas (`foreign_keys`, `journal_mode`): add that test if your package relies on them.
+- **Test pragmas on a real file.** An in-memory database reports `journal_mode = memory`, so it cannot prove WAL is on. `migration_test.dart` opens a real file for that reason.
 
 ---
 

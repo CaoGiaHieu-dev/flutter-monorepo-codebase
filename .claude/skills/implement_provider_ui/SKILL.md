@@ -147,6 +147,12 @@ Sizes, colours and text styles come from the tokens through `context` (RULE-30, 
 page shows the shape (`AdaptiveContent`, `AppSpacing.lg(context)`, `AppTextStyles.bodyMediumStyle(context)`).
 `core_ui_kit`'s `EmptyWidget` and `LoadingWidget` take already-scaled values (RULE-31).
 
+A form or action screen with nothing to render yet — the login page,
+`modules/auth/feature/lib/src/pages/login_page.dart` — skips `BaseViewWidget`, which would show `emptyWidget` while
+`data` is null: it wraps only the button in `Selector<P, bool>` on `isLoading` and runs side effects in
+`ProviderStateListener` (§ 5). Its `AuthProvider` is a global `@lazySingleton` mounted once by an `IAppTreeWrapper`,
+not at the route, and the shell already toasts session failures (`platform/state/provider/README.md` § 3).
+
 ## 5. Side effects: `ProviderStateListener`
 
 One-off reactions (a toast, navigation) are not rendered in `build`. The listener fires on real

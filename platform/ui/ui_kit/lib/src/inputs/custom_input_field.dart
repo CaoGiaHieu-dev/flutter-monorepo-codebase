@@ -30,6 +30,7 @@ class CustomInputField extends StatefulWidget {
     this.hintStyle,
     this.paddingBottom,
     this.obscureText = false,
+    this.autofillHints,
   });
   final TextEditingController? controller;
   final String? Function(String? value)? validator;
@@ -53,6 +54,10 @@ class CustomInputField extends StatefulWidget {
   final TextStyle? hintStyle;
   final double? paddingBottom;
   final bool obscureText;
+
+  /// What the field holds for password managers and OS autofill
+  /// (`AutofillHints.email`, `AutofillHints.password`, …); `null` opts out.
+  final Iterable<String>? autofillHints;
 
   @override
   State<CustomInputField> createState() => _CustomInputFieldState();
@@ -135,6 +140,7 @@ class _CustomInputFieldState extends State<CustomInputField> {
       enabled: widget.enable,
       focusNode: focusNode,
       obscureText: widget.obscureText,
+      autofillHints: widget.autofillHints,
       buildCounter:
           (
             context, {

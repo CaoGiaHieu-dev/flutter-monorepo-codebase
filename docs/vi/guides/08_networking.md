@@ -61,10 +61,14 @@ abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
       _AuthRemoteDataSource;
 
-  /// A `401` here means wrong credentials, not an expired session, so it must
+  /// A public call: it sends no bearer, even when a stale token is stored. A
+  /// `401` here means wrong credentials, not an expired session, so it must
   /// not start a token refresh.
   @POST(AuthApiConstants.LOGIN)
-  @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
+  @Extra({
+    NetworkConstants.EXTRA_NEED_AUTHENTICATION: false,
+    NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+  })
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
   /// Runs inside a refresh or at boot, so it neither refreshes on a `401`
@@ -79,7 +83,7 @@ abstract class AuthRemoteDataSource {
 }
 ```
 
-`@Extra` đặt cờ theo từng request mà interceptor đọc (`NetworkConstants` trong `core_network`). `EXTRA_CAN_REFRESH_TOKEN: false` để `401` không kích hoạt refresh token; `EXTRA_CAN_RETRY: false` để timeout không bật dialog retry. Cả hai mặc định là `true` khi không khai (bước 6).
+`@Extra` đặt cờ theo từng request mà interceptor đọc (`NetworkConstants` trong `core_network`). `EXTRA_NEED_AUTHENTICATION: false` gửi một lời gọi công khai như login mà không kèm bearer token; `EXTRA_CAN_REFRESH_TOKEN: false` để `401` không kích hoạt refresh token; `EXTRA_CAN_RETRY: false` để timeout không bật dialog retry. Cả ba mặc định là `true` khi không khai (bước 6).
 
 > [!IMPORTANT]
 > `AuthRemoteDataSource` **chính là** đường chạy thật: `AuthRepositoryImpl` gọi nó cho login và refresh token, bọc trong `execute()` (RULE-42). Hãy trỏ `AuthApiConstants` vào endpoint thật của bạn, hoặc đổi transport (Firebase, GraphQL) bên trong repository và giữ nguyên hình dạng.
@@ -334,9 +338,9 @@ Envelope là `BaseEntity<UserModel>` (ở trên) và `data` là `UserModel` (`mo
 | không tới được host | `NetworkFailure(CONNECTION_ERROR)` | trước hết là hộp thoại thử lại; sau **Cancel**, "No internet connection. Check your connection and try again." |
 | `BASE_URL` rỗng (`env.dev` đã commit) | `NetworkFailure(NETWORK_UNKNOWN)` | "A network error occurred. Please try again." — đường dẫn `/user/login` không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
 
-Lời gọi đăng nhập được đánh dấu `EXTRA_CAN_REFRESH_TOKEN: false`, nên `401` ở đó là sai mật khẩu chứ không phải phiên hết hạn (bước 6). Việc gia hạn chạy khi app khởi động mà có token đã lưu, và khi một request khác nhận `401`. Một câu trả lời gia hạn không có token (backend không xoay token) giữ token đã lưu; nó không đăng xuất người dùng. Không có token đã lưu thì repository trả lời "đã đăng xuất" mà không gọi server. Khi server từ chối gia hạn thì token đã lưu bị bỏ: lúc app khởi động, `401` hoặc `403` làm việc đó trong repository, còn sau một `401` giữa phiên thì tầng transport kết thúc phiên qua gateway (ở đó body bị từ chối cũng tính là một lần từ chối). Một lỗi không tới được server thì giữ token và phiên; sample không lưu người dùng nào ngoài token, nên một app *khởi động* khi offline không có ai để hiển thị và mở ra ở màn hình đăng nhập cho tới khi một lần khởi động sau gia hạn được (bước 9).
+Lời gọi đăng nhập được đánh dấu `EXTRA_NEED_AUTHENTICATION: false`, nên nó không bao giờ mang token đã lưu, và `EXTRA_CAN_REFRESH_TOKEN: false`, nên `401` ở đó là sai mật khẩu chứ không phải phiên hết hạn (bước 6). Việc gia hạn chạy khi app khởi động mà có token đã lưu, và khi một request khác nhận `401`. Một câu trả lời gia hạn không có token (backend không xoay token) giữ token đã lưu; nó không đăng xuất người dùng. Không có token đã lưu thì repository trả lời "đã đăng xuất" mà không gọi server. Khi server từ chối gia hạn thì token đã lưu bị bỏ: lúc app khởi động, `401` hoặc `403` làm việc đó trong repository, còn sau một `401` giữa phiên thì tầng transport kết thúc phiên qua gateway (ở đó body bị từ chối cũng tính là một lần từ chối). Một lỗi không tới được server thì giữ token và phiên; sample không lưu người dùng nào ngoài token, nên một app *khởi động* khi offline không có ai để hiển thị và mở ra ở màn hình đăng nhập cho tới khi một lần khởi động sau gia hạn được (bước 9).
 
-Để thử app mà không phải viết backend, chạy một HTTP server bất kỳ trả lời lời gọi đăng nhập như trên rồi đặt `BASE_URL` trỏ tới nó trong `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` cho thấy app sẽ nhận được gì). `env.dev` được commit, nên chỉ đặt URL vào đó, không bao giờ đặt credential. Android emulator tới máy chủ qua `10.0.2.2`, không phải `localhost`, và repository này không đặt cho phép cleartext traffic nào cho Android, nên URL `http://` thuần bị chặn ở đó cho tới khi bạn thêm — hãy dùng `https://` hoặc cho phép trong manifest của app bạn. Repository cố ý không có mock backend: template chỉ ra hình dạng và để transport cho bạn. Muốn đăng nhập vào một API khác, giữ `IAuthRepository`, `LoginParams` và `UserEntity` rồi đổi những gì nằm sau chúng: đường dẫn trong `AuthApiConstants`, các trường của `UserModel` (kèm `@JsonKey(name: '…')` ở chỗ tên trên đường truyền khác), hoặc cả `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/auth_data_test.dart` chạy repository và session gateway với một remote data source giả cùng một storage trong bộ nhớ dưới `AuthLocalDataSource` thật, nên các test đó không cần server.
+Để thử app mà không phải viết backend, chạy một HTTP server bất kỳ trả lời lời gọi đăng nhập như trên rồi đặt `BASE_URL` trỏ tới nó trong `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` cho thấy app sẽ nhận được gì). `env.dev` được commit, nên chỉ đặt URL vào đó, không bao giờ đặt credential. Android emulator tới máy chủ qua `10.0.2.2`, không phải `localhost`, và repository này không đặt cho phép cleartext traffic nào cho Android, nên URL `http://` thuần bị chặn ở đó cho tới khi bạn thêm — hãy dùng `https://` hoặc cho phép trong manifest của app bạn. Repository cố ý không có mock backend: template chỉ ra hình dạng và để transport cho bạn. Muốn đăng nhập vào một API khác, giữ `IAuthRepository`, `LoginParams` và `UserEntity` rồi đổi những gì nằm sau chúng: đường dẫn trong `AuthApiConstants`, các trường của `UserModel` (kèm `@JsonKey(name: '…')` ở chỗ tên trên đường truyền khác), hoặc cả `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/auth_data_test.dart` chạy repository và session gateway với một remote data source giả cùng một storage trong bộ nhớ dưới `AuthLocalDataSource` thật, và chạy Retrofit client thật qua một HTTP adapter giả (cờ của từng lời gọi, các key JSON), nên các test đó không cần server.
 
 ## 9. Cắm luồng refresh token
 

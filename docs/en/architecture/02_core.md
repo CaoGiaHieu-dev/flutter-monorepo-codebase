@@ -101,7 +101,7 @@ Which of these an app provides, and what the shell does without each, is the app
 
 A `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside a feature. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it.
 
-Keys are requested by id rather than declared: `NavigatorKeys.nested('auth')` returns the same instance every time. The DI Hub therefore names no feature, and a module needing its own back stack adds nothing here.
+Keys are requested by id rather than declared: `NavigatorKeys.nested('checkout')` returns the same instance every time. The DI Hub therefore names no feature, and a module needing its own back stack adds nothing here.
 
 > [!NOTE]
 > `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` and `INavDestinationModule` both return `List<RouteBase>`. These *are* routing contracts, so they must speak GoRouter's vocabulary — but note `INavDestinationModule` describes its destination with the Hub's own `NavDestination`, never a `BottomNavigationBarItem`, so the contract does not commit to a bottom bar. Abstracting them further would add an adapter layer with no benefit.
@@ -700,7 +700,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 ```
 
 > [!NOTE]
-> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (guard 1); the refresh call also sets `EXTRA_CAN_RETRY: false`, because it runs at boot and inside another request's 401 and must fail fast rather than wait on a retry dialog. With no stored token `AuthRepositoryImpl.refreshToken` answers without a network call at all. Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
+> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false` in their `@Extra` (guard 1); `login`, a public call, also sets `EXTRA_NEED_AUTHENTICATION: false` so a stale stored token never rides along, and the refresh call also sets `EXTRA_CAN_RETRY: false`, because it runs at boot and inside another request's 401 and must fail fast rather than wait on a retry dialog. With no stored token `AuthRepositoryImpl.refreshToken` answers without a network call at all. Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
 
 ### When pinning is installed, and when it is skipped
 

@@ -74,6 +74,12 @@ void main() {
     await tester.tap(find.text('Beta'));
     await tester.pumpAndSettle();
     expect(location(), '/b');
+    expect(
+      tester
+          .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+          .currentIndex,
+      1,
+    );
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();

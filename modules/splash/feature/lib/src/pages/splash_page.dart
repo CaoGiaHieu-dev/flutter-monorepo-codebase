@@ -19,7 +19,10 @@ class SplashPage extends StatelessWidget {
           children: [
             FlutterLogo(size: context.r(64)),
             SizedBox(height: AppSpacing.xlH(context)),
-            const CircularProgressIndicator(),
+            // Nullable: a host without the global delegates still builds it.
+            CircularProgressIndicator(
+              semanticsLabel: AppLocalizations.of(context)?.loading,
+            ),
           ],
         ),
       ),

@@ -15,10 +15,14 @@ abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
       _AuthRemoteDataSource;
 
-  /// A `401` here means wrong credentials, not an expired session, so it must
+  /// A public call: it sends no bearer, even when a stale token is stored. A
+  /// `401` here means wrong credentials, not an expired session, so it must
   /// not start a token refresh.
   @POST(AuthApiConstants.LOGIN)
-  @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
+  @Extra({
+    NetworkConstants.EXTRA_NEED_AUTHENTICATION: false,
+    NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+  })
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
   /// Runs inside a refresh or at boot, so it neither refreshes on a `401`

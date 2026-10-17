@@ -13,7 +13,7 @@ Bạn cho một package database quan hệ của riêng nó: bảng, DAO, một 
 > [!NOTE]
 > Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire tới tận hợp đồng repository, nhưng **không feature và không use case nào trong template này tiêu thụ nó**: `domain_cache` chỉ là một entity và một repository interface, không hơn. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
 >
-> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Hai test database đi theo nó, và test repository là test duy nhất chạy `DatabaseHandle` của `core_database` — nên muốn giữ phần kiểm tra đó thì hãy cho nó một fixture khác trước khi xoá.
+> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Hai test database đi theo nó; các test của chính `core_database` vẫn bao phủ `DatabaseHandle` và migration runner.
 
 ---
 
@@ -425,16 +425,17 @@ Bộ test hiện có được chia theo đúng vị trí code:
 
 | Package | File | Bao phủ |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng, và upgrade trên file thật: mọi bước được replay và giữ nguyên các row, một bước lỗi làm các bước trước đó bị rollback |
+| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng, và upgrade trên file thật: mọi bước được replay và giữ nguyên các row, một bước lỗi làm các bước trước đó bị rollback, và file đã mở có `foreign_keys` bật cùng journal WAL |
 | `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
 | `core_database` | `database_connection_factory_test.dart` | Các kết nối trong read pool mang busy timeout, thứ mà `beforeOpen` chỉ đặt cho writer |
+| `core_database` | `database_handle_test.dart` | `DatabaseHandle.transaction` commit khối của nó và trả về giá trị của khối; một khối ném lỗi thì rollback những gì nó đã ghi |
 | `data_cache` | `cache_database_test.dart` | Một lần nâng cấp trên **file thật**: một file version cũ viết tay (`user_version = 1`) mở lại như version 2 chạy lại bước của nó và giữ nguyên row |
 | `data_cache` | `cache_entry_repository_test.dart` | Repository trên một database in-memory thật (`DatabaseHandle` → DAO → model → entity): giá trị đã lưu quay về thành entity và key không có thành `null`; một data source ném lỗi trở thành `Failure`, không bao giờ là exception |
 
 Hai thói quen đáng học:
 
 - **Test trực tiếp predicate phát hiện hỏng.** Nó quyết định database của người dùng có bị dời đi hay không — kiểm chứng gián tiếp qua một file hỏng thật là chưa đủ.
-- **Test pragma trên file thật.** Database in-memory báo `journal_mode = memory`, nên không thể chứng minh WAL đang bật. Test của chính template không còn kiểm các pragma (`foreign_keys`, `journal_mode`): hãy thêm test đó nếu package của bạn dựa vào chúng.
+- **Test pragma trên file thật.** Database in-memory báo `journal_mode = memory`, nên không thể chứng minh WAL đang bật. `migration_test.dart` mở một file thật vì lý do đó.
 
 ---
 

@@ -104,7 +104,8 @@ Gate 3 runs `cd apps/<id> && flutter test` — the whole package, not only the s
 
 - `apps/<id>/test/di_smoke_test.dart` — a factory with a non-nullable `@factoryParam` has an entry in
   `_factoriesNeedingArguments`. Once the module is gone the test fails with `FactoryProblem:F03 <Type> is listed in
-  notBuilt but is not a factory the graph registers`: delete the entry.
+  notBuilt but is not a factory the graph registers`: delete the entry. Dropping the dashboard while two or more tabs
+  remain (`apps/mobile`: home and settings) fails it with `C12`: compose one tab, or keep the dashboard.
 - `apps/<id>/test/app_profile_test.dart` pins the capabilities the app provides ("declare every optional contract the
   sample modules provide"). After any capability flips to `absent` — by hand, by `remove_sample`, or from a V3
   finding — update the expectations in the same test files of **every** app you changed.

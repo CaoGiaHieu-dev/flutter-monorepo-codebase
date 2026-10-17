@@ -340,6 +340,7 @@ void main() {
         configureDependencies: () async {
           await graph(splash: true);
           getIt
+            ..registerSingleton<IFeatureRouteModule>(aRoute('/login'))
             ..registerSingleton<ISessionState>(session)
             ..registerSingleton<ISessionGateway>(_Gateway())
             ..registerSingleton<ISessionRefreshListenable>(_Refresh())

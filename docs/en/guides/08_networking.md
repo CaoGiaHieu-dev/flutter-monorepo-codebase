@@ -60,10 +60,14 @@ abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
       _AuthRemoteDataSource;
 
-  /// A `401` here means wrong credentials, not an expired session, so it must
+  /// A public call: it sends no bearer, even when a stale token is stored. A
+  /// `401` here means wrong credentials, not an expired session, so it must
   /// not start a token refresh.
   @POST(AuthApiConstants.LOGIN)
-  @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
+  @Extra({
+    NetworkConstants.EXTRA_NEED_AUTHENTICATION: false,
+    NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+  })
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
   /// Runs inside a refresh or at boot, so it neither refreshes on a `401`
@@ -78,7 +82,7 @@ abstract class AuthRemoteDataSource {
 }
 ```
 
-`@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`). `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh; `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. Both default to `true` when absent (step 6).
+`@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`). `EXTRA_NEED_AUTHENTICATION: false` sends a public call such as the login without the bearer token; `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh; `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. All three default to `true` when absent (step 6).
 
 > [!IMPORTANT]
 > `AuthRemoteDataSource` **is** the live path: `AuthRepositoryImpl` calls it for login and token refresh, wrapped in `execute()` (RULE-42). Point `AuthApiConstants` at your real endpoints, or swap the transport (Firebase, GraphQL) inside the repository and keep the shape.
@@ -333,9 +337,9 @@ The sign-in counts as a success only when the call did not fail, `statusCode` is
 | the host cannot be reached | `NetworkFailure(CONNECTION_ERROR)` | the retry dialog first; after **Cancel**, "No internet connection. Check your connection and try again." |
 | `BASE_URL` empty (the committed `env.dev`) | `NetworkFailure(NETWORK_UNKNOWN)` | "A network error occurred. Please try again." — the path `/user/login` has no host, so the HTTP client rejects it before any connection is made |
 
-The login call is marked `EXTRA_CAN_REFRESH_TOKEN: false`, so a `401` there is a wrong password, never an expired session (step 6). The renewal runs at app start when a token is stored, and when any other request gets a `401`. A renewal answer without a token (a backend that does not rotate it) keeps the stored token; it does not sign the user out. With no stored token the repository answers "signed out" without calling the server. When the server refuses the renewal the stored token is dropped: at app start a `401` or `403` does it in the repository, and after a `401` mid-session the transport ends the session through the gateway (a rejected body counts as a refusal there). A failure that never reached the server keeps the token and the session; the sample stores no user besides the token, so an app *started* offline has nobody to show and opens on the login screen until a later start can renew (step 9).
+The login call is marked `EXTRA_NEED_AUTHENTICATION: false`, so it never carries a stored token, and `EXTRA_CAN_REFRESH_TOKEN: false`, so a `401` there is a wrong password, never an expired session (step 6). The renewal runs at app start when a token is stored, and when any other request gets a `401`. A renewal answer without a token (a backend that does not rotate it) keeps the stored token; it does not sign the user out. With no stored token the repository answers "signed out" without calling the server. When the server refuses the renewal the stored token is dropped: at app start a `401` or `403` does it in the repository, and after a `401` mid-session the transport ends the session through the gateway (a rejected body counts as a refusal there). A failure that never reached the server keeps the token and the session; the sample stores no user besides the token, so an app *started* offline has nobody to show and opens on the login screen until a later start can renew (step 9).
 
-To try the app without writing a backend, run any HTTP server that answers the sign-in call as above and set `BASE_URL` to it in `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` shows what the app will see). `env.dev` is committed, so put only a URL there, never a credential. The Android emulator reaches the host machine at `10.0.2.2`, not `localhost`, and this repository sets no cleartext-traffic allowance for Android, so a plain `http://` URL is blocked there until you add one — use `https://` or allow it in your app's manifest. There is no mock backend in the repository by design: the template shows the shape and leaves the transport to you. To sign in against a different API, keep `IAuthRepository`, `LoginParams` and `UserEntity` and change what sits behind them: the paths in `AuthApiConstants`, the fields of `UserModel` (with `@JsonKey(name: '…')` where the wire name differs), or the whole `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/auth_data_test.dart` runs the repository and the session gateway against a fake remote data source and an in-memory storage under the real `AuthLocalDataSource`, so those tests need no server.
+To try the app without writing a backend, run any HTTP server that answers the sign-in call as above and set `BASE_URL` to it in `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` shows what the app will see). `env.dev` is committed, so put only a URL there, never a credential. The Android emulator reaches the host machine at `10.0.2.2`, not `localhost`, and this repository sets no cleartext-traffic allowance for Android, so a plain `http://` URL is blocked there until you add one — use `https://` or allow it in your app's manifest. There is no mock backend in the repository by design: the template shows the shape and leaves the transport to you. To sign in against a different API, keep `IAuthRepository`, `LoginParams` and `UserEntity` and change what sits behind them: the paths in `AuthApiConstants`, the fields of `UserModel` (with `@JsonKey(name: '…')` where the wire name differs), or the whole `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/auth_data_test.dart` runs the repository and the session gateway against a fake remote data source and an in-memory storage under the real `AuthLocalDataSource`, and the real Retrofit client over a stub HTTP adapter (each call's flags, the JSON keys), so those tests need no server.
 
 ## 9. Plug in token refresh
 

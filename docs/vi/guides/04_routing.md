@@ -305,7 +305,7 @@ dart tools/barrel_generator/generate.dart modules/auth/api/lib
 **2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
-@Singleton(as: AuthNavigator)
+@LazySingleton(as: AuthNavigator)
 class AuthNavigatorImpl implements AuthNavigator {
   @override
   void toLogin(BuildContext context) => const LoginRoute().go(context);

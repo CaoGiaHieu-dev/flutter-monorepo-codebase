@@ -9,7 +9,7 @@ import 'support/fake_nav_destination.dart';
 /// The app honours the OS font size up to 2x (the shell clamps it). The
 /// dashboard chrome — bottom bar on a phone, rail from a medium window,
 /// extended rail from a large one — must lay out at that cap without an
-/// overflow, with every label shown.
+/// overflow, with every label present.
 const _labels = ['Home', 'Settings', 'Messages', 'Profile'];
 
 void main() {
@@ -66,6 +66,10 @@ void main() {
       await pumpDashboard(tester, window);
 
       expect(find.byType(chrome), findsOneWidget);
+      if (chrome == NavigationRail) {
+        final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
+        expect(rail.extended, name.contains('extended'));
+      }
       for (final label in _labels) {
         expect(find.text(label), findsWidgets);
       }

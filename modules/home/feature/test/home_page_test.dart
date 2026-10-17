@@ -84,7 +84,7 @@ void main() {
       'a 2x text size scrolls instead of overflowing', (tester) async {
     getIt.registerSingleton<ISessionStatusStream>(_FakeSessionStream());
     tester.view
-      ..physicalSize = const Size(320, 200)
+      ..physicalSize = const Size(320, 150)
       ..devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     tester.platformDispatcher.textScaleFactorTestValue = 2.0;

@@ -83,6 +83,24 @@ void main() {
       );
     });
 
+    // Desktop themes default to a compact density, which takes 8 dp off a
+    // plain MaterialButton.
+    testWidgets(
+      'CustomButton.rectangle keeps 48 dp under the desktop density',
+      (tester) async {
+        await _pump(
+          tester,
+          CustomButton.rectangle(onPressed: () {}, child: const Text('go')),
+        );
+
+        expect(
+          tester.getSize(find.byType(MaterialButton)).height,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
+        );
+      },
+      variant: TargetPlatformVariant.desktop(),
+    );
+
     testWidgets('CustomButton.rectangle keeps a caller height above 48 as-is, '
         'and lifts a smaller one to 48', (tester) async {
       await _pump(

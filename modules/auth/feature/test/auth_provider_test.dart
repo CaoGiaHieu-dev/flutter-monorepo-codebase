@@ -79,8 +79,9 @@ void main() {
   });
 
   test('any other failure is published by its code, not its text', () async {
+    // A 403 is a locked account: an AuthFailure, but not a wrong password.
     repository.loginResult = const Result.failure(
-      ServerFailure(message: 'Maintenance', code: 503),
+      AuthFailure(message: 'Account locked', code: 403),
     );
     final provider = await buildProvider();
     final failures = <SessionFailure>[];
@@ -91,7 +92,7 @@ void main() {
     await pumpEventQueue();
 
     expect(failures.single, isA<SessionServerFailure>());
-    expect((failures.single as SessionServerFailure).code, 503);
+    expect((failures.single as SessionServerFailure).code, 403);
   });
 
   test('a second login while the first is pending sends nothing', () async {

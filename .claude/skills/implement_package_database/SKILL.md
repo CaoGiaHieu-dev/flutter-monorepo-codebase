@@ -357,7 +357,7 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration<CacheDatabase> {
 tests in the owning package's `test/`, following `modules/cache/data/test/` (`cache_database_test.dart`: an old
 file upgrading through its step and keeping its rows; `cache_entry_repository_test.dart`: a real in-memory round
 trip through the repository, and a throwing data source becoming a `Failure`). Test pragmas on a real
-file: an in-memory database reports `journal_mode = memory` (the sample's tests do not assert them).
+file: an in-memory database reports `journal_mode = memory` (`core_database`'s `migration_test.dart` shows how).
 
 **Test an upgrade.** `CacheDatabase.forTesting(executor, steps, schemaVersion)` takes the schema version the build
 under test ships. Write the **old** schema by hand — never derive it from the current table class, which

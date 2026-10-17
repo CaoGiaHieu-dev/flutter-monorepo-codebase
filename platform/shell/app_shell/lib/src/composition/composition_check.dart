@@ -24,8 +24,9 @@ import 'shell_contracts.dart';
 /// - `C08` `DioFailureClassifier` is not registered exactly once;
 /// - `C09` an optional contract has no declaration at all;
 /// - `C10` a registration's constructor throws when the contract is resolved;
-/// - `C11` `RouterProfile.fallbackPath` is not a route the assembled router
-///   registers;
+/// - `C11` a location the shell navigates to — `RouterProfile.fallbackPath`,
+///   a tab's `path`, the path of `ISignInLocation`, `IPostSignInLocation` or
+///   `IAppEntryLocation` — is not a route the assembled router registers;
 /// - `C12` two or more navigation tabs and no `IDashboardRouteModule`: no
 ///   chrome to switch between them.
 ///
@@ -208,7 +209,7 @@ Iterable<ProfileProblem> _bundleDisagreements(
   }
 }
 
-/// `C05`–`C08` and `C11`: the structural checks both smoke tests share. A
+/// `C05`–`C08`, `C11` and `C12`: the structural checks both smoke tests share. A
 /// contract in [failed] already threw while it was resolved (`C10`): what
 /// depends on it is skipped rather than reported twice.
 Iterable<ProfileProblem> _structure(
@@ -268,31 +269,61 @@ Iterable<ProfileProblem> _structure(
     );
   }
 
-  ProfileProblem? fallbackProblem;
+  final unrouted = <ProfileProblem>[];
   if (!failed.contains(AppRouter)) {
     try {
       final router = getItOrNull<AppRouter>();
       // Assembles the GoRouter from every contribution; it asserts on a
       // malformed tree (duplicate or missing paths) while it is built.
-      if (router != null && router.router.configuration.routes.isEmpty) {
+      final config = router?.router.configuration;
+      if (config != null && config.routes.isEmpty) {
         throw StateError('the router has no routes');
       }
+      bool isUnrouted(String path) =>
+          config != null && config.findMatch(Uri.parse(path)).isError;
+
       final fallback = profile.router.fallbackPath;
-      if (router != null &&
-          fallback != null &&
-          router.router.configuration.findMatch(Uri.parse(fallback)).isError) {
-        fallbackProblem = ProfileProblem(
-          code: 'C11',
-          description:
-              '`RouterProfile.fallbackPath` is `$fallback`, but the router '
-              'registers no route at that path. It is where a signed-in user '
-              'lands and where "go home" goes, so the app would open on its '
-              'not-found page.',
-          action:
-              'Set `router: RouterProfile(fallbackPath: ...)` in '
-              'apps/${profile.facts.id}/lib/app/app_profile.dart to a path '
-              'a composed module registers, or remove it to use the first '
-              'tab.',
+      if (fallback != null && isUnrouted(fallback)) {
+        unrouted.add(
+          ProfileProblem(
+            code: 'C11',
+            description:
+                '`RouterProfile.fallbackPath` is `$fallback`, but the router '
+                'registers no route at that path. It is where a signed-in user '
+                'lands and where "go home" goes, so the app would open on its '
+                'not-found page.',
+            action:
+                'Set `router: RouterProfile(fallbackPath: ...)` in '
+                'apps/${profile.facts.id}/lib/app/app_profile.dart to a path '
+                'a composed module registers, or remove it to use the first '
+                'tab.',
+          ),
+        );
+      }
+      // Every other path the shell sends a user to, with its contributor.
+      final locations = [
+        for (final tab in tabs ?? const <INavDestinationModule>[])
+          (tab, tab.path),
+        if (!failed.contains(ISignInLocation))
+          if (getItOrNull<ISignInLocation>() case final l?) (l, l.path),
+        if (!failed.contains(IPostSignInLocation))
+          if (getItOrNull<IPostSignInLocation>() case final l?) (l, l.path),
+        if (!failed.contains(IAppEntryLocation))
+          if (getItOrNull<IAppEntryLocation>() case final l?) (l, l.path),
+      ];
+      for (final (owner, path) in locations) {
+        if (!isUnrouted(path)) continue;
+        unrouted.add(
+          ProfileProblem(
+            code: 'C11',
+            description:
+                '`${owner.runtimeType}.path` is `$path`, but the router '
+                'registers no route at that path, so the shell would send '
+                'the user to its not-found page.',
+            action:
+                'Make `${owner.runtimeType}.path` the location of a route its '
+                'module registers.',
+          ),
         );
       }
     } catch (error) {
@@ -305,7 +336,7 @@ Iterable<ProfileProblem> _structure(
       );
     }
   }
-  if (fallbackProblem != null) yield fallbackProblem;
+  yield* unrouted;
 
   final classifiers = ErrorHandler.classifiers
       .whereType<DioFailureClassifier>()

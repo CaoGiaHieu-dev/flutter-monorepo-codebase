@@ -444,7 +444,7 @@ void main() {
     });
   });
 
-  group('C11 the fallback path is not a registered route', () {
+  group('C11 a location the shell navigates to is not a registered route', () {
     test('a typo is reported with the path and where to fix it', () {
       registerRequiredShell();
       getIt.registerSingleton<IFeatureRouteModule>(aRoute('/home'));
@@ -484,6 +484,34 @@ void main() {
         );
         expect(report.problems, isEmpty, reason: path);
       }
+    });
+
+    test('so is every location contract and tab path, by its contributor', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute('/home'))
+        ..registerSingleton<IAppEntryLocation>(FakeEntryLocation('/home'))
+        ..registerSingleton<IPostSignInLocation>(FakePostSignInLocation('/hme'))
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(
+            path: '/tab',
+            routes: [aRoute('/tab/x').routes.single],
+          ),
+        );
+
+      final report = _check(
+        testProfile(
+          capabilities: declare(
+            provided: const {'routes', 'entry', 'post_sign_in', 'tabs'},
+          ),
+        ),
+      );
+
+      expect(_codes(report), ['C11', 'C11']);
+      expect(report.problems.map((p) => p.description), [
+        contains('`FakeDestination.path` is `/tab`'),
+        contains('`FakePostSignInLocation.path` is `/hme`'),
+      ]);
     });
 
     test('no fallback path is nothing to check', () {

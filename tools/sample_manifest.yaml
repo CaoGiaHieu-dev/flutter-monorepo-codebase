@@ -71,10 +71,11 @@ packages:
     kind: sample
     path: modules/auth/feature
     demonstrates: >-
-      Provider state management, a global @lazySingleton controller,
-      implementing the platform's product-neutral session contracts
-      (ISessionState, ISessionStatusStream, ISessionRefreshListenable,
-      ISignInLocation) and its own module API (auth_api), and route-level DI.
+      Provider state management, a global @lazySingleton controller mounted
+      once by AuthTreeWrapper (IAppTreeWrapper), implementing the platform's
+      product-neutral session contracts (ISessionState, ISessionStatusStream,
+      ISessionRefreshListenable, ISignInLocation) and its own module API
+      (auth_api).
       One screen only (login) — register and forgot-password repeated the
       same mechanisms with different strings.
 
@@ -105,8 +106,9 @@ packages:
     kind: sample
     path: modules/dashboard/feature
     demonstrates: >-
-      Shell chrome only — builds the bottom bar from whatever tabs register
-      themselves. Owns no business logic and no tab page.
+      Shell chrome only — builds the bottom bar or navigation rail from
+      whatever tabs register themselves. Owns no business logic and no tab
+      page.
 
   feature_splash:
     kind: sample
@@ -142,8 +144,9 @@ packages:
     path: modules/auth/data
     demonstrates: >-
       A Retrofit data source, Freezed models with .toEntity(), a
-      package-owned storage key, and a repository wrapping both in execute()
-      so nothing throws past the data layer.
+      package-owned storage key, a repository wrapping both in execute()
+      so nothing throws past the data layer, and the ISessionGateway
+      implementation.
   domain_cache:
     kind: sample
     path: modules/cache/domain
@@ -154,8 +157,9 @@ packages:
     demonstrates: >-
       A package-owned Drift database — table, DAO, migrations through
       core_database — behind IDatabaseHandle, with a Model that keeps Drift's
-      row type out of the public API. Its tests are the fixture for
-      core_database's DatabaseHandle and driftMigrationStrategy.
+      row type out of the public API. Its tests use DatabaseHandle.accessor
+      and hold the sample's real-file upgrade test (core_database's
+      migration_test.dart covers the runner itself).
 
 # ---------------------------------------------------------------------------
 # Removal bundles
@@ -183,8 +187,6 @@ bundles:
     # contracts auth implements live in core_di and are product-neutral —
     # framework_contracts below, not orphans.
     packages: [feature_auth, domain_auth, data_auth, auth_api]
-    orphaned_keys:
-      - "NavigatorKeys.nested('auth') in platform/foundation/contracts/lib/src/routing/navigator_keys.dart"
     breaks: []
     safe_couplings:
       - "platform_app_shell -> ISessionState / ISignInLocation / ISessionRefreshListenable (getItOrNull; boot treats the app as signed out and never redirects to a sign-in screen)"
@@ -223,24 +225,26 @@ bundles:
     breaks: []
     note: >-
       Nothing consumes it. It is the only sample of a Drift database: its
-      upgrade test (modules/cache/data/test/) is the one that exercises
-      driftMigrationStrategy against a real file.
+      upgrade test (modules/cache/data/test/) is the sample-level example;
+      core_database's migration_test.dart is the authority on the runner.
 
   dashboard:
     capabilities: [dashboard]
     packages: [feature_dashboard]
-    orphaned_contracts:
-      - platform/foundation/contracts/lib/src/routing/i_dashboard_route_module.dart
-    breaks: []
+    breaks:
+      - sample: apps/mobile
+        at: test/di_smoke_test.dart
+        why: "checkAppContract C12: home and settings stay as two tabs with no dashboard, so only the first is reachable"
+        fix: keep dashboard, or remove all but one tab bundle with it
     note: >-
-      Tabs still render, without chrome — AppRouter falls back to the bare
-      navigationShell. apps/admin runs this way.
+      With one tab only, the tab renders without chrome (apps/admin) —
+      AppRouter falls back to the bare navigationShell. An app with two or
+      more tabs (apps/mobile) then fails its smoke test with C12: compose one
+      tab or keep the dashboard.
 
   splash:
     capabilities: [splash]
     packages: [feature_splash]
-    orphaned_contracts:
-      - platform/foundation/contracts/lib/src/app/i_app_splash_screen.dart
     breaks: []
     note: >-
       runShellApp (platform_app_shell) resolves it with getItOrNull, so the
@@ -276,3 +280,7 @@ framework_contracts:
   - platform/foundation/contracts/lib/src/i_theme_storage.dart
   - platform/foundation/contracts/lib/src/i_language_storage.dart
   - platform/foundation/contracts/lib/src/app/i_app_tree_wrapper.dart
+  # Optional shell slots the shell resolves with getItOrNull (AppRouter,
+  # composition_check, bootstrap): they stay when dashboard or splash goes.
+  - platform/foundation/contracts/lib/src/routing/i_dashboard_route_module.dart
+  - platform/foundation/contracts/lib/src/app/i_app_splash_screen.dart

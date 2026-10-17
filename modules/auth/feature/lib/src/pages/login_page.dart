@@ -58,6 +58,9 @@ class _LoginPageState extends State<LoginPage> {
       onError: (context, error, _) {
         if (error == const AuthErrorState.invalidCredentials()) {
           _passwordController.clear();
+          // Clearing counts as an edit: without this the emptied field
+          // would show "required" next to the shell's toast.
+          _formKey.currentState?.clearError();
         }
       },
       child: Scaffold(
@@ -80,6 +83,7 @@ class _LoginPageState extends State<LoginPage> {
                       controller: _emailController,
                       hintText: context.l10nAuth.enterYourEmail,
                       keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
                       textInputAction: TextInputAction.next,
                       validator: _required,
                     ),
@@ -88,6 +92,7 @@ class _LoginPageState extends State<LoginPage> {
                       controller: _passwordController,
                       hintText: context.l10nAuth.enterYourPassword,
                       obscureText: true,
+                      autofillHints: const [AutofillHints.password],
                       textInputAction: TextInputAction.done,
                       validator: _required,
                       onFieldSubmitted: (_) => _submit(),

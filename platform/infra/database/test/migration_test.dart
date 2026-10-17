@@ -336,6 +336,21 @@ void main() {
       return (error: error, columns: columns, version: version);
     }
 
+    test('opens with foreign keys enforced and the WAL journal', () async {
+      // An in-memory database reports `journal_mode = memory`: only a file
+      // proves WAL is on.
+      final database = _VersionedDatabase(drift.NativeDatabase(file), 1, []);
+      addTearDown(database.close);
+      Future<Object?> pragma(String name) async =>
+          (await database.customSelect('PRAGMA $name').getSingle())
+              .data
+              .values
+              .first;
+
+      expect(await pragma('foreign_keys'), 1);
+      expect(await pragma('journal_mode'), 'wal');
+    });
+
     test('replays every step and keeps the rows', () async {
       final result = await open(3, const [
         _SqlMigration(2, 'ALTER TABLE t ADD COLUMN a INTEGER'),

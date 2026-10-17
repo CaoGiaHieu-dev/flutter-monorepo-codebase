@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'auth_route_module.dart';
 
-@Singleton(as: AuthNavigator)
+@LazySingleton(as: AuthNavigator)
 class AuthNavigatorImpl implements AuthNavigator {
   @override
   void toLogin(BuildContext context) => const LoginRoute().go(context);

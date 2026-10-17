@@ -18,8 +18,10 @@ class _AddExpiresAt implements IDatabaseMigration {
     'ALTER TABLE cache_entries ADD COLUMN expires_at INTEGER',
   );
 
+  /// Irreversible here, so it says so instead of silently keeping the column.
   @override
-  Future<void> downgrade(drift.Migrator m) async {}
+  Future<void> downgrade(drift.Migrator m) async =>
+      throw UnsupportedError('expires_at cannot be dropped');
 }
 
 void main() {

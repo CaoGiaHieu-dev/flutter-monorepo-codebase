@@ -145,7 +145,7 @@ flutter analyze
 
 - [ ] **RULE-50** — controllers extend `BaseProvider` / `BaseBloc` (`BaseCubit` only without events)
 - [ ] **RULE-51 · RULE-52** — BLoC events are private `part` subclasses; every `on<Event>` handler is `async (event, emit)` (`arch_check` R18 reads it)
-- [ ] **RULE-53** — a `BlocViewState<T>` state settles through `emitResult`; generic code writes the type argument
+- [ ] **RULE-53** — a `BlocViewState<T>` state that settles a use case's `Result` goes through `emitResult` (one mapped from a stream is emitted by hand); generic code writes the type argument
 - [ ] **RULE-54** — cross-feature state is a neutral `Stream` / `ValueListenable` interface, dual-registered
 - [ ] **RULE-30** — all sizing goes through `BuildContext`; values needed after an `await` were read before it (R7 and R20 catch the literal forms, not a value reached through a variable)
 - [ ] **RULE-31** — reusable widgets use parameters as received; nothing is scaled twice

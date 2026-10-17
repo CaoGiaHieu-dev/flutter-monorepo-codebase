@@ -144,15 +144,22 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   starts; the `SslPinningConfig` supertype, its `@module` binding and `NetworkConfig.sslPinningHashes`
   are gone, so a missing registration can no longer switch pinning off. The template ships a stated
   placeholder decision for staging and prod, listed under *decisions to revisit* in each app's report.
-- **`http_security_pinning` 1.0.1 → 1.2.2** (catalog and `core_common` at `^1.2.2`; BSD-3-Clause since
+- **`http_security_pinning` 1.0.1 → 2.0.0** (catalog and `core_common` at `^2.0.0`; BSD-3-Clause since
   1.2.2, like this template; it adds `cryptography` (Apache-2.0), `http` becomes a runtime dependency of
-  the apps, `pem` is gone). `AppInitializer` no longer carries its own recursion guard around the pinning
-  client; it parses the declared pins at boot (a malformed pin stops the boot with `InvalidPinException`,
-  and a boot retry can no longer start the app unpinned); a refused host lists the hashes the server
-  presented, also in `AppFailure.message`; a rotated certificate is read again once without a restart.
-  The client is held as an `Object` and type-tested before it is returned, because on the web the package's class is an `http.BaseClient`, so
-  `apps/admin` still builds for the web. The enforcement test no longer fakes the plugin's channel: it
-  makes the installed client judge chains put in the package's chain cache.
+  the apps, `pem` is gone; it needs Flutter 3.41, Android minSdk 24 with Java 17 and iOS 13, which the
+  template already meets — a fork that lowered `minSdk` below 24 or its iOS target below 13 must raise
+  it). `AppInitializer` no longer carries its own recursion guard around the pinning client; it checks
+  the declared pins at boot with the client's own rules (a malformed pin stops the boot with
+  `InvalidPinException`, and a boot retry can no longer start the app unpinned); a refused host lists the
+  hashes the server presented, also in `AppFailure.message` (on desktop with a note that only the leaf
+  can match); a rotated certificate is read again once without a restart, and every host is read again
+  after an hour. Every redirect hop is checked like a first request; the pinned client follows
+  `https_proxy` / `no_proxy` like `dart:io`, its probe included; the Android probe's trust manager
+  rejects what it records, so it no longer looks like an accept-all one to store scanners. The client is
+  held as an `Object` and type-tested before it is returned, because on the web the package's class is an
+  `http.BaseClient`, so `apps/admin` still builds for the web. The enforcement test no longer fakes the
+  plugin's channel: it makes the installed client judge chains put in the package's chain cache, and it
+  dials directly whatever proxy the environment names.
 - **Breaking, for forks — pinning applies on Windows, macOS and Linux.** `AppPlatform.canPinTls` is every
   platform but the web; on desktop the plugin sees the leaf certificate only, so the pinned keys must
   include the leaf's key. An app that declares a desktop platform must decide `flavors.<f>.ssl_pinning`
@@ -289,6 +296,10 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 - Certificate validation is bypassed only in a debug build that explicitly declared `--flavor dev`; a
   missing or unknown flavor is treated as prod.
+- A redirect can no longer take pinned traffic out of TLS: `http_security_pinning` 2.0.0 checks the
+  scheme and the pins on every hop, so an `https://` → `http://` redirect is refused instead of sent in
+  cleartext (image loaders and other `HttpClient` users follow redirects; `ApiClient` does not by
+  default).
 - `LoggingInterceptor` redacts credentials in bodies as well as headers and logs only in debug.
 - The AI code-review tool sends the Gemini key in a header, redacts it from errors, and stores it in a
   gitignored file instead of tracked config.

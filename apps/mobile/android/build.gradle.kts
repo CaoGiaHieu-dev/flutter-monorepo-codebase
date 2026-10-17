@@ -38,10 +38,10 @@ subprojects {
 // Compile-time only — nothing is added to the shipped APK.
 subprojects {
     plugins.withId("com.android.library") {
-        dependencies.add("compileOnly", "org.checkerframework:checker-qual:3.51.1")
+        dependencies.add("compileOnly", "org.checkerframework:checker-qual:4.3.1")
     }
     plugins.withId("com.android.application") {
-        dependencies.add("compileOnly", "org.checkerframework:checker-qual:3.51.1")
+        dependencies.add("compileOnly", "org.checkerframework:checker-qual:4.3.1")
     }
 }
 

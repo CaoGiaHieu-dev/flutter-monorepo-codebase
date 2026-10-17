@@ -1,6 +1,5 @@
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../utils/cache_constants.dart';
@@ -29,8 +28,8 @@ class CacheDatabase extends _$CacheDatabase {
   @override
   final int schemaVersion;
 
-  /// Opens the database on a background isolate, with corruption recovery
-  /// ([DriftDatabaseOpener]).
+  /// Opens the database — on a background isolate natively, in drift's wasm
+  /// worker on the web — with corruption recovery ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -40,19 +39,18 @@ class CacheDatabase extends _$CacheDatabase {
     );
   }
 
-  /// In-memory database for tests. [executor] and [schemaVersion] let an
-  /// upgrade test reopen a hand-written old file so the [migrations] run.
+  /// A database over [executor], for tests — `NativeDatabase.memory()` for
+  /// an in-memory one. The test passes the executor, so this library never
+  /// imports `drift/native` (`dart:ffi`), which no web build can compile.
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file so
+  /// the [migrations] run.
   @visibleForTesting
-  factory CacheDatabase.forTesting([
-    QueryExecutor? executor,
+  factory CacheDatabase.forTesting(
+    QueryExecutor executor, [
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
     int schemaVersion = 1,
   ]) {
-    return CacheDatabase._(
-      executor ?? NativeDatabase.memory(),
-      migrations,
-      schemaVersion,
-    );
+    return CacheDatabase._(executor, migrations, schemaVersion);
   }
 
   @override

@@ -6,8 +6,8 @@ import 'package:mobile_app/app/app_profile.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
 
 /// Booting this app on a platform its manifest does not declare would be a
-/// permanently blank window with no error (Linux: `Firebase.initializeApp`
-/// never returns). The boot stops before dependency injection instead and says
+/// permanently blank window with no error (on Linux, before this app declared
+/// it, `Firebase.initializeApp` never returned). The boot stops before dependency injection instead and says
 /// what to do — and `ALLOW_UNDECLARED_PLATFORM` is the one way past it.
 void main() {
   tearDown(() async {
@@ -15,10 +15,10 @@ void main() {
     await getIt.reset();
   });
 
-  testWidgets('stops before DI on linux with the manifest-key message', (
+  testWidgets('stops before DI on windows with the manifest-key message', (
     tester,
   ) async {
-    debugAppPlatformOverride = AppPlatform.linux;
+    debugAppPlatformOverride = AppPlatform.windows;
     var diCalls = 0;
 
     runShellApp(
@@ -39,8 +39,8 @@ void main() {
     expect(diCalls, 0, reason: 'configureDependencies must not run');
     expect(
       find.textContaining(
-        '`mobile` is running on linux, which its manifest does not declare '
-        '(declared: android, ios)',
+        '`mobile` is running on windows, which its manifest does not declare '
+        '(declared: android, ios, web, linux)',
       ),
       findsOneWidget,
     );
@@ -66,13 +66,13 @@ void main() {
   test('ALLOW_UNDECLARED_PLATFORM lets the profile register, with the '
       'template defaults for that platform', () {
     expect(
-      () => registerAppProfile(appProfile, platform: AppPlatform.linux),
+      () => registerAppProfile(appProfile, platform: AppPlatform.windows),
       throwsStateError,
     );
 
     registerAppProfile(
       appProfile,
-      platform: AppPlatform.linux,
+      platform: AppPlatform.windows,
       allowUndeclaredPlatform: true,
     );
 

@@ -4,8 +4,9 @@ import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/app/app_profile.dart';
 
-/// What `apps/mobile` declares: android and ios with their switches, the three
-/// flavors, no certificate pinning (as a stated decision), and a profile that
+/// What `apps/mobile` declares: android and ios (committed runners) with their
+/// switches, web and linux (generated runners) with push and deep links off,
+/// the three flavors, no certificate pinning (as a stated decision), and a profile that
 /// leaves every tuning section at the template default.
 ///
 /// A change to `app_manifest.yaml` that moves one of these is a behaviour
@@ -23,27 +24,61 @@ void main() {
       expect(appFacts.flavors, {Flavor.dev, Flavor.staging, Flavor.prod});
     });
 
-    test('declare android and ios, nothing else', () {
-      expect(appFacts.platforms.keys, {AppPlatform.android, AppPlatform.ios});
+    test('declare android and ios (committed), web and linux (generated)', () {
+      expect(appFacts.platforms.keys, {
+        AppPlatform.android,
+        AppPlatform.ios,
+        AppPlatform.web,
+        AppPlatform.linux,
+      });
     });
 
-    test('declare every platform switch', () {
-      for (final entry in appFacts.platforms.entries) {
-        final platform = entry.value;
-        expect(platform.runner, RunnerKind.committed, reason: entry.key.name);
-        expect(platform.deepLinks, isTrue, reason: entry.key.name);
-        expect(platform.push, isTrue, reason: entry.key.name);
+    test('declare every platform switch of the committed runners', () {
+      for (final platform in const [AppPlatform.android, AppPlatform.ios]) {
+        final facts = appFacts.platformFor(platform)!;
+        expect(facts.runner, RunnerKind.committed, reason: platform.name);
+        expect(facts.deepLinks, isTrue, reason: platform.name);
+        expect(facts.push, isTrue, reason: platform.name);
         expect(
-          platform.orientation,
+          facts.secureStorage,
+          SecureStoragePolicy.required,
+          reason: platform.name,
+        );
+      }
+    });
+
+    test('derive push and deep links off on the generated web and linux '
+        'runners; linux keeps secure values in memory without a Secret '
+        'Service', () {
+      for (final platform in const [AppPlatform.web, AppPlatform.linux]) {
+        final facts = appFacts.platformFor(platform)!;
+        expect(facts.runner, RunnerKind.scaffold, reason: platform.name);
+        expect(facts.deepLinks, isFalse, reason: platform.name);
+        expect(facts.push, isFalse, reason: platform.name);
+      }
+      expect(
+        appFacts.platformFor(AppPlatform.web)!.secureStorage,
+        SecureStoragePolicy.required,
+      );
+      expect(
+        appFacts.platformFor(AppPlatform.linux)!.secureStorage,
+        SecureStoragePolicy.memoryFallback,
+      );
+    });
+
+    test('lock phones to portrait and set no window, on every platform', () {
+      for (final entry in appFacts.platforms.entries) {
+        expect(
+          entry.value.orientation,
           OrientationPolicy.phonesPortrait,
           reason: entry.key.name,
         );
-        expect(platform.window, isNull, reason: entry.key.name);
+        expect(entry.value.window, isNull, reason: entry.key.name);
       }
     });
 
     test(
-      'split the splash by platform: iOS native, Android Dart',
+      'split the splash by platform: iOS native, Android, web and linux Dart',
       () {
         expect(
           appFacts.platformFor(AppPlatform.android)!.splash,
@@ -52,6 +87,14 @@ void main() {
         expect(
           appFacts.platformFor(AppPlatform.ios)!.splash,
           SplashMode.native,
+        );
+        expect(
+          appFacts.platformFor(AppPlatform.web)!.splash,
+          SplashMode.dart,
+        );
+        expect(
+          appFacts.platformFor(AppPlatform.linux)!.splash,
+          SplashMode.dart,
         );
       },
     );

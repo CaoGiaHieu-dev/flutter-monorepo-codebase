@@ -43,33 +43,21 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Cod
 | `APP_NAME` | Dart (`String.fromEnvironment`) | — |
 
 ### 2. Platforms (c) — effective values, `value (source)`
-| Platform | Runner | Splash | Push | Deep links | Orientation | TLS pinning | Window |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| web | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | n/a (the browser owns TLS) | — |
-| windows | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
-| macos | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
-| linux | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
+| Platform | Runner | Splash | Push | Deep links | Secure storage | Orientation | TLS pinning | Window |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| web | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: the address bar is the deep link; the router reads it) | required (default) | phone-sized displays portrait, larger free (default) | n/a (the browser owns TLS) | — |
+| windows | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: a generated runner registers no URL scheme) | required (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
+| macos | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: a generated runner registers no URL scheme) | required (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
+| linux | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: a generated runner registers no URL scheme) | memory_fallback (derived: a Linux session may run no Secret Service) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
 
-The runner of web, windows, macos, linux is not in the repository. Create it once, from the app directory, then declare it `runner: committed`:
-
-```bash
-cd apps/admin
-flutter create --platforms=web,windows,macos,linux --org com.example --project-name admin_app .
-# flutter create also writes files this repo does not want: a sample test
-# that does not compile, an analysis_options.yaml that would replace the
-# root's strict options for this whole app (RULE-70), and IDE files.
-rm -f test/widget_test.dart analysis_options.yaml
-rm -rf .idea *.iml
-```
+Generate the runners (never committed): `dart tools/composer/composer.dart runners --app admin`
 
 Native notes (not checked):
-- **web** — `flutter build web` has no --flavor option, and the Flutter tool refuses --dart-define=FLUTTER_APP_FLAVOR (the name is the framework's own). Name the flavor with --dart-define=APP_FLAVOR=<flavor>, which the shell reads on the web only; without it a release runs as prod and a debug run as dev. The tool's refusal is measured; the APP_FLAVOR define is covered by a unit test, not by a web build.
-- **web** — The browser owns TLS, so SSL pinning does not apply; secure storage needs a secure context (https or localhost). Measured.
-- **windows** — flutter_secure_storage_windows needs the Visual Studio ATL component. From the plugin docs, not built here.
-- **windows** — No URL protocol is registered, so deep links never arrive. From the plugin docs, not built here.
-- **macos** — The scaffolded entitlements enable the sandbox but not com.apple.security.network.client; add it for any network access. Derived from the scaffold, not built here.
-- **macos** — flutter_secure_storage needs the keychain access group, or MacOsOptions(usesDataProtectionKeychain: false). From the plugin docs, not built here.
-- **linux** — flutter_secure_storage needs libsecret and a running, unlocked Secret Service; on a clean session the app blocks behind the keyring dialog. Measured.
+- **web** — The flavor comes from --dart-define=APP_FLAVOR=<flavor> (the web has no --flavor). Secure storage needs a secure context (https or localhost); the browser owns TLS, so nothing is pinned. Without a splash module the page stays empty until boot ends. URLs are hash URLs; for path URLs call `usePathUrlStrategy()` in `ShellHooks.beforeDependencies` and have the server rewrite every path to index.html. An app that links core_database needs sqlite3.wasm and drift_worker.js in its web runner, which `composer runners` writes. Measured.
+- **windows** — flutter_secure_storage needs Visual Studio 2022 "Desktop development with C++" with the ATL component. Linking core_notifications downloads the Firebase C++ SDK (FlutterFire). The window title is the package name until the runner is ejected. Unverified.
+- **macos** — `composer runners` adds the network-client entitlement to both entitlements files. Secure storage uses the login keychain (no keychain sharing, no signing team needed). `--flavor` needs Xcode schemes, so a generated runner names the flavor with APP_FLAVOR. Plugins resolve through Swift Package Manager, not CocoaPods. Unverified.
+- **linux** — With no Secret Service, secure values are kept in memory for the run (`secure_storage: memory_fallback`, derived). A fresh session with a locked or new keyring blocks the app behind the keyring prompt until it is answered; no code can avoid it. Dev and prod share one application id, so one support directory and one keyring namespace. libdartjni.so is bundled. Measured.
+- **all generated runners** — no native flavors (APP_FLAVOR), no push, no deep links — eject (`runner: committed`) to own them
 
 Not targeted — and what blocks it:
 - **android** — no composed package blocks it; declare it under `platforms:` and add its runner.
@@ -109,7 +97,7 @@ Modules: auth (api, domain, data, feature) · settings (feature).
 | `dashboard` | `IDashboardRouteModule` | optional | **absent** — one tab: destinations render without chrome | — | the destinations render without any chrome (with two or more tabs none after the first can be reached: C12) |
 | `entry` | `IAppEntryLocation` | optional | **absent** — no onboarding: boot goes straight to the sign-in check | — | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | **absent** — no home module: after sign-in the router's first tab (settings) opens | — | after sign-in the router opens its fallback, the first tab |
-| `splash` | `IAppSplashScreen` | optional | **absent** — native splash is kept through boot | — | the native splash is kept through boot |
+| `splash` | `IAppSplashScreen` | optional | **absent** — no splash module: the first frame is held until boot ends — the page or window stays empty, at most NetworkProfile.connectTimeout while the session restores | — | the native splash is kept through boot |
 | `tree_wrappers` | `IAppTreeWrapper` | optional | provided | feature_auth | the widget tree is built unwrapped |
 | `localization` | `IFeatureLocalization` | optional | provided | feature_auth, feature_settings | only core_base_ui's own strings are translated |
 | `error_reporter` | `IErrorReporter` | optional | **absent** — no crash backend chosen: errors are printed and sent nowhere (RULE-67) | — | errors are printed and sent nowhere (RULE-67) |

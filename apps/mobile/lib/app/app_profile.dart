@@ -17,10 +17,12 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.dart,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
+      // default: the committed runner registers its links
       deepLinks: true,
-      // derived: core_notifications is composed and supports android
+      // derived: core_notifications is composed and pushes on android
       push: true,
+      // default
+      secureStorage: SecureStoragePolicy.required,
     ),
     AppPlatform.ios: PlatformFacts(
       // manifest
@@ -29,10 +31,40 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.native,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
+      // default: the committed runner registers its links
       deepLinks: true,
-      // derived: core_notifications is composed and supports ios
+      // derived: core_notifications is composed and pushes on ios
       push: true,
+      // default
+      secureStorage: SecureStoragePolicy.required,
+    ),
+    AppPlatform.web: PlatformFacts(
+      // manifest
+      runner: RunnerKind.scaffold,
+      // derived: capability `splash` is provided
+      splash: SplashMode.dart,
+      // default
+      orientation: OrientationPolicy.phonesPortrait,
+      // derived: the address bar is the deep link; the router reads it
+      deepLinks: false,
+      // derived: no messaging service worker is shipped for web
+      push: false,
+      // default
+      secureStorage: SecureStoragePolicy.required,
+    ),
+    AppPlatform.linux: PlatformFacts(
+      // manifest
+      runner: RunnerKind.scaffold,
+      // derived: capability `splash` is provided
+      splash: SplashMode.dart,
+      // default
+      orientation: OrientationPolicy.phonesPortrait,
+      // derived: a generated runner registers no URL scheme
+      deepLinks: false,
+      // derived: a generated runner carries no push setup
+      push: false,
+      // derived: a Linux session may run no Secret Service
+      secureStorage: SecureStoragePolicy.memoryFallback,
     ),
   },
   env: [

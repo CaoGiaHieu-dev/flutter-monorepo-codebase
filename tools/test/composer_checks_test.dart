@@ -12,7 +12,7 @@ import 'support/tool_harness.dart';
 /// | V7  | every declared platform is one every composed package supports |
 /// | V10 | what a composed package needs the app to register (`FirebaseOptions`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares |
-/// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`callFactories: true`) |
+/// | V12 | the entry point passes the profile; the DI smoke test exists, iterates `appFacts.platforms`, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`); the boot test exists and calls `debugBootStage(`; an app on the web has the `flutter drive` driver |
 /// | V17 | no member pubspec but the root's has a top-level `workspace:` key (RULE-16) |
 ///
 /// Each has a clean fixture and a violating one. The workspace is the `demo`
@@ -753,6 +753,78 @@ void main() {
           'RULE-63',
         ]);
       }
+    });
+  });
+
+  group('V12 the boot test (RULE-83)', () {
+    const boot = 'apps/demo/integration_test/boot_test.dart';
+    const driver = 'apps/demo/test_driver/integration_test.dart';
+
+    test('a boot test that waits on debugBootStage passes', () async {
+      expect(await syncAndVerify(demo()), exitsWith(0));
+    });
+
+    test('a missing boot test fails, naming where to copy one from', () async {
+      expectRefused(await syncAndVerify(demo(without: {boot})), [
+        '$boot: file: missing — every app keeps a boot test that runs main() '
+            'on a device and waits for debugBootStage() to reach '
+            'BootStage.shown (RULE-83)',
+        'apps/admin/integration_test/boot_test.dart',
+      ]);
+    });
+
+    test('a boot test that only finds widgets fails', () async {
+      for (final body in [
+        kFixtureBootTest.replaceFirst(
+          'expect(debugBootStage(), BootStage.shown);',
+          'expect(find.byType(RootApp), findsOneWidget);',
+        ),
+        // Named in a comment is not called.
+        kFixtureBootTest.replaceFirst(
+          'expect(debugBootStage(), BootStage.shown);',
+          '// expect(debugBootStage(), BootStage.shown);',
+        ),
+      ]) {
+        expectRefused(await syncAndVerify(demo(extra: {boot: body})), [
+          '$boot: debugBootStage: never calls debugBootStage() — a boot test '
+              'that only finds widgets passes a blank screen (RULE-83)',
+        ]);
+      }
+    });
+
+    test('an app on the web needs the flutter drive driver', () async {
+      final web = demoManifest(
+        platforms:
+            'platforms:\n'
+            '  android: { runner: committed }\n'
+            '  web: { runner: scaffold }\n',
+      );
+      expectRefused(
+        await syncAndVerify(demo(manifest: web, without: {driver})),
+        [
+          '$driver: file: missing — `flutter drive` on the web needs it: '
+              "`import 'package:integration_test/integration_test_driver.dart'; "
+              'Future<void> main() => integrationDriver();`',
+        ],
+      );
+      // An app that is not on the web does not.
+      expect(await syncAndVerify(demo(without: {driver})), exitsWith(0));
+    });
+
+    test('a smoke test that boots one platform fails', () async {
+      final ws = demo(
+        extra: {
+          'apps/demo/test/di_smoke_test.dart': kFixtureSmokeTest.replaceFirst(
+            'for (final platform in appFacts.platforms.keys) {',
+            'for (final platform in [AppPlatform.android]) {',
+          ),
+        },
+      );
+      expectRefused(await syncAndVerify(ws), [
+        'apps/demo/test/di_smoke_test.dart: appFacts.platforms: does not '
+            'iterate appFacts.platforms — boot every declared platform but the '
+            'web (RULE-63)',
+      ]);
     });
   });
 

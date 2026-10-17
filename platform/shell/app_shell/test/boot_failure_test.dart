@@ -198,8 +198,8 @@ void main() {
       expect(errors.single, isA<StateError>());
     });
 
-    bootTest('with the native splash preserved the error still reaches '
-        'the screen', (tester) async {
+    bootTest('with the first frame held (SplashMode.native) the error '
+        'still reaches the screen', (tester) async {
       debugAppPlatformOverride = AppPlatform.ios;
       final errors = <Object>[];
 

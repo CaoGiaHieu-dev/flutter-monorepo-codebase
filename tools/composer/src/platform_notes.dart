@@ -1,61 +1,48 @@
-/// What to remove right after `flutter create` has written a runner into an
-/// app — the shell lines of the report's create block and of `composer new`'s
-/// next steps. `flutter create` writes files this repository does not want:
-/// a sample widget test that does not compile (`MyApp` is not a class here, so
-/// Gate 2 fails), an `analysis_options.yaml` that would replace the root's
-/// strict options for the whole app (RULE-70), and IDE project files.
-const List<String> kFlutterCreateCleanup = [
-  '# flutter create also writes files this repo does not want: a sample test',
-  '# that does not compile, an analysis_options.yaml that would replace the',
-  "# root's strict options for this whole app (RULE-70), and IDE files.",
-  'rm -f test/widget_test.dart analysis_options.yaml',
-  'rm -rf .idea *.iml',
-];
-
-/// Native notes: what a person standing up a platform's runner should know
-/// that no manifest key can express and no gate checks.
+/// Native notes: what a person running an app on a generated runner should
+/// know that no manifest key can express and no gate checks.
 ///
 /// Printed under the platforms table of the app report for every platform
-/// declared `runner: scaffold`. Native files stay hand-written and unverified
-/// — a manifest vocabulary for every Gradle / Xcode setting would duplicate
-/// those tools — so each note says how it is known: **measured** (built or run
-/// in this repository), or **from the plugin docs** (not built here).
+/// declared `runner: scaffold` — a runner `composer runners` writes and git
+/// never tracks. Each note says how it is known: **measured** (built and
+/// booted in this repository), or **unverified** (not runnable here; the
+/// full-matrix CI run is the proof).
 const Map<String, List<String>> kPlatformNotes = {
-  'android': [
-    'push needs google-services.json per Android flavor (gitignored) when '
-        'core_notifications is composed. From the plugin docs.',
-  ],
-  'ios': [
-    'push needs the aps-environment entitlement and the '
-        'GoogleService-Info.plist copy phase. From the plugin docs.',
-  ],
   'web': [
-    '`flutter build web` has no --flavor option, and the Flutter tool refuses '
-        '--dart-define=FLUTTER_APP_FLAVOR (the name is the framework\'s own). '
-        'Name the flavor with --dart-define=APP_FLAVOR=<flavor>, which the '
-        'shell reads on the web only; without it a release runs as prod and a '
-        'debug run as dev. The tool\'s refusal is measured; the APP_FLAVOR '
-        'define is covered by a unit test, not by a web build.',
-    'The browser owns TLS, so SSL pinning does not apply; secure storage '
-        'needs a secure context (https or localhost). Measured.',
-  ],
-  'windows': [
-    'flutter_secure_storage_windows needs the Visual Studio ATL component. '
-        'From the plugin docs, not built here.',
-    'No URL protocol is registered, so deep links never arrive. From the '
-        'plugin docs, not built here.',
-  ],
-  'macos': [
-    'The scaffolded entitlements enable the sandbox but not '
-        'com.apple.security.network.client; add it for any network access. '
-        'Derived from the scaffold, not built here.',
-    'flutter_secure_storage needs the keychain access group, or '
-        'MacOsOptions(usesDataProtectionKeychain: false). From the plugin '
-        'docs, not built here.',
+    'The flavor comes from --dart-define=APP_FLAVOR=<flavor> (the web has no '
+        '--flavor). Secure storage needs a secure context (https or '
+        'localhost); the browser owns TLS, so nothing is pinned. Without a '
+        'splash module the page stays empty until boot ends. URLs are hash '
+        'URLs; for path URLs call `usePathUrlStrategy()` in '
+        '`ShellHooks.beforeDependencies` and have the server rewrite every '
+        'path to index.html. An app that links core_database needs '
+        'sqlite3.wasm and drift_worker.js in its web runner, which '
+        '`composer runners` writes. Measured.',
   ],
   'linux': [
-    'flutter_secure_storage needs libsecret and a running, unlocked Secret '
-        'Service; on a clean session the app blocks behind the keyring '
-        'dialog. Measured.',
+    'With no Secret Service, secure values are kept in memory for the run '
+        '(`secure_storage: memory_fallback`, derived). A fresh session with '
+        'a locked or new keyring blocks the app behind the keyring prompt '
+        'until it is answered; no code can avoid it. Dev and prod share one '
+        'application id, so one support directory and one keyring '
+        'namespace. libdartjni.so is bundled. Measured.',
+  ],
+  'macos': [
+    '`composer runners` adds the network-client entitlement to both '
+        'entitlements files. Secure storage uses the login keychain (no '
+        'keychain sharing, no signing team needed). `--flavor` needs Xcode '
+        'schemes, so a generated runner names the flavor with APP_FLAVOR. '
+        'Plugins resolve through Swift Package Manager, not CocoaPods. '
+        'Unverified.',
+  ],
+  'windows': [
+    'flutter_secure_storage needs Visual Studio 2022 "Desktop development '
+        'with C++" with the ATL component. Linking core_notifications '
+        'downloads the Firebase C++ SDK (FlutterFire). The window title is '
+        'the package name until the runner is ejected. Unverified.',
   ],
 };
+
+/// Printed once under the notes, whenever any platform is generated.
+const String kAllGeneratedRunnersNote =
+    'no native flavors (APP_FLAVOR), no push, no deep links — eject '
+    '(`runner: committed`) to own them';

@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 import '../arch_check/platform_forks.dart';
 import '../composer/src/catalog.dart';
+import '../composer/src/facts_emit.dart';
 import '../composer/src/manifest_v2.dart';
 import '../composer/src/package_facts.dart';
 import '../composer/src/profile_summary.dart';
@@ -72,6 +74,20 @@ void main() {
 
     test('SplashMode', () {
       expect(kSplashModes, enumValues(facts, 'SplashMode'));
+    });
+
+    test('SecureStoragePolicy, spelled snake_case in the manifest', () {
+      String snake(String name) => name.replaceAllMapped(
+        RegExp('[A-Z]'),
+        (m) => '_${m.group(0)!.toLowerCase()}',
+      );
+      final kernel = enumValues(facts, 'SecureStoragePolicy');
+      expect(kSecureStoragePolicies, [for (final v in kernel) snake(v)]);
+      // Every spelling maps onto the constant composer emits.
+      expect(
+        [for (final v in kSecureStoragePolicies) secureStorageConstant(v)],
+        kernel,
+      );
     });
 
     test('OrientationPolicy, spelled snake_case in the manifest', () {
@@ -284,7 +300,7 @@ void main() {
         for (final key in kManifestKeys)
           if (key.reportOnly) key.key,
       ];
-      expect(reportOnly, ['platforms.<p>.runner']);
+      expect(reportOnly, ['app.org', 'platforms.<p>.runner']);
       for (final key in kManifestKeys.where((k) => k.reportOnly)) {
         expect(key.consumer, startsWith('tools/composer/'));
       }
@@ -318,10 +334,12 @@ void main() {
       final reader = read('tools/composer/src/package_facts.dart');
       expect(reader, contains("doc['platforms']"));
       expect(reader, contains("composition['app_provides']"));
+      expect(reader, contains("composition['push_platforms']"));
       // And two checks consume what it reads.
       final checks = read('tools/composer/src/checks.dart');
       expect(checks, contains('facts.supports('), reason: 'V7');
       expect(checks, contains('appProvides'), reason: 'V10');
+      expect(checks, contains('.pushes('), reason: 'V8');
     });
 
     test('no key is listed twice', () {
@@ -343,20 +361,53 @@ void main() {
       '$name = ([\\w.]+)',
     ).firstMatch(today)!.group(1)!;
 
-    test('the orientation, deep links and push composer derives', () {
-      // composer: orientation `phonesPortrait`, deep links on, push on when
-      // the notifications package is composed and supports the platform.
-      expect(field('orientation'), 'OrientationPolicy.phonesPortrait');
-      expect(field('deepLinks'), 'true');
-      expect(field('push'), 'true');
+    test('equals what composer derives for a committed android runner', () {
+      // The template's own shape: core_notifications composed (as the
+      // repository declares it), capability `splash` provided, nothing set
+      // in the manifest — so every value below is a derived default.
+      final problems = <String>[];
+      final notifications = readPackageFacts(
+        kNotificationsPackage,
+        p.join(repoRoot, 'platform/infra/notifications'),
+        'platform/infra/notifications/pubspec.yaml',
+        problems,
+      );
+      expect(problems, isEmpty);
+      final view = AppView(
+        id: 'demo',
+        dir: 'apps/demo',
+        pubspecName: 'demo_app',
+        declaration: AppDeclaration(
+          name: 'Demo',
+          entrypoint: 'lib/main.dart',
+          flavors: const {},
+          env: const [],
+          platforms: const [PlatformDecl('android', 'committed', null)],
+          capabilities: const {'splash': CapabilityDecl.provided()},
+        ),
+        groups: const [],
+        modules: const [],
+        composed: const {kNotificationsPackage},
+        packageFacts: {kNotificationsPackage: notifications},
+        catalog: const ShellCatalog([]),
+      );
+      final android = derivePlatforms(view).single;
+      expect(field('runner'), 'RunnerKind.${android.runner.value}');
+      expect(field('splash'), 'SplashMode.${android.splash.value}');
+      expect(
+        field('orientation'),
+        'OrientationPolicy.${android.orientation.value}',
+      );
+      expect(field('deepLinks'), '${android.deepLinks.value}');
+      expect(field('push'), '${android.push.value}');
+      expect(
+        field('secureStorage'),
+        'SecureStoragePolicy.'
+        '${secureStorageConstant(android.secureStorage.value)}',
+      );
+      expect(field('window'), 'null');
+      expect(android.window, isNull);
     });
-
-    test(
-      'the Dart splash composer derives when capability splash is provided',
-      () {
-        expect(field('splash'), 'SplashMode.dart');
-      },
-    );
 
     test('the runner folder is committed', () {
       expect(field('runner'), 'RunnerKind.committed');
@@ -391,31 +442,35 @@ void main() {
     }
 
     test(
-      'core_notifications: no Windows or Linux, FirebaseOptions per flavor',
+      'core_notifications declares no `platforms:` and pushes on android, '
+      'ios, macos, web; FirebaseOptions per flavor',
       () {
         final notifications = facts(
           'core_notifications',
           'platform/infra/notifications',
         );
-        expect(notifications.platforms, ['android', 'ios', 'web', 'macos']);
-        expect(notifications.supports('windows'), isFalse);
-        expect(notifications.supports('linux'), isFalse);
+        // It links everywhere: an app on Linux or Windows composes it with
+        // push off (decision: notifications link on all six platforms).
+        expect(notifications.platforms, isNull);
+        for (final name in kPlatformNames) {
+          expect(notifications.supports(name), isTrue, reason: name);
+        }
+        expect(notifications.pushPlatforms, ['android', 'ios', 'macos', 'web']);
+        expect(notifications.pushes('windows'), isFalse);
+        expect(notifications.pushes('linux'), isFalse);
+        expect(notifications.pushes('macos'), isTrue);
         final needs = notifications.appProvides;
         expect(needs.map((n) => n.type), ['FirebaseOptions']);
         expect(needs.single.perFlavor, isTrue);
       },
     );
 
-    test('core_database: no web, because drift/native needs dart:ffi', () {
+    test('core_database declares no `platforms:`', () {
+      // The web opens drift's wasm build through a configurable import, so
+      // the package links on every platform (R22 keeps dart:ffi behind it).
       final database = facts('core_database', 'platform/infra/database');
-      expect(database.supports('web'), isFalse);
-      expect(database.platforms, [
-        'android',
-        'ios',
-        'windows',
-        'macos',
-        'linux',
-      ]);
+      expect(database.platforms, isNull);
+      expect(database.supports('web'), isTrue);
     });
 
     test('every declared platform is a name composer knows', () {
@@ -601,6 +656,110 @@ void main() {
       ).firstMatch(text)!.group(1)!.split('|');
       expect(pattern, contains('${id}_app'));
       expect(pattern, isNot(contains(id)));
+    });
+  });
+
+  group('the platform workflows read the manifests', () {
+    /// The parsed workflow at `.github/workflows/<name>`, or a failure naming
+    /// it when it is not there.
+    YamlMap workflow(String name) {
+      final file = File(p.join(repoRoot, '.github', 'workflows', name));
+      expect(
+        file.existsSync(),
+        isTrue,
+        reason: '.github/workflows/$name is missing',
+      );
+      return loadYaml(file.readAsStringSync()) as YamlMap;
+    }
+
+    Map<String, YamlMap> jobs(YamlMap flow) => {
+      for (final entry in (flow['jobs'] as YamlMap).entries)
+        entry.key as String: entry.value as YamlMap,
+    };
+
+    List<YamlMap> steps(YamlMap job) => [
+      for (final step in (job['steps'] as YamlList? ?? YamlList()))
+        step as YamlMap,
+    ];
+
+    String run(YamlMap step) => '${step['run'] ?? ''}';
+
+    /// A job's `strategy.matrix.include`, as written (empty when it has none).
+    String matrixInclude(YamlMap job) {
+      final strategy = job['strategy'];
+      final matrix = strategy is YamlMap ? strategy['matrix'] : null;
+      return matrix is YamlMap ? '${matrix['include'] ?? ''}' : '';
+    }
+
+    bool bootsLinux(YamlMap step) => run(
+      step,
+    ).contains('flutter test integration_test/boot_test.dart -d linux');
+
+    test(
+      'the PR workflow takes its platform apps from describe --ci-matrix pr',
+      () {
+        final text = read('.github/workflows/pr_quality_check.yml');
+        expect(text, contains('describe --ci-matrix pr'));
+        final matrixJobs = [
+          for (final entry in jobs(workflow('pr_quality_check.yml')).entries)
+            if (matrixInclude(
+              entry.value,
+            ).contains('fromJSON(needs.quality.outputs.platform_apps)'))
+              entry.key,
+        ];
+        expect(
+          matrixJobs,
+          hasLength(1),
+          reason: 'one job fans out over `fromJSON(needs.quality.outputs.platform_apps)`',
+        );
+      },
+    );
+
+    test('that job boots Linux twice, once with no Secret Service', () {
+      final job = jobs(workflow('pr_quality_check.yml')).values.firstWhere(
+        (j) => matrixInclude(j).contains('platform_apps'),
+        orElse: () => fail('no job fans out over platform_apps'),
+      );
+      final linux = steps(job).where(bootsLinux).toList();
+      expect(linux, hasLength(2));
+      expect(
+        linux.where(
+          (s) =>
+              (s['env'] as YamlMap?)?['DBUS_SESSION_BUS_ADDRESS'] ==
+              'unix:path=/nonexistent/bus',
+        ),
+        hasLength(1),
+        reason:
+            'one Linux boot runs with DBUS_SESSION_BUS_ADDRESS: '
+            'unix:path=/nonexistent/bus (the memory fallback)',
+      );
+    });
+
+    test('the full matrix comes from describe --ci-matrix full', () {
+      workflow('platforms_full.yml');
+      expect(
+        read('.github/workflows/platforms_full.yml'),
+        contains('describe --ci-matrix full'),
+      );
+    });
+
+    test('every job that runs boot_test.dart sets timeout-minutes', () {
+      final missing = <String>[];
+      for (final name in ['pr_quality_check.yml', 'platforms_full.yml']) {
+        for (final entry in jobs(workflow(name)).entries) {
+          final boots = steps(
+            entry.value,
+          ).any((s) => run(s).contains('boot_test.dart'));
+          if (boots && entry.value['timeout-minutes'] == null) {
+            missing.add('$name: ${entry.key}');
+          }
+        }
+      }
+      expect(
+        missing,
+        isEmpty,
+        reason: 'a keyring prompt or a hung device never ends on its own',
+      );
     });
   });
 }

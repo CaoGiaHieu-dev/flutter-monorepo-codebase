@@ -8,16 +8,19 @@ import 'support/composer_fixture.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/composer/composer.dart` — what a platform enables:
-/// `platforms.<p>.{push, deep_links, orientation, window}` and check V8.
+/// `platforms.<p>.{push, deep_links, secure_storage, orientation, window}` and
+/// check V8.
 ///
 /// | Check | Holds |
 /// |:-:|:--|
-/// | V1 | the four keys' types and vocabulary; an unknown platform key is refused |
-/// | V8 | `push: true` needs `core_notifications` composed and supporting the platform; `window` only on a desktop platform |
+/// | V1 | the keys' types and vocabulary; an unknown platform key is refused |
+/// | V8 | `push: true` needs `core_notifications` composed, the platform in its `push_platforms` and a committed runner; `deep_links: true` needs a committed runner and is refused on the web; `window` only on a desktop platform |
 ///
 /// A key written in the manifest reaches the generated facts as `// manifest`
-/// and replaces the derived default; a key left out keeps it. Every refusal
-/// names the file and the key and writes nothing.
+/// and replaces the derived default; a key left out keeps it, and the first
+/// derivation rule that matches says why in the comment above it (the table
+/// of `derivePlatforms`, row by row below). Every refusal names the file and
+/// the key and writes nothing.
 void main() {
   late CompiledTool tool;
 
@@ -30,13 +33,12 @@ void main() {
   const profilePath = 'apps/demo/lib/app/app_profile.dart';
   const readmePath = 'apps/demo/README.md';
 
+  /// `core_notifications` as the repository declares it: it links
+  /// everywhere, and Firebase Messaging delivers on four platforms.
   const notificationsPubspec =
       'name: core_notifications\n'
-      'platforms:\n'
-      '  android:\n'
-      '  ios:\n'
-      '  macos:\n'
-      '  web:\n';
+      'composition:\n'
+      '  push_platforms: [android, ios, macos, web]\n';
 
   /// An app on [platforms] (the YAML block), optionally composing
   /// `core_notifications`.
@@ -101,13 +103,34 @@ void main() {
 
   final noRunner = {'apps/demo/android/README.txt'};
 
+  /// The generated facts of [platform] alone, from `AppPlatform.<platform>`
+  /// to the next platform (or the end of the map).
+  String factsOf(String facts, String platform) {
+    final start = facts.indexOf('AppPlatform.$platform: PlatformFacts(');
+    expect(start, greaterThan(-1), reason: '$platform has no facts');
+    final end = facts.indexOf('AppPlatform.', start + 1);
+    return facts.substring(start, end == -1 ? facts.length : end);
+  }
+
   group('a key left out keeps its derived default', () {
     test('and says where it came from', () async {
       final ws = workspace(kPlatforms);
       expect(await run(ws, ['sync']), exitsWith(0));
 
       final facts = ws.read(profilePath);
-      expect(facts, contains('// default\n      deepLinks: true,'));
+      expect(
+        facts,
+        contains(
+          '// default: the committed runner registers its links\n'
+          '      deepLinks: true,',
+        ),
+      );
+      expect(
+        facts,
+        contains(
+          '// default\n      secureStorage: SecureStoragePolicy.required,',
+        ),
+      );
       expect(
         facts,
         contains(
@@ -145,7 +168,13 @@ void main() {
       );
       // The other platform of the same app is untouched.
       final linux = facts.substring(facts.indexOf('AppPlatform.linux'));
-      expect(linux, contains('// default\n      deepLinks: true,'));
+      expect(
+        linux,
+        contains(
+          '// derived: a generated runner registers no URL scheme\n'
+          '      deepLinks: false,',
+        ),
+      );
       expect(linux, isNot(contains('window:')));
       expect(await run(ws, ['verify']), exitsWith(0));
     });
@@ -232,6 +261,292 @@ void main() {
     });
   });
 
+  group('the derivation, row by row: the first rule that matches wins', () {
+    /// Syncs an app on [platforms] and returns the facts of [platform].
+    Future<String> derived(
+      String platforms,
+      String platform, {
+      bool notifications = false,
+      Map<String, String> extra = const {},
+    }) async {
+      final ws = workspace(
+        platforms,
+        notifications: notifications,
+        without: platforms.contains('android:') ? const {} : noRunner,
+        extra: extra,
+      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      return factsOf(ws.read(profilePath), platform);
+    }
+
+    String push(String why, {required bool on}) => '// $why\n      push: $on,';
+    String links(String why, {required bool on}) =>
+        '// $why\n      deepLinks: $on,';
+
+    group('push', () {
+      test('1. the manifest', () async {
+        expect(
+          await derived(
+            'platforms:\n  android: { runner: committed, push: false }\n',
+            'android',
+            notifications: true,
+          ),
+          contains(push('manifest', on: false)),
+        );
+      });
+
+      test('2. off where core_notifications is not composed', () async {
+        expect(
+          await derived(kPlatforms, 'android'),
+          contains(
+            push('derived: core_notifications is not composed', on: false),
+          ),
+        );
+      });
+
+      test('3. off on the web, committed or not', () async {
+        expect(
+          await derived(
+            'platforms:\n  web: { runner: committed }\n',
+            'web',
+            notifications: true,
+            extra: {'apps/demo/web/index.html': '<html>\n'},
+          ),
+          contains(
+            push(
+              'derived: no messaging service worker is shipped for web',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('4. off on a generated runner, even where it would push', () async {
+        expect(
+          await derived(
+            'platforms:\n  macos: { runner: scaffold }\n',
+            'macos',
+            notifications: true,
+          ),
+          contains(
+            push(
+              'derived: a generated runner carries no push setup',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('5. off where push_platforms lacks the platform', () async {
+        expect(
+          await derived(
+            'platforms:\n  linux: { runner: committed }\n',
+            'linux',
+            notifications: true,
+            extra: {'apps/demo/linux/README.txt': 'runner\n'},
+          ),
+          contains(
+            push(
+              'derived: Firebase Messaging does not deliver on linux',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('6. otherwise on', () async {
+        expect(
+          await derived(
+            'platforms:\n  android: { runner: committed }\n',
+            'android',
+            notifications: true,
+          ),
+          contains(
+            push(
+              'derived: core_notifications is composed and pushes on android',
+              on: true,
+            ),
+          ),
+        );
+      });
+
+      test('without push_platforms a package pushes wherever it links', () {
+        // `pushes()` falls back to `platforms:`: an adopter's own push
+        // package that predates the key still derives as before.
+        final ws = workspace(
+          'platforms:\n  linux: { runner: committed }\n',
+          notifications: true,
+          without: noRunner,
+          extra: {
+            'apps/demo/linux/README.txt': 'runner\n',
+            'platform/infra/notifications/pubspec.yaml':
+                'name: core_notifications\n',
+          },
+        );
+        return run(ws, ['sync']).then((result) {
+          expect(result, exitsWith(0));
+          expect(
+            factsOf(ws.read(profilePath), 'linux'),
+            contains(
+              push(
+                'derived: core_notifications is composed and pushes on linux',
+                on: true,
+              ),
+            ),
+          );
+        });
+      });
+    });
+
+    group('deep_links', () {
+      test('1. the manifest', () async {
+        expect(
+          await derived(
+            'platforms:\n  android: { runner: committed, deep_links: false }\n',
+            'android',
+          ),
+          contains(links('manifest', on: false)),
+        );
+      });
+
+      test('2. off on the web', () async {
+        expect(
+          await derived('platforms:\n  web: { runner: scaffold }\n', 'web'),
+          contains(
+            links(
+              'derived: the address bar is the deep link; the router reads it',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('3. off on a generated runner', () async {
+        expect(
+          await derived(
+            'platforms:\n  android: { runner: scaffold }\n',
+            'android',
+            extra: {'apps/demo/android/README.txt': 'generated\n'},
+          ),
+          contains(
+            links(
+              'derived: a generated runner registers no URL scheme',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('4. off on a committed desktop runner', () async {
+        expect(
+          await derived(
+            'platforms:\n  windows: { runner: committed }\n',
+            'windows',
+            extra: {'apps/demo/windows/README.txt': 'runner\n'},
+          ),
+          contains(
+            links(
+              'derived: register the URL scheme in the runner, then set it '
+              'true',
+              on: false,
+            ),
+          ),
+        );
+      });
+
+      test('5. on for a committed Android or iOS runner', () async {
+        expect(
+          await derived(kPlatforms, 'android'),
+          contains(
+            links(
+              'default: the committed runner registers its links',
+              on: true,
+            ),
+          ),
+        );
+      });
+    });
+
+    group('secure_storage', () {
+      test('the manifest', () async {
+        expect(
+          await derived(
+            'platforms:\n  linux: { runner: scaffold, secure_storage: required }\n',
+            'linux',
+          ),
+          contains(
+            '// manifest\n      secureStorage: SecureStoragePolicy.required,',
+          ),
+        );
+        expect(
+          await derived(
+            'platforms:\n  android: { runner: committed, secure_storage: memory_fallback }\n',
+            'android',
+          ),
+          contains(
+            '// manifest\n      secureStorage: SecureStoragePolicy.memoryFallback,',
+          ),
+        );
+      });
+
+      test('memory_fallback on linux', () async {
+        expect(
+          await derived('platforms:\n  linux: { runner: scaffold }\n', 'linux'),
+          contains(
+            '// derived: a Linux session may run no Secret Service\n'
+            '      secureStorage: SecureStoragePolicy.memoryFallback,',
+          ),
+        );
+      });
+
+      test('required elsewhere, by default', () async {
+        for (final platform in ['windows', 'macos', 'web']) {
+          expect(
+            await derived(
+              'platforms:\n  $platform: { runner: scaffold }\n',
+              platform,
+            ),
+            contains(
+              '// default\n      secureStorage: SecureStoragePolicy.required,',
+            ),
+            reason: platform,
+          );
+        }
+      });
+
+      test('a policy outside the two is refused', () async {
+        final ws = workspace(
+          'platforms:\n  linux: { runner: scaffold, secure_storage: wipe }\n',
+          without: noRunner,
+        );
+        await expectRefused(
+          ws,
+          contains(
+            '$manifestPath: platforms.linux.secure_storage: expected required '
+            'or memory_fallback, got a string (`wipe`)',
+          ),
+        );
+      });
+
+      test('the report has a secure-storage column', () async {
+        final ws = workspace(
+          'platforms:\n  linux: { runner: scaffold }\n',
+          without: noRunner,
+        );
+        expect(await run(ws, ['sync']), exitsWith(0));
+        final readme = ws.read(readmePath);
+        expect(readme, contains('| Deep links | Secure storage |'));
+        expect(
+          readme,
+          contains(
+            '| memory_fallback (derived: a Linux session may run no Secret '
+            'Service) |',
+          ),
+        );
+      });
+    });
+  });
+
   group('V1 — vocabulary and shape', () {
     test('an orientation outside the four', () async {
       final ws = workspace(
@@ -273,7 +588,8 @@ void main() {
         ws,
         contains(
           '$manifestPath: platforms.android.notifications: unknown key — '
-          'expected runner, splash, push, deep_links, orientation, window',
+          'expected runner, splash, push, deep_links, secure_storage, '
+          'orientation, window',
         ),
       );
     });
@@ -339,23 +655,108 @@ void main() {
     );
 
     test(
-      'push: true on a platform the package does not support is refused',
+      'push: true where Firebase Messaging does not deliver is refused, '
+      'naming push_platforms',
       () async {
         final ws = workspace(
-          'platforms:\n  windows: { runner: scaffold, push: true }\n',
+          'platforms:\n  windows: { runner: committed, push: true }\n',
           notifications: true,
           without: noRunner,
+          extra: {'apps/demo/windows/README.txt': 'runner\n'},
         );
         await expectRefused(
           ws,
           contains(
             '$manifestPath: platforms.windows.push: push is on, but '
-            'core_notifications does not support windows (its pubspec '
-            '`platforms:` lists android, ios, web, macos)',
+            'core_notifications does not push on windows (its '
+            'composition.push_platforms lists android, ios, macos, web; '
+            'Firebase Messaging has no windows implementation) — set '
+            '`push: false`, or delete the key',
           ),
         );
       },
     );
+
+    test('push: true on a generated runner is refused', () async {
+      final ws = workspace(
+        'platforms:\n  macos: { runner: scaffold, push: true }\n',
+        notifications: true,
+        without: noRunner,
+      );
+      await expectRefused(
+        ws,
+        contains(
+          '$manifestPath: platforms.macos.push: push is on, but the macos '
+          'runner is generated (`runner: scaffold`) and carries none of the '
+          'native push setup (google-services.json, the aps-environment '
+          'entitlement, web/firebase-messaging-sw.js) — commit the runner, '
+          'set it up, then switch push on; or delete the key',
+        ),
+      );
+    });
+
+    test(
+      'push: true on a committed runner in push_platforms is fine',
+      () async {
+        final ws = workspace(
+          'platforms:\n  macos: { runner: committed, push: true }\n',
+          notifications: true,
+          without: noRunner,
+          extra: {'apps/demo/macos/README.txt': 'runner\n'},
+        );
+        expect(await run(ws, ['sync']), exitsWith(0));
+      },
+    );
+
+    test('deep_links: true on a generated runner is refused', () async {
+      final ws = workspace(
+        'platforms:\n  linux: { runner: scaffold, deep_links: true }\n',
+        without: noRunner,
+      );
+      await expectRefused(
+        ws,
+        contains(
+          '$manifestPath: platforms.linux.deep_links: deep links are on, but '
+          'the linux runner is generated (`runner: scaffold`) and registers '
+          'no URL scheme or app link, so no link would arrive — commit the '
+          'runner and register them (docs/en/guides/13_app_composition.md '
+          '§ 7, "Deep links on a committed runner"), or delete the key',
+        ),
+      );
+    });
+
+    test('deep_links: true on the web is refused, committed or not', () async {
+      for (final runner in ['scaffold', 'committed']) {
+        final ws = workspace(
+          'platforms:\n  web: { runner: $runner, deep_links: true }\n',
+          without: noRunner,
+          extra: {
+            if (runner == 'committed') 'apps/demo/web/index.html': '<html>\n',
+          },
+        );
+        await expectRefused(
+          ws,
+          contains(
+            '$manifestPath: platforms.web.deep_links: on the web the address '
+            'bar is the deep link and the router already reads it; app_links '
+            "would route the page's own URL a second time — delete the key",
+          ),
+        );
+      }
+    });
+
+    test('deep_links: true on a committed desktop runner is fine', () async {
+      final ws = workspace(
+        'platforms:\n  linux: { runner: committed, deep_links: true }\n',
+        without: noRunner,
+        extra: {'apps/demo/linux/README.txt': 'runner\n'},
+      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      expect(
+        factsOf(ws.read(profilePath), 'linux'),
+        contains('// manifest\n      deepLinks: true,'),
+      );
+    });
 
     test('push: false needs nothing', () async {
       final ws = workspace(

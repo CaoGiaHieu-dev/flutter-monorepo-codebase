@@ -5,7 +5,7 @@ import '../shared/workspace.dart';
 import 'firebase_stubs.dart';
 
 const String _usage = '''
-Usage: dart tools/workspace_setup/configure.dart [--stub-firebase] [--help]
+Usage: dart tools/workspace_setup/configure.dart [--stub-firebase] [--no-runners] [--help]
 
 Full workspace setup — the setup step on a fresh clone. Run from anywhere in
 the repository; it works on the repository root. In order:
@@ -17,6 +17,10 @@ the repository; it works on the repository root. In order:
   5. dart run build_runner build --workspace
   6. tools/barrel_generator/generate.dart for every package with a lib/
      (apps are skipped)
+  7. dart tools/composer/composer.dart runners — the runner of every
+     platform an app declares `runner: scaffold` (flutter create in a
+     temporary directory, then the patch set; git ignores the result, so
+     `flutter run -d chrome` or `-d linux` works straight away — RULE-83)
 
 Step 2 deletes build output and .dart_tool/, and steps 5-6 rewrite every
 generated file and barrel. Stops at the first failing command with its exit
@@ -38,6 +42,9 @@ Options:
                    The app then compiles and builds, but nothing
                    Firebase-backed works (push, FCM token). Replace them with
                    `dart tools/firebase/firebase_config.dart --app <id>`.
+  --no-runners     Skip step 7: no runner is generated or patched (an
+                   Android-only build, or an offline machine). Generate them
+                   later with `dart tools/composer/composer.dart runners`.
   -h, --help       Print this help and exit.''';
 
 void main(List<String> args) async {
@@ -49,7 +56,10 @@ void main(List<String> args) async {
     exit(0);
   }
   final stubFirebase = args.contains('--stub-firebase');
-  final unknown = args.where((a) => a != '--stub-firebase').toList();
+  final runners = !args.contains('--no-runners');
+  final unknown = args
+      .where((a) => a != '--stub-firebase' && a != '--no-runners')
+      .toList();
   if (unknown.isNotEmpty) {
     stderr.writeln('[ERROR] Unknown argument(s): ${unknown.join(' ')}');
     stderr.writeln('');
@@ -154,6 +164,24 @@ void main(List<String> args) async {
       'tools/barrel_generator/generate.dart',
       lib.path,
     ]);
+  }
+
+  // 7. The generated runners (`runner: scaffold`): a native project per
+  // platform, never committed — after codegen and the barrels, because the
+  // web database assets need the resolved packages, and nothing it writes
+  // is Dart a barrel or the CI barrel gate would see.
+  if (runners) {
+    stdout.writeln('[!] Generating the runners (composer runners)...');
+    await _runCommand(dartCmd, [
+      ...dartArgs,
+      'tools/composer/composer.dart',
+      'runners',
+    ]);
+  } else {
+    stdout.writeln(
+      '[!] Skipping the runners (--no-runners): '
+      'dart tools/composer/composer.dart runners writes them later.',
+    );
   }
 
   if (stubs != null) _reportFirebaseStubs(stubs);

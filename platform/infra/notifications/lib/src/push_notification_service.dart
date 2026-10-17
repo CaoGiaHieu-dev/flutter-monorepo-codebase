@@ -413,9 +413,12 @@ class PushNotificationService {
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
+    // macOS shares the Darwin settings. The web needs none, and Linux and
+    // Windows never get here: push is off there (composer V8).
     final initializationSettings = InitializationSettings(
       android: _initializationSettingsAndroid,
       iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
     );
     await flutterLocalNotificationsPlugin.initialize(
       settings: initializationSettings,

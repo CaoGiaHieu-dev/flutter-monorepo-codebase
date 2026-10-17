@@ -16,10 +16,12 @@
 /// bounded context belongs at the repository layer, not inside a query.
 ///
 /// Opening:
-/// - [DriftDatabaseOpener] — opens any [GeneratedDatabase] on a background
-///   isolate, verifies the connection, and quarantines (never deletes) a
-///   corrupt file
-/// - [DatabaseConnectionFactory] — resolves the file and builds the executor
+/// - [DriftDatabaseOpener] — opens any [GeneratedDatabase] (on a background
+///   isolate natively, in drift's wasm worker on the web), verifies the
+///   connection, and quarantines (never deletes) a corrupt file
+/// - [DatabaseConnectionFactory] — builds the executor: a file in the app's
+///   private directory natively, wasm SQLite on the web (a configurable
+///   import; its `src/connection/` targets are never exported)
 ///
 /// Schema evolution:
 /// - [IDatabaseMigration] — contract a package implements, next to its own

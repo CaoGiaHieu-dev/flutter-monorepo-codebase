@@ -150,18 +150,59 @@ void main() {
       },
     );
 
-    test('a conditional export, and an export after an import and a comment', () async {
-      final barrel = await barrelAfter(
-        "import 'dart:async';\n"
-        "export 'stub.dart' if (dart.library.io) 'io.dart';\n"
-        '// export \'in_a_comment.dart\';\n'
-        "export 'late.dart';\n",
-      );
-      expect(barrel, contains("import 'dart:async';"));
-      expect(barrel, contains("// export 'in_a_comment.dart';"));
-      expect(barrel, isNot(contains('stub.dart')));
-      expect(barrel, isNot(contains('late.dart')));
-    });
+    test(
+      'a conditional export, and an export after an import and a comment',
+      () async {
+        final barrel = await barrelAfter(
+          "import 'dart:async';\n"
+          "export 'stub.dart' if (dart.library.io) 'io.dart';\n"
+          '// export \'in_a_comment.dart\';\n'
+          "export 'late.dart';\n",
+        );
+        expect(barrel, contains("import 'dart:async';"));
+        expect(barrel, contains("// export 'in_a_comment.dart';"));
+        expect(barrel, isNot(contains('stub.dart')));
+        expect(barrel, isNot(contains('late.dart')));
+      },
+    );
+
+    test(
+      'the targets of a configurable import are not exported; the file '
+      'holding it is',
+      () async {
+        final ws = TempWorkspace.create({
+          'pkg/pubspec.yaml': 'name: demo_pkg\n',
+          'pkg/lib/src/a.dart':
+              "import 'n.dart' if (dart.library.js_interop) 'w.dart' as c;\n"
+              'Object open() => c.open();\n',
+          'pkg/lib/src/n.dart': "import 'dart:ffi';\nObject open() => 1;\n",
+          'pkg/lib/src/w.dart': 'Object open() => 2;\n',
+          // A configurable export through the package's own URI counts too.
+          'pkg/lib/src/b.dart':
+              "export 'package:demo_pkg/src/io/x.dart' "
+              "if (dart.library.js_interop) 'web/x.dart';\n",
+          'pkg/lib/src/io/x.dart': 'class X {}\n',
+          'pkg/lib/src/web/x.dart': 'class X {}\n',
+          // An ordinary import names nothing it hides.
+          'pkg/lib/src/c.dart': "import 'd.dart';\n",
+          'pkg/lib/src/d.dart': 'class D {}\n',
+        });
+        final run = await tool.run(const [
+          'pkg/lib',
+        ], workingDirectory: ws.root);
+        expect(run, exitsWith(0), reason: run.output);
+        final barrel = ws.read('pkg/lib/demo_pkg.dart');
+        expect(barrel, contains("export 'src/a.dart';"));
+        expect(barrel, contains("export 'src/b.dart';"));
+        expect(barrel, contains("export 'src/c.dart';"));
+        expect(barrel, contains("export 'src/d.dart';"));
+        expect(barrel, isNot(contains("'src/n.dart'")));
+        expect(barrel, isNot(contains("'src/w.dart'")));
+        expect(barrel, isNot(contains("'src/io/x.dart'")));
+        expect(barrel, isNot(contains("'src/web/x.dart'")));
+        expect(run.output, contains('Barrel generated: 4 exports.'));
+      },
+    );
 
     test('it is idempotent: a second run changes nothing', () async {
       final ws = package();

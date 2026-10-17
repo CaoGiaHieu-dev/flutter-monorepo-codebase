@@ -7,7 +7,6 @@ import 'package:yaml/yaml.dart';
 import 'catalog.dart';
 import 'manifest_v2.dart';
 import 'package_facts.dart';
-import 'platform_notes.dart';
 import 'provisions.dart';
 
 /// `composer new <id>`: the pieces that need no knowledge of composer's
@@ -16,9 +15,9 @@ import 'provisions.dart';
 ///
 /// An app is a manifest plus the files composer writes its regions into, so
 /// the third app is one command instead of a hand copy of `apps/admin`. The
-/// command **never runs `flutter create`**: a runner is native-project state
-/// the Flutter tool owns, so the manifest declares each platform
-/// `runner: scaffold` and the command prints the line to run.
+/// manifest declares each platform `runner: scaffold`: a runner `composer
+/// runners` generates once the app resolves, and git never tracks (the
+/// `runners` region of the app's `.gitignore`). `new` itself writes none.
 ///
 /// The composition is the shape `apps/admin` has — the shared core, shell and
 /// ui groups, every layer of the requested modules — and `capabilities:` is
@@ -77,10 +76,14 @@ class NewAppRequest {
     required this.name,
     required this.platforms,
     required this.modules,
+    this.org = kDefaultOrg,
   });
 
   final String id;
   final String name;
+
+  /// `--org`, written as `app.org`.
+  final String org;
 
   /// Platform names, canonical order.
   final List<String> platforms;
@@ -89,7 +92,8 @@ class NewAppRequest {
   final List<String> modules;
 }
 
-/// Reads `new <id> [--name <text>] --platforms <a,b> [--modules <x,y>]`.
+/// Reads `new <id> [--name <text>] --platforms <a,b> [--modules <x,y>]
+/// [--org <reverse domain>]`.
 ///
 /// Throws a [FormatException] saying what is wrong; nothing here touches the
 /// disk.
@@ -98,6 +102,7 @@ NewAppRequest parseNewArgs(List<String> args) {
   String? name;
   String? platforms;
   String? modules;
+  String? org;
   String value(int i, String flag) {
     if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
       throw FormatException('`$flag` needs a value.');
@@ -117,6 +122,9 @@ NewAppRequest parseNewArgs(List<String> args) {
       case '--modules':
         modules = value(i, arg);
         i++;
+      case '--org':
+        org = value(i, arg);
+        i++;
       default:
         if (arg.startsWith('-')) {
           throw FormatException('Unknown argument `$arg` for `new`.');
@@ -134,7 +142,8 @@ NewAppRequest parseNewArgs(List<String> args) {
   if (id == null) {
     throw const FormatException(
       '`new` needs an app id: dart tools/composer/composer.dart new <id> '
-      '--platforms <a,b> [--modules <x,y>] [--name "<Display Name>"]',
+      '--platforms <a,b> [--modules <x,y>] [--name "<Display Name>"] '
+      '[--org <reverse domain>]',
     );
   }
   if (platforms == null) {
@@ -153,6 +162,7 @@ NewAppRequest parseNewArgs(List<String> args) {
     name: name ?? _titleCase(id),
     platforms: list(platforms),
     modules: modules == null ? const [] : list(modules),
+    org: org ?? kDefaultOrg,
   );
 }
 
@@ -218,13 +228,6 @@ class NewAppPlan {
   /// staging and prod must carry a pin decision.
   bool get anyPlatformCanPin =>
       request.platforms.any(kPinnablePlatforms.contains);
-
-  /// The platform the smoke test names: a VM reports Android and never the
-  /// web, so a declared platform that is not `web` when there is one.
-  String get smokePlatform => request.platforms.firstWhere(
-    (name) => name != 'web',
-    orElse: () => request.platforms.first,
-  );
 }
 
 /// Why [request] cannot become an app, or the plan for it.
@@ -268,6 +271,15 @@ class NewAppPlan {
         '${p.posix.relative(packages['${id}_app']!, from: root)}',
       );
     }
+  }
+
+  // -- the org -----------------------------------------------------------------
+  if (!kOrgPattern.hasMatch(request.org)) {
+    problems.add(
+      '--org: expected a reverse domain such as `com.acme`, got '
+      '`${request.org}` — it becomes `app.org`, which every generated '
+      'runner\'s application / bundle id starts with',
+    );
   }
 
   // -- the name ----------------------------------------------------------------
@@ -537,6 +549,7 @@ Map<String, String> renderAppFiles(
   final values = <String, Object?>{
     'id': plan.id,
     'name': request.name,
+    'org': request.org,
     'pubspecName': plan.pubspecName,
     'sdk': environment.sdk,
     'flutter': environment.flutter,
@@ -547,7 +560,7 @@ Map<String, String> renderAppFiles(
       for (final name in request.platforms) {'name': name},
     ],
     'platformsCsv': request.platforms.join(','),
-    'smokePlatform': plan.smokePlatform,
+    'hasWeb': request.platforms.contains('web'),
     'usesDatabase': plan.usesDatabase,
     'hasModules': plan.modules.isNotEmpty,
     'modulesCsv': plan.modules.map((m) => m.id).join(','),
@@ -571,6 +584,8 @@ Map<String, String> renderAppFiles(
       'core_common/core_common.dart',
       'core_di/core_di.dart',
       if (plan.usesDatabase) 'drift/drift.dart show GeneratedDatabase',
+      // debugDefaultTargetPlatformOverride: each declared platform is booted.
+      'flutter/foundation.dart',
       // Only the `path_provider` channel double (database apps) names it.
       if (plan.usesDatabase) 'flutter/services.dart',
       'flutter_secure_storage/flutter_secure_storage.dart',
@@ -581,6 +596,14 @@ Map<String, String> renderAppFiles(
     'profileTestImports': _sortedImports([
       '${plan.pubspecName}/app/app_profile.dart',
       'flutter_test/flutter_test.dart',
+    ]),
+    'bootTestImports': _sortedImports([
+      // FlutterError: flutter_test does not re-export it.
+      'flutter/foundation.dart',
+      '${plan.pubspecName}/main.dart as app',
+      'flutter_test/flutter_test.dart',
+      'integration_test/integration_test.dart',
+      'platform_app_shell/platform_app_shell.dart',
     ]),
     'capabilities': [
       for (final c in plan.capabilities)
@@ -625,6 +648,8 @@ List<Map<String, String>> _sortedImports(List<String> uris) => [
 ];
 
 String _importLine(String entry) {
+  final alias = entry.split(' as ');
+  if (alias.length > 1) return "import 'package:${alias[0]}' as ${alias[1]};";
   final parts = entry.split(' show ');
   final show = parts.length > 1 ? ' show ${parts[1]}' : '';
   return "import 'package:${parts[0]}'$show;";
@@ -682,6 +707,14 @@ Map<String, String> _catalogVersions(String? root) {
   return fallback;
 }
 
+/// What `-d` names for [platform] in the boot test: the desktop itself, or a
+/// device or simulator of a phone platform.
+String _bootDevice(String platform) => switch (platform) {
+  'android' => '<emulator id>',
+  'ios' => '<simulator id>',
+  _ => platform,
+};
+
 /// The lines `new` prints once the app is written and verified: what to run
 /// next, and the one thing it deliberately did not do.
 List<String> nextSteps(NewAppPlan plan) {
@@ -700,13 +733,24 @@ List<String> nextSteps(NewAppPlan plan) {
     '  dart run build_runner build --workspace',
     '  cd apps/${plan.id} && flutter test test/di_smoke_test.dart',
     '',
-    'composer does NOT run `flutter create` — the native runners are the '
-        'Flutter tool\'s to write. When you want them, run, once:',
-    '  cd apps/${plan.id} && flutter create --platforms=${request.platforms.join(',')} '
-        '--org com.example --project-name ${plan.pubspecName} .',
-    for (final cleanup in kFlutterCreateCleanup) '  $cleanup',
-    'then declare each platform `runner: committed` in the manifest and run '
-        '`dart tools/composer/composer.dart sync --app ${plan.id}`.',
+    'Generate the runners with composer runners (never committed — '
+        'apps/${plan.id}/.gitignore ignores them; `${request.org}` starts '
+        'each application id):',
+    '  dart tools/composer/composer.dart runners --app ${plan.id}',
+    'Then prove the boot on each platform (RULE-83), from apps/${plan.id}:',
+    for (final platform in request.platforms)
+      if (platform != 'web')
+        '  flutter test integration_test/boot_test.dart -d '
+            '${_bootDevice(platform)} --dart-define-from-file=env.dev '
+            '--dart-define=APP_FLAVOR=dev',
+    if (request.platforms.contains('web'))
+      '  flutter drive --driver=test_driver/integration_test.dart '
+          '--target=integration_test/boot_test.dart -d web-server --headless '
+          '--dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev   '
+          '# a chromedriver of your Chrome\'s version on port 4444',
+    'To own a runner (native flavors, push, deep links): declare it '
+        '`runner: committed`, run `dart tools/composer/composer.dart sync '
+        '--app ${plan.id}`, then commit apps/${plan.id}/<platform>/.',
     'Only `env.dev` is written. Create `env.stg` and `env.prod` (the same keys; '
         'the report names them) when you build those flavors — `composer '
         'verify` holds each file that exists to `env:` (V11).',

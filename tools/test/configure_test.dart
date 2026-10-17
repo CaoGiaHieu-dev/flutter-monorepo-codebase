@@ -73,6 +73,12 @@ void main() {
       );
       expect(run0.stdout, contains('--stub-firebase'));
       expect(run0.stdout, contains('build_runner build --workspace'));
+      // Step 7, and the flag that skips it.
+      expect(
+        run0.stdout,
+        contains('  7. dart tools/composer/composer.dart runners'),
+      );
+      expect(run0.stdout, contains('--no-runners'));
       expect(bin.calls, isEmpty);
     }, skip: skipWithoutPosixShell());
 
@@ -114,7 +120,7 @@ void main() {
   });
 
   group('the setup', () {
-    test('runs the six steps in order and exits 0', () async {
+    test('runs the seven steps in order and exits 0', () async {
       final ws = workspace();
       final bin = FakeBin.create({'flutter': logOnly, 'dart': logOnly});
 
@@ -134,7 +140,39 @@ void main() {
         // without lib/ are left out. Sorted by path.
         'dart tools/barrel_generator/generate.dart ./modules/auth/domain/lib',
         'dart tools/barrel_generator/generate.dart ./platform/ui/core_ui/lib',
+        // Last: the generated runners, from the repository root.
+        'dart tools/composer/composer.dart runners',
       ]);
+      expect(bin.calls.last.split(' ')[1], ws.root);
+    }, skip: skipWithoutPosixShell());
+
+    test('--no-runners skips step 7 and says how to run it later', () async {
+      final ws = workspace();
+      final bin = FakeBin.create({'flutter': logOnly, 'dart': logOnly});
+
+      final run0 = await run(ws, bin, args: ['--no-runners']);
+
+      expect(run0, exitsWith(0));
+      expect(bin.calls.where((c) => c.contains('composer.dart')), isEmpty);
+      expect(
+        bin.calls.where((c) => c.contains('barrel_generator')),
+        isNotEmpty,
+      );
+      expect(run0.output, contains('Skipping the runners (--no-runners)'));
+    }, skip: skipWithoutPosixShell());
+
+    test('a failing runners step stops configure with its exit code', () async {
+      final ws = workspace();
+      final bin = FakeBin.create({
+        'flutter': logOnly,
+        'dart': '[ "\$1" = tools/composer/composer.dart ] && exit 1\nexit 0',
+      });
+
+      final run0 = await run(ws, bin);
+
+      expect(run0, exitsWith(1));
+      expect(run0.output, contains('composer.dart runners" failed'));
+      expect(run0.output, isNot(contains('Configuration completed')));
     }, skip: skipWithoutPosixShell());
 
     test(

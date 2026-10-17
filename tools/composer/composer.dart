@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -15,6 +16,7 @@ import 'src/package_facts.dart';
 import 'src/profile_summary.dart';
 import 'src/provisions.dart';
 import 'src/report.dart';
+import 'src/runners.dart';
 
 /// Composes an app from its `app_manifest.yaml`.
 ///
@@ -35,16 +37,18 @@ import 'src/report.dart';
 /// dart tools/composer/composer.dart sync [--app <id>] [--strict]
 /// dart tools/composer/composer.dart verify
 /// dart tools/composer/composer.dart list
-/// dart tools/composer/composer.dart describe [--app <id>] [--catalog]
+/// dart tools/composer/composer.dart describe [--app <id>] [--catalog | --ci-matrix pr|full]
 /// dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]
-/// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]
+/// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>] [--org <reverse domain>]
+/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force]
 /// ```
 ///
 /// The manifest also **declares** the app — its name, flavors (and the pinning
 /// decision each carries), environment keys, platforms and capabilities — and
 /// `sync` turns that into the `facts` region of `lib/app/app_profile.dart`, the
-/// `report` region of the app's `README.md` and, in `injection.dart`, the
-/// `configureDependencies` entry point. `src/manifest_v2.dart` holds the
+/// `report` region of the app's `README.md`, the `runners` region of its
+/// `.gitignore` (every generated runner, never committed) and, in
+/// `injection.dart`, the `configureDependencies` entry point. `src/manifest_v2.dart` holds the
 /// schema, `src/checks.dart` the checks `verify` adds.
 ///
 /// `verify` also holds the declaration to the source (`checkComposition`,
@@ -58,7 +62,13 @@ import 'src/report.dart';
 /// `capabilities:` derived from the modules asked for), the generated-file
 /// shells, a profile, hooks, an entry point, a smoke test — then `sync` and
 /// `verify`. It refuses an id that exists or a platform a requested module
-/// blocks before it writes anything, and never runs `flutter create`.
+/// blocks before it writes anything, and generates no runner.
+///
+/// `runners` generates the runner of every `scaffold` platform with
+/// `flutter create` in a temporary directory (`src/runners.dart`), copies only
+/// the platform folder into the app and applies a fixed patch set; git
+/// ignores the result. `describe --ci-matrix pr|full` prints, as one line of
+/// JSON, the apps and platforms CI boots.
 ///
 /// `sync` skips a module that is not on disk and says so loudly; `--strict`
 /// makes that an error. CI runs `--strict`, which is what stops a release
@@ -72,7 +82,7 @@ String _beginMarker(String region) =>
     'composer:managed:$region — generated from app_manifest.yaml';
 String _endMarker(String region) => 'composer:end:$region';
 
-void main(List<String> args) {
+Future<void> main(List<String> args) async {
   if (args.isEmpty || args.contains('--help') || args.contains('-h')) {
     _printHelp(args.isEmpty ? stderr : stdout);
     // No command is a usage error, like an unknown one (64) — never 1, which
@@ -88,6 +98,7 @@ void main(List<String> args) {
     'describe',
     'reconcile',
     'new',
+    'runners',
   }.contains(command)) {
     OutputFormatter.printError('Unknown command `$command`.');
     _printHelp(stderr);
@@ -111,10 +122,42 @@ void main(List<String> args) {
     return;
   }
 
+  // `runners` too: an app, platforms and `--force`.
+  if (command == 'runners') {
+    final RunnersRequest request;
+    try {
+      request = parseRunnersArgs(args.sublist(1));
+    } on FormatException catch (e) {
+      OutputFormatter.printError(e.message);
+      exit(64);
+    }
+    var apps = const <RunnerApp>[];
+    _guardYaml(root, () => apps = _runnerApps(root));
+    OutputFormatter.printHeader(
+      'Composer — runners',
+      subtitle: 'flutter create + patch set; git ignores the result (RULE-83)',
+    );
+    final code = await generateRunners(
+      root: root,
+      apps: apps,
+      request: request,
+      run: runProcess,
+      fetch: fetchUrl,
+      out: stdout.writeln,
+      warn: OutputFormatter.printWarning,
+      err: OutputFormatter.printError,
+    );
+    if (code == 0) {
+      OutputFormatter.printSuccess('Every generated runner is in place.');
+    }
+    exit(code);
+  }
+
   // Every argument after the command must be one this tool knows. An
   // unknown flag used to be ignored, so `sync --stritc` ran a lenient sync.
   var strict = false;
   var catalogOnly = false;
+  String? ciMatrix;
   String? appFilter;
   String? reason;
   for (var i = 1; i < args.length; i++) {
@@ -123,6 +166,13 @@ void main(List<String> args) {
         strict = true;
       case '--catalog':
         catalogOnly = true;
+      case '--ci-matrix':
+        if (i + 1 >= args.length ||
+            !const {'pr', 'full'}.contains(args[i + 1])) {
+          OutputFormatter.printError('`--ci-matrix` needs `pr` or `full`.');
+          exit(64);
+        }
+        ciMatrix = args[++i];
       case '--app':
         if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
           OutputFormatter.printError('`--app` needs an app id.');
@@ -150,6 +200,7 @@ void main(List<String> args) {
       appFilter,
       strict,
       catalogOnly: catalogOnly,
+      ciMatrix: ciMatrix,
       reason: reason,
     ),
   );
@@ -185,8 +236,15 @@ void _run(
   String? appFilter,
   bool strict, {
   required bool catalogOnly,
+  String? ciMatrix,
   String? reason,
 }) {
+  if (ciMatrix != null && (command != 'describe' || catalogOnly)) {
+    OutputFormatter.printError(
+      '`--ci-matrix` belongs to `describe`, without `--catalog`.',
+    );
+    exit(64);
+  }
   if (reason != null && command != 'reconcile') {
     OutputFormatter.printError('`--reason` belongs to `reconcile`.');
     exit(64);
@@ -225,6 +283,19 @@ void _run(
   if (_invalidYaml.isNotEmpty && command == 'list') {
     _reportInvalidYaml(root);
     exit(1);
+  }
+
+  // One line of JSON on stdout and nothing else, for `>> $GITHUB_OUTPUT`.
+  if (ciMatrix != null) {
+    _ciMatrix(
+      root,
+      apps,
+      packages,
+      catalog!,
+      appFilter,
+      full: ciMatrix == 'full',
+    );
+    return;
   }
 
   // What the source registers: read once, by the same scanner arch_check's R8
@@ -472,6 +543,7 @@ List<AppManifest> _discoverApps(
           catalog: catalog,
           appDir: app.dir,
           appRel: p.posix.relative(app.dir, from: root),
+          appId: app.id,
         ),
       );
     }
@@ -515,7 +587,7 @@ const _topLevelKeys = {
 
 /// `kind` is listed so the generic unknown-key message does not fire for it:
 /// the declaration parser refuses it with its own, more useful one.
-const _appKeys = {'id', 'name', 'kind', 'entrypoint'};
+const _appKeys = {'id', 'name', 'org', 'kind', 'entrypoint'};
 const _groupKeys = {'name', 'phase', 'packages', 'from_modules', 'why'};
 const _moduleKeys = {'id', 'layers'};
 const _phases = ['before', 'after'];
@@ -1291,6 +1363,133 @@ void _describeApps(
   }
 }
 
+/// The platforms `describe --ci-matrix` boots off ubuntu, and the runner
+/// image each one needs.
+const Map<String, String> _ciRunnerImages = {
+  'android': 'ubuntu-latest',
+  'ios': 'macos-latest',
+  'windows': 'windows-latest',
+  'macos': 'macos-latest',
+};
+
+/// `describe --ci-matrix pr|full`: the matrix CI fans out over, as one line of
+/// compact JSON on stdout.
+///
+/// - `pr`: one row per app that declares web or Linux — what one ubuntu job
+///   builds and boots per pull request:
+///   `{"app": <id>, "web": bool, "linux": bool}`;
+/// - `full`: one row per (app, declared android / ios / windows / macos), in
+///   canonical platform order: the image (`os`), how the flavor is named
+///   (`--flavor dev` for a committed Android or iOS runner, which has native
+///   flavors; `--dart-define=APP_FLAVOR=dev` for a generated one) and `boot`
+///   — `firebase` where the derived push is on (the leg boots only when real
+///   Firebase files can be restored), else `test`.
+void _ciMatrix(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  String? appFilter, {
+  required bool full,
+}) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  final rows = <Map<String, Object>>[];
+  for (final app in selected) {
+    final declared = {for (final p in app.declaration.platforms) p.name};
+    if (!full) {
+      if (!declared.contains('web') && !declared.contains('linux')) continue;
+      rows.add({
+        'app': app.id,
+        'web': declared.contains('web'),
+        'linux': declared.contains('linux'),
+      });
+      continue;
+    }
+    final r = _resolve(app, packages, <String>[]);
+    final view = _view(
+      root,
+      app,
+      r,
+      packages,
+      catalog,
+      const ProvisionIndex.empty(),
+    );
+    for (final platform in derivePlatforms(view)) {
+      final os = _ciRunnerImages[platform.name];
+      if (os == null) continue;
+      final nativeFlavors =
+          platform.runner.value == 'committed' &&
+          (platform.name == 'android' || platform.name == 'ios');
+      rows.add({
+        'app': app.id,
+        'platform': platform.name,
+        'os': os,
+        'flavor': nativeFlavors
+            ? '--flavor dev'
+            : '--dart-define=APP_FLAVOR=dev',
+        'boot': platform.push.value ? 'firebase' : 'test',
+      });
+    }
+  }
+  stdout.writeln(jsonEncode(rows));
+}
+
+/// Every app as `composer runners` needs it: the declaration, the pubspec
+/// name `flutter create` gets, and whether it links `core_database`.
+List<RunnerApp> _runnerApps(String root) {
+  final packages = _discoverPackages(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
+  if (apps.isEmpty || catalog == null) {
+    for (final problem in catalogProblems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'No app_manifest.yaml found. Run this from the repository root.',
+    );
+    exit(1);
+  }
+  return [
+    for (final app in apps)
+      () {
+        final r = _resolve(app, packages, <String>[]);
+        final view = _view(
+          root,
+          app,
+          r,
+          packages,
+          catalog,
+          const ProvisionIndex.empty(),
+        );
+        return RunnerApp(
+          id: app.id,
+          dir: app.dir,
+          pubspecName: view.pubspecName,
+          decl: app.declaration,
+          linksDatabase: linkedPackages(view).contains(kDatabasePackageName),
+        );
+      }(),
+  ];
+}
+
+/// The `runners` region of an app's `.gitignore`: one `/<p>/` per platform
+/// declared `runner: scaffold`, in canonical order — a generated runner is
+/// never committed (RULE-83).
+String _runnersBody(AppDeclaration decl) => [
+  for (final platform in decl.platforms)
+    if (platform.isScaffold) '/${platform.name}/\n',
+].join();
+
 /// `new`: creates `apps/<id>/` from `app_template/`, then runs `sync` and
 /// `verify` over the workspace.
 ///
@@ -1298,8 +1497,8 @@ void _describeApps(
 /// text about to be written: the request, the composition the modules imply,
 /// and the rendered manifest through the same parser and checks every manifest
 /// goes through (a platform a composed package cannot run on is V7). A refusal
-/// writes nothing. `flutter create` is never run — the native runners are the
-/// Flutter tool's.
+/// writes nothing. No runner is generated — `composer runners` does that,
+/// once the app resolves.
 void _newApp(String root, NewAppRequest request) {
   OutputFormatter.printHeader(
     'Composer — new',
@@ -1372,6 +1571,7 @@ void _newApp(String root, NewAppRequest request) {
         catalog: catalog,
         appDir: dir,
         appRel: 'apps/${plan.id}',
+        appId: plan.id,
       ),
     );
     final resolved = _resolve(manifest, packages, <String>[]);
@@ -1535,6 +1735,14 @@ void _sync(
           '<!--',
           'report',
           '\n${renderReport(view)}\n',
+        ),
+      )
+      ..add(
+        _Region(
+          p.posix.join(app.dir, '.gitignore'),
+          '#',
+          'runners',
+          _runnersBody(app.declaration),
         ),
       );
   }
@@ -1989,7 +2197,10 @@ COMMANDS
                     what the shell resolves from it — the text of the `report`
                     region of its README.md. With --catalog: the manifest keys
                     (type, default, what refuses and what reads each), the
-                    shell's contract catalog and the derived defaults.
+                    shell's contract catalog and the derived defaults. With
+                    --ci-matrix pr|full: one line of JSON for CI — `pr` lists
+                    each app that declares web or linux, `full` each app's
+                    android, ios, windows and macos legs (os, flavor, boot).
   reconcile         Declare `absent` every optional capability an app still
                     says is `provided` although nothing it composes (or its
                     own lib/) registers the contract any more — what removing
@@ -1998,12 +2209,26 @@ COMMANDS
                     the shell does without it>`; run `sync` afterwards.
                     remove_sample runs it for you.
   new               Create a whole app: `new <id> --platforms <a,b>
-                    [--modules <x,y>] [--name "<Display Name>"]` renders
-                    tools/composer/app_template/ into apps/<id>/, derives its
-                    `capabilities:` from what the modules register, runs `sync`
-                    and `verify`, and prints what to run next. Refuses an id
-                    that exists or a platform a module blocks, writing
-                    nothing. It never runs `flutter create`: it prints the line.
+                    [--modules <x,y>] [--name "<Display Name>"] [--org <reverse
+                    domain>]` renders tools/composer/app_template/ into
+                    apps/<id>/, derives its `capabilities:` from what the
+                    modules register, runs `sync` and `verify`, and prints what
+                    to run next. Refuses an id that exists or a platform a
+                    module blocks, writing nothing. It generates no runner:
+                    `runners --app <id>` does, once the app resolves.
+  runners           Generate the runner of every platform declared
+                    `runner: scaffold` (never committed: the app's .gitignore
+                    `runners` region ignores it): `flutter create` in a
+                    temporary directory with `app.org` and the pubspec name,
+                    then only apps/<id>/<p>/ is copied in. Every run applies
+                    the patch set: the macOS network-client entitlement, and
+                    for an app on the web that links core_database the
+                    sqlite3.wasm the resolved sqlite3 names (sha256-checked)
+                    and a compiled drift_worker.js. A missing folder is
+                    generated, an existing one only patched; `--force`
+                    regenerates (after a Flutter upgrade). Refuses a committed
+                    platform. configure.dart runs it last. Exit 0 done, 1 a
+                    failed step, 64 usage.
   sync              Regenerate the managed regions of:
                       - the root pubspec.yaml `workspace:` list
                       - each app's path dependencies
@@ -2012,6 +2237,8 @@ COMMANDS
                       - each app's lib/app/app_profile.dart (`facts`: the
                         manifest's declaration as const Dart)
                       - each app's README.md (`report`)
+                      - each app's .gitignore (`runners`: one `/<p>/` per
+                        scaffold platform)
                     Writes nothing and exits 1 if any of those files, or a
                     region's composer:managed / composer:end marker, is
                     missing, or if a manifest declaration is refused.
@@ -2021,14 +2248,23 @@ COMMANDS
                     only warns about one). Also implies --strict. Use in CI.
 
 OPTIONS
-  --app <id>        Only this app (list, describe, reconcile, sync, verify). The root
-                    `workspace:` list is still computed from every app.
+  --app <id>        Only this app (list, describe, reconcile, sync, verify,
+                    runners). The root `workspace:` list is still computed
+                    from every app.
   --catalog         With `describe`: the schema and catalog, not an app.
+  --ci-matrix <k>   With `describe`: `pr` or `full`, one line of JSON on stdout.
   --reason <text>   With `reconcile`: the start of each `reason:` it writes.
   --platforms <a,b> With `new`: where the app runs (android, ios, web,
-                    windows, macos, linux), each `runner: scaffold`.
+                    windows, macos, linux), each `runner: scaffold`
+                    (generated by `runners`, never committed).
   --modules <x,y>   With `new`: the modules it composes, every layer each has.
   --name <text>     With `new`: the display name (default: the id, title-cased).
+  --org <domain>    With `new`: `app.org`, the reverse domain every generated
+                    runner's application / bundle id starts with (default
+                    com.example).
+  --platform <p,q>  With `runners`: only these scaffold platforms; naming a
+                    committed one is refused.
+  --force           With `runners`: delete and regenerate the selected runners.
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.
@@ -2050,9 +2286,13 @@ WHAT VERIFY HOLDS THE DECLARATION TO
        per flavor) is registered under the app's lib/
   V11  the env files that exist hold exactly the keys `env:` declares
   V12  the entry point passes `profile:`; test/di_smoke_test.dart exists,
-       calls checkAppContract and builds every factory (`FactoryRecorder` + `buildEvery`)
-  V13  the generated regions equal regeneration, and lib/di/injection.dart
-       holds nothing but comments and blank lines outside its two regions
+       iterates `appFacts.platforms`, calls checkAppContract and builds every
+       factory (`FactoryRecorder` + `buildEvery`); integration_test/
+       boot_test.dart exists and calls `debugBootStage(`; an app that declares
+       web has test_driver/integration_test.dart (RULE-83)
+  V13  the generated regions equal regeneration (the .gitignore `runners`
+       region included), and lib/di/injection.dart holds nothing but comments
+       and blank lines outside its two regions
   V15  a committed Android runner has a `productFlavor` per declared flavor,
        a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-`
        configurations per declared flavor, and neither names a flavor the
@@ -2061,8 +2301,11 @@ WHAT VERIFY HOLDS THE DECLARATION TO
        template names follow the canonical order
   V17  no member pubspec but the root's has a top-level `workspace:` key
        (a nested workspace node, RULE-16)
-  V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12, V13,
-  V15, V16 and V17 fail `verify`; `sync` prints them as warnings and still writes.
+  V6 refuses a runner folder of a platform `platforms:` does not declare.
+  V7 and V8 (push and deep links need a committed runner; deep links are
+  refused on the web) refuse before anything is written, in `sync` too.
+  V3, V10, V11, V12, V13, V15, V16 and V17 fail `verify`; `sync` prints them
+  as warnings and still writes.
   The scan reads source, not the graph: `checkAppContract` stays the authority.
 
 MODULE LAYERS

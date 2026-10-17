@@ -25,7 +25,10 @@ written (single or double quotes, `export'x'`, a `show` / `hide` clause across
 lines); everything else in it (library doc comment, `library;`) is kept.
 
 Not exported: `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `part of` files,
-`firebase_options*.dart`, lib/gen/ and hidden directories. Generated files
+`firebase_options*.dart`, lib/gen/, hidden directories, and every file a
+configurable import or export (`import 'a.dart' if (dart.library.js_interop)
+'b.dart';`) names — the file holding that directive is exported instead, so
+the compiler picks one side per platform (RULE-75). Generated files
 that ARE libraries (`module.module.dart`, lib/src/gen/**) are exported when
 present on disk — run it after gen-l10n / build_runner.
 
@@ -104,8 +107,18 @@ void main(List<String> args) {
   stdout.writeln('\n[INFO] Writing ${barrel.path}...');
 
   try {
+    final files = _dartFiles(lib);
+    // The barrel's own exports are about to be replaced: they name nothing.
+    final targets = _configurableTargets(
+      [
+        for (final f in files)
+          if (!p.equals(f.path, barrel.path)) f,
+      ],
+      lib.path,
+      nameMatch.group(1)!,
+    );
     final sources = <String>[];
-    for (final file in _dartFiles(lib)) {
+    for (final file in files) {
       if (p.equals(file.path, barrel.path)) continue;
       final content = file.readAsStringSync();
       if (_isLegacyBarrel(content)) {
@@ -117,7 +130,8 @@ void main(List<String> args) {
         file.writeAsStringSync(_withoutExports(content));
         stdout.writeln('  - Removed exports from: ${file.path}');
       }
-      if (_isExported(file.path, content)) {
+      if (!targets.contains(p.normalize(file.absolute.path)) &&
+          _isExported(file.path, content)) {
         sources.add(
           p.posix.joinAll(p.split(p.relative(file.path, from: lib.path))),
         );
@@ -172,6 +186,44 @@ List<File> _dartFiles(Directory lib) {
   }
 
   walk(lib, top: true);
+  return out;
+}
+
+/// Every file of the package that a **configurable** `import` / `export`
+/// names — one with an `if (dart.library.…)` clause, so more than one URI —
+/// as normalized absolute paths: the default target and each conditional
+/// one. None of them is exported: the barrel would otherwise export both
+/// sides (`ambiguous_export`), and the default side — `dart:ffi` behind it —
+/// would reach every web build through the barrel. The file holding the
+/// directive is exported as usual; it is the one place the compiler picks.
+Set<String> _configurableTargets(
+  List<File> files,
+  String libPath,
+  String packageName,
+) {
+  final out = <String>{};
+  final ownPackage = 'package:$packageName/';
+  for (final file in files) {
+    for (final directive in DartSource.scan(
+      file.readAsStringSync(),
+    ).directives) {
+      if (directive.uris.length < 2) continue;
+      for (final uri in directive.uris) {
+        final String? path;
+        if (uri.startsWith(ownPackage)) {
+          path = p.joinAll([
+            libPath,
+            ...uri.substring(ownPackage.length).split('/'),
+          ]);
+        } else if (uri.contains(':')) {
+          path = null; // dart:, another package: not a file of this lib/
+        } else {
+          path = p.joinAll([p.dirname(file.path), ...uri.split('/')]);
+        }
+        if (path != null) out.add(p.normalize(File(path).absolute.path));
+      }
+    }
+  }
   return out;
 }
 

@@ -2,14 +2,19 @@ import 'dart:async';
 
 import 'package:core_common/core_common.dart';
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_material_wrapper.dart';
 
-/// MainScope is responsible for initializing the app, displaying a splash screen,
-/// and transitioning to the main application once initialization is complete.
+/// MainScope is responsible for initializing the app and transitioning to the
+/// main application once initialization is complete.
+///
+/// With a Dart [splashScreen] it shows that splash while initialization runs.
+/// Without one it holds the first frame (`deferFirstFrame`) until
+/// initialization ends, on every platform: the native launch screen stays up
+/// on Android and iOS, and nothing half-built is painted on the web or the
+/// desktop. The hold is released whether initialization succeeds or throws,
+/// so a failed boot can always show its error screen (RULE-83).
 class MainScope {
   /// Creates an instance of MainScope.
   ///
@@ -46,31 +51,20 @@ class MainScope {
 
     // Check if a splash screen is provided.
     if (splashScreen == null) {
-      // Preserve the splash screen until initialization is complete.
-      FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-
-      // The splash stays exactly as long as initialization takes — no
-      // artificial minimum on top of it.
+      // SplashMode.native: hold the first frame until initialization is
+      // done. On Android and iOS the launch screen stays up meanwhile; on
+      // the web and the desktop nothing half-built is painted. Released in
+      // `finally`, so a failed boot shows its error screen everywhere — the
+      // web once skipped this release and stayed blank (RULE-83).
+      widgetsBinding.deferFirstFrame();
       try {
         await initService();
-      } catch (_) {
-        // Hand the screen back before the error reaches the caller: a native
-        // splash that is still preserved would hide the boot error screen
-        // for good.
-        _removeNativeSplash();
-        rethrow;
+      } finally {
+        widgetsBinding.allowFirstFrame();
       }
-
-      // Remove the splash screen after initialization.
-      _removeNativeSplash();
-
-      // Run the app with the root widget wrapped in a responsive wrapper.
       runApp(_ResponsiveWrapper(display: display, child: root));
       return;
     }
-
-    // Remove the splash screen after initialization.
-    _removeNativeSplash();
 
     // Create an AppMaterialWrapper with the splash screen.
     final splash = AppMaterialWrapper(home: splashScreen, display: display);
@@ -174,13 +168,3 @@ ResponsiveProfile _profileOf(ScalePolicy policy) => switch (policy) {
 
 /// The factor at which a design value is drawn at exactly its design size.
 const double _designFactor = ResponsiveConstants.DESIGN_SCALE_FACTOR;
-
-/// Removes the native splash kept by `FlutterNativeSplash.preserve`.
-///
-/// Skipped on the web: no app here generates a web splash, so the plugin has
-/// no web side and `remove()` throws `PlatformException(removeSplashFromWeb)`,
-/// which would reach the crash reporter on every start.
-void _removeNativeSplash() {
-  if (kIsWeb) return;
-  FlutterNativeSplash.remove();
-}

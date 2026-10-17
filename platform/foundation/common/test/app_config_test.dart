@@ -20,58 +20,38 @@ void main() {
   });
 
   group('AppConfig.declaredFlavorName', () {
-    test('the Flutter tool\'s --flavor wins, on every platform', () {
-      for (final isWeb in [true, false]) {
-        expect(
-          AppConfig.declaredFlavorName(
-            toolFlavor: 'staging',
-            webDefine: 'prod',
-            isWeb: isWeb,
-          ),
-          'staging',
-        );
-      }
+    test('the tool\'s flavor still wins over the define', () {
+      expect(
+        AppConfig.declaredFlavorName(toolFlavor: 'staging', define: 'prod'),
+        'staging',
+      );
     });
 
-    test('the web, which has no --flavor, reads --dart-define=APP_FLAVOR', () {
+    test('used when the tool named no flavor (any platform)', () {
+      // The web, and every generated runner — they carry no native flavors.
       expect(
-        AppConfig.declaredFlavorName(
-          toolFlavor: null,
-          webDefine: 'staging',
-          isWeb: true,
-        ),
+        AppConfig.declaredFlavorName(toolFlavor: null, define: 'staging'),
         'staging',
       );
       expect(
         AppConfig.parseFlavor(
-          AppConfig.declaredFlavorName(
-            toolFlavor: '',
-            webDefine: 'staging',
-            isWeb: true,
-          ),
+          AppConfig.declaredFlavorName(toolFlavor: '', define: 'staging'),
         ),
         Flavor.staging,
       );
-    });
-
-    test('off the web the define is ignored: one source of truth', () {
       expect(
-        AppConfig.declaredFlavorName(
-          toolFlavor: null,
-          webDefine: 'staging',
-          isWeb: false,
-        ),
-        isNull,
+        AppConfig.declaredFlavorName(toolFlavor: '  ', define: 'dev'),
+        'dev',
       );
     });
 
     test('nothing declared is null, so the build-mode fallback applies', () {
       expect(
-        AppConfig.declaredFlavorName(
-          toolFlavor: null,
-          webDefine: '',
-          isWeb: true,
-        ),
+        AppConfig.declaredFlavorName(toolFlavor: null, define: ''),
+        isNull,
+      );
+      expect(
+        AppConfig.declaredFlavorName(toolFlavor: '', define: ' '),
         isNull,
       );
     });

@@ -43,10 +43,19 @@ abstract class EncryptedStorage implements StorageInterface {
     accessibility: KeychainAccessibility.first_unlock,
   );
 
+  /// macOS options: the login keychain. The data-protection keychain (the
+  /// plugin's default) needs a keychain-access-groups entitlement and a
+  /// signing team, which a generated runner does not carry.
+  static const MacOsOptions _macOsOptions = MacOsOptions(
+    usesDataProtectionKeychain: false,
+    accessibility: KeychainAccessibility.first_unlock,
+  );
+
   /// The secure store both backends keep their master keys in.
   static FlutterSecureStorage get secureStorage => const FlutterSecureStorage(
     aOptions: _androidOptions,
     iOptions: _iosOptions,
+    mOptions: _macOsOptions,
   );
 
   ObfuscatedBytes? _masterKey;

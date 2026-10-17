@@ -13,28 +13,17 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Dem
 No environment keys are declared.
 
 ### 2. Platforms (c) — effective values, `value (source)`
-| Platform | Runner | Splash | Push | Deep links | Orientation | TLS pinning | Window |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| web | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | n/a (the browser owns TLS) | — |
-| windows | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | on (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
+| Platform | Runner | Splash | Push | Deep links | Secure storage | Orientation | TLS pinning | Window |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| web | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: the address bar is the deep link; the router reads it) | required (default) | phone-sized displays portrait, larger free (default) | n/a (the browser owns TLS) | — |
+| windows | scaffold (manifest) | native (derived: capability `splash` is absent) | off (derived: core_notifications is not composed) | off (derived: a generated runner registers no URL scheme) | required (default) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
 
-The runner of web, windows is not in the repository. Create it once, from the app directory, then declare it `runner: committed`:
-
-```bash
-cd apps/demo
-flutter create --platforms=web,windows --org com.example --project-name demo_app .
-# flutter create also writes files this repo does not want: a sample test
-# that does not compile, an analysis_options.yaml that would replace the
-# root's strict options for this whole app (RULE-70), and IDE files.
-rm -f test/widget_test.dart analysis_options.yaml
-rm -rf .idea *.iml
-```
+Generate the runners (never committed): `dart tools/composer/composer.dart runners --app demo`
 
 Native notes (not checked):
-- **web** — `flutter build web` has no --flavor option, and the Flutter tool refuses --dart-define=FLUTTER_APP_FLAVOR (the name is the framework's own). Name the flavor with --dart-define=APP_FLAVOR=<flavor>, which the shell reads on the web only; without it a release runs as prod and a debug run as dev. The tool's refusal is measured; the APP_FLAVOR define is covered by a unit test, not by a web build.
-- **web** — The browser owns TLS, so SSL pinning does not apply; secure storage needs a secure context (https or localhost). Measured.
-- **windows** — flutter_secure_storage_windows needs the Visual Studio ATL component. From the plugin docs, not built here.
-- **windows** — No URL protocol is registered, so deep links never arrive. From the plugin docs, not built here.
+- **web** — The flavor comes from --dart-define=APP_FLAVOR=<flavor> (the web has no --flavor). Secure storage needs a secure context (https or localhost); the browser owns TLS, so nothing is pinned. Without a splash module the page stays empty until boot ends. URLs are hash URLs; for path URLs call `usePathUrlStrategy()` in `ShellHooks.beforeDependencies` and have the server rewrite every path to index.html. An app that links core_database needs sqlite3.wasm and drift_worker.js in its web runner, which `composer runners` writes. Measured.
+- **windows** — flutter_secure_storage needs Visual Studio 2022 "Desktop development with C++" with the ATL component. Linking core_notifications downloads the Firebase C++ SDK (FlutterFire). The window title is the package name until the runner is ejected. Unverified.
+- **all generated runners** — no native flavors (APP_FLAVOR), no push, no deep links — eject (`runner: committed`) to own them
 
 Not targeted — and what blocks it:
 - **android** — no composed package blocks it; declare it under `platforms:` and add its runner.

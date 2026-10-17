@@ -342,6 +342,26 @@ android {
         ]);
       });
 
+      test('generated (scaffold) android and ios runners, which have no '
+          'native flavors, say nothing', () async {
+        final ws = demo(
+          manifest: demoManifest(
+            platforms:
+                'platforms:\n'
+                '  android: { runner: scaffold }\n'
+                '  ios: { runner: scaffold }\n',
+          ),
+          extra: {
+            ...ios(schemes: const [], configurations: const []),
+            'apps/demo/android/app/build.gradle': 'android { }',
+          },
+        );
+        final run = await syncAndVerify(ws);
+        expect(run, exitsWith(0));
+        expect(run.output, isNot(contains('productFlavor')));
+        expect(run.output, isNot(contains('has no scheme')));
+      });
+
       test('a runner with only the Runner scheme fails for every flavor', () async {
         final ws = withIos(ios(schemes: const [], configurations: const []));
         final run = await syncAndVerify(ws);

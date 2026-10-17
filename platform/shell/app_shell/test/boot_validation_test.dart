@@ -46,6 +46,20 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('declared: ios'), findsOneWidget);
+      // The action names both steps that add a platform: the manifest line
+      // and the generated runner.
+      expect(
+        find.textContaining(
+          'Add `android: { runner: scaffold }` under `platforms:`',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'dart tools/composer/composer.dart runners --app test_app',
+        ),
+        findsOneWidget,
+      );
       expect(diCalls, 0, reason: 'configureDependencies must not run');
       expect(hookCalls, 0, reason: 'no hook runs before the boot is valid');
       expect(getIt.isRegistered<AppProfile>(), isFalse);

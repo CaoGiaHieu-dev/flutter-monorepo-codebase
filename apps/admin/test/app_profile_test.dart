@@ -31,24 +31,40 @@ void main() {
       expect(appFacts.flavors, {Flavor.dev, Flavor.staging, Flavor.prod});
     });
 
-    test('declare web and the desktop platforms, all still to be created', () {
+    test('declare web and the desktop platforms, generated (runner: '
+        'scaffold)', () {
       expect(appFacts.platforms.keys, declared);
       for (final platform in appFacts.platforms.values) {
         expect(platform.runner, RunnerKind.scaffold);
       }
     });
 
-    test('declare native splash and deep links on every platform', () {
+    test('native splash and deep links off on every platform', () {
       for (final entry in appFacts.platforms.entries) {
         final platform = entry.value;
         expect(platform.splash, SplashMode.native, reason: entry.key.name);
-        expect(platform.deepLinks, isTrue, reason: entry.key.name);
+        // A generated runner registers no URL scheme, and on the web the
+        // address bar is the link: deep links are derived off.
+        expect(platform.deepLinks, isFalse, reason: entry.key.name);
         expect(
           platform.orientation,
           OrientationPolicy.phonesPortrait,
           reason: entry.key.name,
         );
         expect(platform.window, isNull, reason: entry.key.name);
+      }
+    });
+
+    test('linux keeps secure values in memory without a Secret Service; the '
+        'others require a store', () {
+      for (final entry in appFacts.platforms.entries) {
+        expect(
+          entry.value.secureStorage,
+          entry.key == AppPlatform.linux
+              ? SecureStoragePolicy.memoryFallback
+              : SecureStoragePolicy.required,
+          reason: entry.key.name,
+        );
       }
     });
 

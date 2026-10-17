@@ -17,10 +17,12 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.native,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
-      deepLinks: true,
+      // derived: the address bar is the deep link; the router reads it
+      deepLinks: false,
       // derived: core_notifications is not composed
       push: false,
+      // default
+      secureStorage: SecureStoragePolicy.required,
     ),
     AppPlatform.windows: PlatformFacts(
       // manifest
@@ -29,10 +31,12 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.native,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
-      deepLinks: true,
+      // derived: a generated runner registers no URL scheme
+      deepLinks: false,
       // derived: core_notifications is not composed
       push: false,
+      // default
+      secureStorage: SecureStoragePolicy.required,
     ),
     AppPlatform.macos: PlatformFacts(
       // manifest
@@ -41,10 +45,12 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.native,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
-      deepLinks: true,
+      // derived: a generated runner registers no URL scheme
+      deepLinks: false,
       // derived: core_notifications is not composed
       push: false,
+      // default
+      secureStorage: SecureStoragePolicy.required,
     ),
     AppPlatform.linux: PlatformFacts(
       // manifest
@@ -53,10 +59,12 @@ const AppFacts appFacts = AppFacts(
       splash: SplashMode.native,
       // default
       orientation: OrientationPolicy.phonesPortrait,
-      // default
-      deepLinks: true,
+      // derived: a generated runner registers no URL scheme
+      deepLinks: false,
       // derived: core_notifications is not composed
       push: false,
+      // derived: a Linux session may run no Secret Service
+      secureStorage: SecureStoragePolicy.memoryFallback,
     ),
   },
   env: [
@@ -100,7 +108,9 @@ const AppFacts appFacts = AppFacts(
     ),
     // manifest
     'splash': CapabilityExpectation.absent(
-      'native splash is kept through boot',
+      'no splash module: the first frame is held until boot ends — '
+      'the page or window stays empty, at most '
+      'NetworkProfile.connectTimeout while the session restores',
     ),
     // manifest
     'tree_wrappers': CapabilityExpectation.provided(),

@@ -18,8 +18,9 @@ import 'support/tool_harness.dart';
 ///   catalog's `whenAbsent` text, never `TODO`;
 /// - it refuses an existing id, a platform a requested module blocks, an
 ///   unknown module or platform, and in each case **writes nothing**;
-/// - it never runs `flutter create`: no runner folder appears, and the command
-///   to run is printed.
+/// - it generates no runner: no runner folder appears, every platform is
+///   `runner: scaffold`, the `.gitignore` `runners` region lists them, and
+///   the next steps name `composer runners` and the boot test (RULE-83).
 void main() {
   late CompiledTool composer;
 
@@ -42,8 +43,10 @@ void main() {
     'platform/state/bloc': 'bloc_state_management',
   };
 
-  /// `core_database` as the repository declares it: no web (drift/native needs
-  /// dart:ffi).
+  /// A `core_database` that still declares `platforms:` without web — the
+  /// repository's declares none any more (the web opens drift's wasm build),
+  /// but an adopter's package that wraps a native-only SDK does, and V7's
+  /// refusal must stay covered.
   const databasePubspec =
       'name: core_database\n'
       'platforms:\n'
@@ -166,9 +169,30 @@ void main() {
         'lib/di/injection.dart',
         'test/di_smoke_test.dart',
         'test/app_profile_test.dart',
+        'integration_test/boot_test.dart',
+        'test_driver/integration_test.dart',
       ]) {
         expect(ws.exists('apps/reports/$file'), isTrue, reason: file);
       }
+
+      // The boot test waits until the first screen is drawn (RULE-83), and
+      // runs this app's own main().
+      final boot = ws.read('apps/reports/integration_test/boot_test.dart');
+      expect(boot, contains("import 'package:reports_app/main.dart' as app;"));
+      expect(boot, contains('stage = debugBootStage();'));
+      expect(boot, contains('IntegrationTestWidgetsFlutterBinding'));
+      // It restores FlutterError.onError, which flutter_test does not
+      // re-export: without the import the boot test does not compile.
+      expect(boot, contains('FlutterError.onError'));
+      expect(boot, contains("import 'package:flutter/foundation.dart';"));
+      expect(
+        ws.read('apps/reports/test_driver/integration_test.dart'),
+        contains('Future<void> main() => integrationDriver();'),
+      );
+      expect(
+        ws.read('apps/reports/pubspec.yaml'),
+        contains('  integration_test:\n    sdk: flutter\n'),
+      );
 
       // The smoke test builds every @injectable factory, not only the lazy
       // singletons (RULE-63): a factory with an unregistered dependency must
@@ -224,6 +248,55 @@ void main() {
         reason: 'the name defaults to the id, title-cased',
       );
     });
+
+    test('writes app.org: com.example by default, --org when given', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'plain', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/plain/app_manifest.yaml'),
+        contains('  org: com.example '),
+      );
+      expect(
+        await run(ws, [
+          'new',
+          'desk',
+          '--platforms',
+          'linux',
+          '--org',
+          'com.acme',
+        ]),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/desk/app_manifest.yaml'),
+        contains('  org: com.acme '),
+      );
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test(
+      'ignores its generated runners, filled in by the sync it runs',
+      () async {
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'reports', '--platforms', 'web,windows,linux']),
+          exitsWith(0),
+        );
+        expect(
+          ws.read('apps/reports/.gitignore'),
+          contains(
+            '# composer:managed:runners — generated from app_manifest.yaml\n'
+            '/web/\n'
+            '/windows/\n'
+            '/linux/\n'
+            '# composer:end:runners\n',
+          ),
+        );
+      },
+    );
 
     test('ignores the Firebase project files an app may generate', () async {
       final ws = await workspace();
@@ -530,21 +603,38 @@ void main() {
       );
     });
 
-    test('names a declared platform in its smoke test, not the web', () async {
-      final ws = await workspace();
-      expect(
-        await run(ws, ['new', 'reports', '--platforms', 'web,windows']),
-        exitsWith(0),
-      );
-      expect(
-        ws.read('apps/reports/test/di_smoke_test.dart'),
-        contains('const _platform = AppPlatform.windows;'),
-      );
-    });
+    test(
+      'boots every declared platform but the web in its smoke test',
+      () async {
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'reports', '--platforms', 'web,windows']),
+          exitsWith(0),
+        );
+        final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
+        expect(
+          smoke,
+          contains('for (final platform in appFacts.platforms.keys'),
+        );
+        expect(smoke, contains('(p) => p != AppPlatform.web'));
+        expect(smoke, contains('for (final flavor in appFacts.flavors)'));
+        expect(smoke, contains('debugAppPlatformOverride = platform;'));
+        expect(
+          smoke,
+          contains('debugDefaultTargetPlatformOverride = _targetOf(platform);'),
+        );
+        expect(
+          smoke,
+          contains('registerAppProfile(appProfile, platform: platform);'),
+        );
+        expect(smoke, contains("import 'package:flutter/foundation.dart';"));
+        expect(smoke, isNot(contains('const _platform')));
+      },
+    );
   });
 
-  group('never runs flutter create', () {
-    test('writes no runner and prints the line to run', () async {
+  group('generates no runner', () {
+    test('writes no runner folder and names composer runners next', () async {
       final ws = await workspace();
       final result = await run(ws, [
         'new',
@@ -559,20 +649,29 @@ void main() {
       for (final folder in ['web', 'windows', 'android', 'ios', 'linux']) {
         expect(ws.exists('apps/reports/$folder'), isFalse, reason: folder);
       }
-      expect(result.output, contains('does NOT run `flutter create`'));
-      // And the cleanup `flutter create` makes necessary: its sample test does
-      // not compile here and its analysis_options.yaml replaces the strict one.
-      expect(result.output, contains('rm -f test/widget_test.dart '));
-      expect(result.output, contains('analysis_options.yaml'));
-      expect(result.output, contains('rm -rf .idea *.iml'));
-      expect(result.output, contains('Only `env.dev` is written.'));
+      expect(result.output, contains('composer runners'));
+      expect(
+        result.output,
+        contains('  dart tools/composer/composer.dart runners --app reports'),
+      );
+      // The boot proof of each platform: flutter test on the desktop, flutter
+      // drive on the web.
       expect(
         result.output,
         contains(
-          'cd apps/reports && flutter create --platforms=web,windows '
-          '--org com.example --project-name reports_app .',
+          '  flutter test integration_test/boot_test.dart -d windows '
+          '--dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev',
         ),
       );
+      expect(
+        result.output,
+        contains(
+          'flutter drive --driver=test_driver/integration_test.dart '
+          '--target=integration_test/boot_test.dart -d web-server',
+        ),
+      );
+      expect(result.output, isNot(contains('flutter create')));
+      expect(result.output, contains('Only `env.dev` is written.'));
     });
   });
 
@@ -632,6 +731,13 @@ void main() {
       await refused(
         ['new', 'reports', '--platforms', 'web', '--name', 'Bob\'s "Reports"'],
         contains('--name: expected a display name without quotes'),
+      );
+    });
+
+    test('an org that is not a reverse domain', () async {
+      await refused(
+        ['new', 'reports', '--platforms', 'web', '--org', 'Acme'],
+        contains('--org: expected a reverse domain such as `com.acme`'),
       );
     });
 

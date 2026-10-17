@@ -168,6 +168,17 @@ void main() {
     });
   });
 
+  group('secureStorage options', () {
+    test('macOS uses the login keychain, readable after the first unlock', () {
+      // The data-protection keychain needs a keychain-access-groups
+      // entitlement and a signing team; a generated runner has neither.
+      final macOs = EncryptedStorage.secureStorage.mOptions as MacOsOptions;
+
+      expect(macOs.usesDataProtectionKeychain, isFalse);
+      expect(macOs.accessibility, KeychainAccessibility.first_unlock);
+    });
+  });
+
   group('master keys', () {
     test('generateKey is a fresh, usable 256-bit base64 key', () {
       final a = EncryptedStorage.generateKey();

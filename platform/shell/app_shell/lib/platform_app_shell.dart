@@ -26,6 +26,7 @@ export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/app_material_wrapper.dart';
 export 'src/boot/boot_error_app.dart';
+export 'src/boot/boot_stage.dart';
 export 'src/bootstrap.dart';
 export 'src/composition/composition_check.dart';
 export 'src/composition/factory_check.dart';

@@ -7,7 +7,9 @@ import 'dart_source.dart';
 /// `AppPlatform` is `resolveAppPlatform()`. A `Platform.isIOS`, `kIsWeb`,
 /// `defaultTargetPlatform` or `TargetPlatform.*` anywhere else is a second,
 /// private answer to "where am I running" that no manifest can see and no gate
-/// can check — the bug class that left a Linux build with a blank window.
+/// can check — the bug class that left a Linux build with a blank window. A
+/// configurable import or export (`if (dart.library.js_interop)`) is a
+/// compile-time fork too, so it is counted the same way.
 ///
 /// Some forks are not an app decision but the availability of an operating
 /// system API (`dart:io`'s `Platform` throws on the web; an OS asks for a
@@ -26,21 +28,30 @@ const Map<String, String> kPlatformForkAllowList = {
       'the page type is an OS convention (CupertinoPage on iOS, MaterialPage '
       'on the web, a Cupertino-style slide elsewhere); every page is wrapped '
       'in RouteAwareWidget on every platform',
-  'platform/shell/app_shell/lib/src/main_scope.dart':
-      'flutter_native_splash has no web side: FlutterNativeSplash.remove() '
-      'throws PlatformException(removeSplashFromWeb) there',
+  'platform/infra/database/lib/src/database_connection_factory.dart':
+      'drift/native and sqlite3 need dart:ffi, which the web lacks; the web '
+      'opens drift\'s wasm build instead (a configurable import: the compiler '
+      'picks, nothing forks at run time)',
+  'platform/infra/database/lib/src/connection/native_connection.dart':
+      'where an app\'s private files live is an OS convention: Android and '
+      'iOS keep the documents directory shipped installs use; on Windows and '
+      'Linux documents is the user\'s shared folder, so the desktop uses the '
+      'support directory',
   'platform/ui/design_system/lib/src/theme/theme_provider.dart':
       'PageTransitionsTheme is a table keyed by TargetPlatform: a transition '
       'per OS convention, not a choice an app makes',
 };
 
 /// What counts as a fork: the dart:io `Platform` getters, the Flutter web
-/// constant and the runtime target.
+/// constant, the runtime target, and the configuration of a configurable
+/// import or export (`if (dart.library.io)` — in code, not in the URI
+/// string, so the scan sees it).
 final RegExp platformFork = RegExp(
   r'\bPlatform\s*\.\s*(?:is[A-Z]\w*|operatingSystem)\b'
   r'|\bkIsWeb\b'
   r'|\bdefaultTargetPlatform\b'
-  r'|\bTargetPlatform\s*\.\s*\w+',
+  r'|\bTargetPlatform\s*\.\s*\w+'
+  r'|\bif\s*\(\s*dart\.library\.\w+',
 );
 
 /// One fork in a source file.

@@ -46,16 +46,23 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Cod
 | `APP_LINK_MODE` | native only (Gradle / Xcode) — no Dart reader | — |
 
 ### 2. Platforms (c) — effective values, `value (source)`
-| Platform | Runner | Splash | Push | Deep links | Orientation | TLS pinning | Window |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| android | committed (manifest) | dart (derived: capability `splash` is provided) | on (derived: core_notifications is composed and supports android) | on (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
-| ios | committed (manifest) | native (default: iOS keeps its native splash for the whole boot) | on (derived: core_notifications is composed and supports ios) | on (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
+| Platform | Runner | Splash | Push | Deep links | Secure storage | Orientation | TLS pinning | Window |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| android | committed (manifest) | dart (derived: capability `splash` is provided) | on (derived: core_notifications is composed and pushes on android) | on (default: the committed runner registers its links) | required (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
+| ios | committed (manifest) | native (default: iOS keeps its native splash for the whole boot) | on (derived: core_notifications is composed and pushes on ios) | on (default: the committed runner registers its links) | required (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
+| web | scaffold (manifest) | dart (derived: capability `splash` is provided) | off (derived: no messaging service worker is shipped for web) | off (derived: the address bar is the deep link; the router reads it) | required (default) | phone-sized displays portrait, larger free (default) | n/a (the browser owns TLS) | — |
+| linux | scaffold (manifest) | dart (derived: capability `splash` is provided) | off (derived: a generated runner carries no push setup) | off (derived: a generated runner registers no URL scheme) | memory_fallback (derived: a Linux session may run no Secret Service) | phone-sized displays portrait, larger free (default) | can pin, the leaf certificate only (decision per flavor, §1) | — |
+
+Generate the runners (never committed): `dart tools/composer/composer.dart runners --app mobile`
+
+Native notes (not checked):
+- **web** — The flavor comes from --dart-define=APP_FLAVOR=<flavor> (the web has no --flavor). Secure storage needs a secure context (https or localhost); the browser owns TLS, so nothing is pinned. Without a splash module the page stays empty until boot ends. URLs are hash URLs; for path URLs call `usePathUrlStrategy()` in `ShellHooks.beforeDependencies` and have the server rewrite every path to index.html. An app that links core_database needs sqlite3.wasm and drift_worker.js in its web runner, which `composer runners` writes. Measured.
+- **linux** — With no Secret Service, secure values are kept in memory for the run (`secure_storage: memory_fallback`, derived). A fresh session with a locked or new keyring blocks the app behind the keyring prompt until it is answered; no code can avoid it. Dev and prod share one application id, so one support directory and one keyring namespace. libdartjni.so is bundled. Measured.
+- **all generated runners** — no native flavors (APP_FLAVOR), no push, no deep links — eject (`runner: committed`) to own them
 
 Not targeted — and what blocks it:
-- **web** — core_database does not support it (`platforms:` in the package pubspec).
-- **windows** — core_notifications does not support it (`platforms:` in the package pubspec).
+- **windows** — no composed package blocks it; declare it under `platforms:` and add its runner.
 - **macos** — no composed package blocks it; declare it under `platforms:` and add its runner.
-- **linux** — core_notifications does not support it (`platforms:` in the package pubspec).
 
 ### 3. Composition, in boot order (a)
 | # | Group (phase) | Packages | Why |

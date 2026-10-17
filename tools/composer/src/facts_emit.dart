@@ -139,6 +139,7 @@ class DerivedPlatform {
     required this.orientation,
     required this.deepLinks,
     required this.push,
+    required this.secureStorage,
     this.window,
   });
 
@@ -151,24 +152,38 @@ class DerivedPlatform {
   final Sourced<bool> deepLinks;
   final Sourced<bool> push;
 
+  /// The manifest spelling (`memory_fallback`); [secureStorageConstant] turns
+  /// it into the kernel's `SecureStoragePolicy` constant.
+  final Sourced<String> secureStorage;
+
   /// The declared desktop window; null when the manifest declares none.
   final Sourced<WindowDecl>? window;
 }
 
 /// The effective facts of every declared platform.
 ///
-/// The one derivation table (`composer describe --catalog` prints it):
+/// The one derivation table (`composer describe --catalog` prints it). For
+/// each switch the first rule that matches wins, and its text is the comment
+/// the generated facts carry:
 ///
 /// - `splash`: iOS keeps its native splash for the whole boot; elsewhere the
 ///   Dart splash when capability `splash` is provided, else the native one;
-/// - `push`: on when `core_notifications` is composed and supports the
-///   platform — but never on the web, where no service worker is shipped;
-/// - `deep_links`: on everywhere;
+/// - `push`: off where `core_notifications` is not composed, on the web (no
+///   messaging service worker is shipped), on a generated (`scaffold`) runner
+///   (no google-services.json, no aps-environment) and where its
+///   `composition.push_platforms` lacks the platform; else on;
+/// - `deep_links`: off on the web (the address bar is the deep link), on a
+///   generated runner (no URL scheme is registered) and on a committed
+///   desktop runner until its scheme is registered; on for a committed
+///   Android or iOS runner;
+/// - `secure_storage`: `memory_fallback` on Linux (a session may run no Secret
+///   Service), else `required`;
 /// - `orientation`: phone-sized displays locked to portrait;
 /// - `window`: none — the shell does not touch the window;
 ///
 /// and each of them is what the manifest says when it says anything
-/// (`platforms.<p>.push`, `.deep_links`, `.orientation`, `.window`).
+/// (`platforms.<p>.push`, `.deep_links`, `.secure_storage`, `.orientation`,
+/// `.window`).
 ///
 /// `PlatformFacts.today()` in the kernel holds the same defaults for a
 /// hand-built object; `app_sync_test.dart` compares the two.
@@ -209,18 +224,60 @@ List<DerivedPlatform> derivePlatforms(AppView view) {
     } else if (name == 'web') {
       push = const Sourced(
         false,
-        'derived: no service worker is shipped for web',
+        'derived: no messaging service worker is shipped for web',
       );
-    } else if (notifications != null && !notifications.supports(name)) {
+    } else if (platform.isScaffold) {
+      push = const Sourced(
+        false,
+        'derived: a generated runner carries no push setup',
+      );
+    } else if (notifications != null && !notifications.pushes(name)) {
       push = Sourced(
         false,
-        'derived: core_notifications does not support $name',
+        'derived: Firebase Messaging does not deliver on $name',
       );
     } else {
       push = Sourced(
         true,
-        'derived: core_notifications is composed and supports $name',
+        'derived: core_notifications is composed and pushes on $name',
       );
+    }
+
+    final Sourced<bool> deepLinks;
+    if (platform.deepLinks != null) {
+      deepLinks = Sourced(platform.deepLinks!, 'manifest');
+    } else if (name == 'web') {
+      deepLinks = const Sourced(
+        false,
+        'derived: the address bar is the deep link; the router reads it',
+      );
+    } else if (platform.isScaffold) {
+      deepLinks = const Sourced(
+        false,
+        'derived: a generated runner registers no URL scheme',
+      );
+    } else if (kDesktopPlatforms.contains(name)) {
+      deepLinks = const Sourced(
+        false,
+        'derived: register the URL scheme in the runner, then set it true',
+      );
+    } else {
+      deepLinks = const Sourced(
+        true,
+        'default: the committed runner registers its links',
+      );
+    }
+
+    final Sourced<String> secureStorage;
+    if (platform.secureStorage != null) {
+      secureStorage = Sourced(platform.secureStorage!, 'manifest');
+    } else if (name == 'linux') {
+      secureStorage = const Sourced(
+        'memory_fallback',
+        'derived: a Linux session may run no Secret Service',
+      );
+    } else {
+      secureStorage = const Sourced('required', 'default');
     }
 
     out.add(
@@ -231,10 +288,9 @@ List<DerivedPlatform> derivePlatforms(AppView view) {
         orientation: platform.orientation == null
             ? const Sourced('phonesPortrait', 'default')
             : Sourced(orientationConstant(platform.orientation!), 'manifest'),
-        deepLinks: platform.deepLinks == null
-            ? const Sourced(true, 'default')
-            : Sourced(platform.deepLinks!, 'manifest'),
+        deepLinks: deepLinks,
         push: push,
+        secureStorage: secureStorage,
         window: platform.window == null
             ? null
             : Sourced(platform.window!, 'manifest'),
@@ -309,6 +365,12 @@ String emitFacts(AppView view) {
     line(3, 'deepLinks: ${platform.deepLinks.value},');
     note(3, platform.push.source);
     line(3, 'push: ${platform.push.value},');
+    note(3, platform.secureStorage.source);
+    line(
+      3,
+      'secureStorage: '
+      'SecureStoragePolicy.${secureStorageConstant(platform.secureStorage.value)},',
+    );
     final window = platform.window;
     if (window != null) {
       note(3, window.source);

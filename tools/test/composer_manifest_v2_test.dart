@@ -16,9 +16,9 @@ import 'support/tool_harness.dart';
 /// | V2  | every optional catalog id has a state; no unknown id |
 /// | V4  | the members of a bundle share one state |
 /// | V5  | `splash: dart` needs capability `splash` provided |
-/// | V6  | `committed` => the runner folder exists; `scaffold` => it does not |
+/// | V6  | `committed` => the runner folder exists; a runner folder of an undeclared platform is refused |
 /// | V9  | a pin decision per flavor where a declared platform can pin |
-/// | V13 | the `facts`, `report` and `modules` regions equal regeneration |
+/// | V13 | the `facts`, `report`, `modules` and `.gitignore` `runners` regions equal regeneration |
 /// | V14 | no reason is empty, `TODO` or `TBD` |
 ///
 /// Every refusal names the file and the key (`<file>: <key>: <problem>`), is
@@ -94,6 +94,7 @@ void main() {
       );
       expect(facts, contains('push: false,'));
       expect(facts, contains('deepLinks: true,'));
+      expect(facts, contains('secureStorage: SecureStoragePolicy.required,'));
       expect(facts, contains('orientation: OrientationPolicy.phonesPortrait,'));
       // A bundle expands to its members, each marked as such.
       expect(
@@ -280,9 +281,76 @@ void main() {
         ws,
         contains(
           '$manifestPath: platforms.android.sound: unknown key — expected '
-          'runner, splash, push, deep_links, orientation, window',
+          'runner, splash, push, deep_links, secure_storage, orientation, '
+          'window',
         ),
       );
+    });
+
+    test('app.org is a reverse domain', () async {
+      for (final org in [
+        'Com.Acme',
+        'acme',
+        'com.',
+        '1com.acme',
+        'com.acme-x',
+      ]) {
+        final ws = workspace(
+          manifest: demoManifest(
+            appBlock: 'app:\n  id: demo\n  name: Demo App\n  org: "$org"\n',
+          ),
+        );
+        await expectRefused(
+          ws,
+          contains(
+            '$manifestPath: app.org: expected a reverse domain such as '
+            '`com.acme`, got a string (`$org`)',
+          ),
+        );
+      }
+    });
+
+    test(
+      'app.org accepts a reverse domain, and defaults to com.example',
+      () async {
+        for (final org in ['com.acme', 'io.acme.mobile_team', 'dev.a1']) {
+          final ws = workspace(
+            manifest: demoManifest(
+              appBlock: 'app:\n  id: demo\n  name: Demo App\n  org: $org\n',
+            ),
+          );
+          expect(await run(ws, ['sync']), exitsWith(0), reason: org);
+          expect(await run(ws, ['verify']), exitsWith(0), reason: org);
+        }
+        // Left out, it is the default: the catalog says so.
+        final catalog = await run(workspace(), ['describe', '--catalog']);
+        expect(catalog.stdout, contains('  app.org\n'));
+        expect(catalog.stdout, contains('default     com.example'));
+      },
+    );
+
+    test('secure_storage is one of required, memory_fallback', () async {
+      final ws = workspace(
+        manifest: demoManifest(
+          platforms: 'platforms:\n  android: { runner: committed, secure_storage: true }\n',
+        ),
+      );
+      await expectRefused(
+        ws,
+        contains(
+          '$manifestPath: platforms.android.secure_storage: expected required '
+          'or memory_fallback, got a boolean (`true`)',
+        ),
+      );
+      for (final policy in ['required', 'memory_fallback']) {
+        final ok = workspace(
+          manifest: demoManifest(
+            platforms:
+                'platforms:\n  android: { runner: committed, secure_storage: $policy }\n',
+          ),
+        );
+        expect(await run(ok, ['sync']), exitsWith(0), reason: policy);
+      }
     });
 
     test('a missing platforms section prints the YAML to paste', () async {
@@ -514,28 +582,26 @@ void main() {
         ws,
         contains(
           '$manifestPath: platforms.android.runner: declared `committed`, '
-          'but apps/demo/android/ does not exist',
+          'but apps/demo/android/ does not exist — restore it from git, or '
+          'declare `runner: scaffold` and run '
+          '`dart tools/composer/composer.dart runners --app demo`',
         ),
       );
     });
 
-    test('scaffold with a folder is refused', () async {
+    test('scaffold with the folder present is clean: composer runners wrote '
+        'it and git ignores it', () async {
       final ws = workspace(
         manifest: demoManifest(
           platforms: 'platforms:\n  android: { runner: scaffold }\n',
         ),
       );
-      await expectRefused(
-        ws,
-        contains(
-          '$manifestPath: platforms.android.runner: declared `scaffold`, but '
-          'apps/demo/android/ exists',
-        ),
-      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      expect(await run(ws, ['verify']), exitsWith(0));
     });
 
-    test('scaffold with no folder is accepted and the report prints the '
-        'flutter create line', () async {
+    test('scaffold with no folder is accepted and the report names composer '
+        'runners', () async {
       final ws = workspace(
         manifest: demoManifest(
           platforms: 'platforms:\n  web: { runner: scaffold }\n',
@@ -544,14 +610,34 @@ void main() {
         without: {'apps/demo/android/README.txt'},
       );
       expect(await run(ws, ['sync']), exitsWith(0));
+      final readme = ws.read(readmePath);
       expect(
-        ws.read(readmePath),
+        readme,
         contains(
-          'flutter create --platforms=web --org com.example --project-name '
-          'demo_app .',
+          'Generate the runners (never committed): '
+          '`dart tools/composer/composer.dart runners --app demo`',
         ),
       );
+      expect(readme, isNot(contains('flutter create')));
       expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('a runner folder of a platform the manifest does not declare is '
+        'refused', () async {
+      final ws = workspace(extra: {'apps/demo/linux/CMakeLists.txt': '#\n'});
+      final result = await run(ws, ['verify']);
+      expect(result, exitsWith(1));
+      expect(
+        result.output,
+        contains(
+          'apps/demo/linux/: a linux runner, but `platforms:` does not '
+          'declare linux — Flutter would build a platform this app does not '
+          'run on (boot problem P01). Declare it (`linux: { runner: '
+          'committed }`, or `scaffold` and delete the folder), or delete the '
+          'folder',
+        ),
+      );
+      expect(ws.read('pubspec.yaml'), isNot(contains('apps/demo')));
     });
   });
 
@@ -815,6 +901,60 @@ void main() {
   });
 
   group('V13 — the generated regions equal regeneration', () {
+    test(
+      'the .gitignore lists every scaffold platform, and only those',
+      () async {
+        final ws = workspace(
+          manifest: demoManifest(
+            platforms:
+                'platforms:\n'
+                '  android: { runner: committed }\n'
+                '  web: { runner: scaffold }\n'
+                '  linux: { runner: scaffold }\n',
+          ),
+        );
+        expect(await run(ws, ['sync']), exitsWith(0));
+        expect(
+          ws.read('apps/demo/.gitignore'),
+          contains(
+            '# composer:managed:runners — generated from app_manifest.yaml\n'
+            '/web/\n'
+            '/linux/\n'
+            '# composer:end:runners\n',
+          ),
+        );
+        expect(await run(ws, ['verify']), exitsWith(0));
+
+        // A runner taken out of the list by hand is drift.
+        ws.write({
+          'apps/demo/.gitignore': ws
+              .read('apps/demo/.gitignore')
+              .replaceFirst('/linux/\n', ''),
+        });
+        final verify = await run(ws, ['verify']);
+        expect(verify, exitsWith(1));
+        expect(
+          verify.output,
+          contains('out of date: apps/demo/.gitignore (runners)'),
+        );
+      },
+    );
+
+    test(
+      'a .gitignore without the runners markers cannot be verified',
+      () async {
+        final ws = workspace(extra: {'apps/demo/.gitignore': '.dart_tool/\n'});
+        final verify = await run(ws, ['verify']);
+        expect(verify, exitsWith(1));
+        expect(
+          verify.output,
+          contains(
+            'apps/demo/.gitignore has no `# composer:managed:runners',
+          ),
+        );
+      },
+    );
+
     Future<TempWorkspace> synced() async {
       final ws = workspace();
       expect(await run(ws, ['sync']), exitsWith(0));

@@ -19,8 +19,8 @@ import 'package_facts.dart';
 /// | V2  | every optional catalog id has a declared state; no unknown id |
 /// | V4  | the members of a bundle share one state |
 /// | V5  | `splash: dart` needs capability `splash` provided |
-/// | V6  | `committed` => the runner folder exists; `scaffold` => it does not |
-/// | V8  | `push: true` needs `core_notifications` composed and supporting the platform; `window` only on a desktop platform |
+/// | V6  | `committed` => the runner folder exists; a runner folder of an undeclared platform is refused |
+/// | V8  | `push: true` needs `core_notifications` composed, the platform in its `push_platforms` and a committed runner; `deep_links: true` needs a committed runner, never on the web; `window` only on a desktop platform |
 /// | V9  | a pinning decision per flavor where a declared platform can pin |
 /// | V14 | no reason is empty, `TODO` or `TBD` |
 ///
@@ -39,13 +39,21 @@ List<String> checkDeclaration({
   required ShellCatalog catalog,
   required String appDir,
   required String appRel,
+  String? appId,
 }) {
   final problems = <String>[];
   void bad(String key, String problem) => problems.add('$rel: $key: $problem');
 
   _capabilities(decl, catalog, bad);
   _splash(decl, bad);
-  _runners(decl, appDir, appRel, bad);
+  _runners(
+    decl,
+    appDir,
+    appRel,
+    appId ?? p.posix.basename(appRel),
+    bad,
+    problems.add,
+  );
   _pinning(decl, bad);
   return problems;
 }
@@ -185,12 +193,20 @@ void _splash(
   }
 }
 
-/// V6.
+/// V6: a `committed` runner is in the repository; a `scaffold` one may or may
+/// not be on disk (`composer runners` writes it, the `.gitignore` region
+/// keeps it out of git — V13); and a runner folder for a platform the
+/// manifest does not declare is refused, because Flutter would build it.
+///
+/// [raw] takes a problem that names the folder itself rather than a key of
+/// the manifest.
 void _runners(
   AppDeclaration decl,
   String appDir,
   String appRel,
+  String id,
   void Function(String key, String problem) bad,
+  void Function(String problem) raw,
 ) {
   for (final platform in decl.platforms) {
     final folder = p.posix.join(appRel, platform.name);
@@ -198,17 +214,22 @@ void _runners(
     if (platform.runner == 'committed' && !exists) {
       bad(
         'platforms.${platform.name}.runner',
-        'declared `committed`, but $folder/ does not exist — run `flutter '
-            'create --platforms=${platform.name} .` in $appRel, or declare '
-            '`runner: scaffold`',
-      );
-    } else if (platform.runner == 'scaffold' && exists) {
-      bad(
-        'platforms.${platform.name}.runner',
-        'declared `scaffold`, but $folder/ exists — the runner is committed, '
-            'so declare `runner: committed`',
+        'declared `committed`, but $folder/ does not exist — restore it from '
+            'git, or declare `runner: scaffold` and run '
+            '`dart tools/composer/composer.dart runners --app $id`',
       );
     }
+  }
+  final declared = {for (final platform in decl.platforms) platform.name};
+  for (final name in kPlatformNames) {
+    if (declared.contains(name)) continue;
+    if (!Directory(p.posix.join(appDir, name)).existsSync()) continue;
+    raw(
+      '${p.posix.join(appRel, name)}/: a $name runner, but `platforms:` does '
+      'not declare $name — Flutter would build a platform this app does not '
+      'run on (boot problem P01). Declare it (`$name: { runner: committed }`, '
+      'or `scaffold` and delete the folder), or delete the folder',
+    );
   }
 }
 
@@ -267,9 +288,14 @@ String _yaml(String text) =>
 /// V8: what a platform switches on must be something the app composes and the
 /// platform has.
 ///
-/// - `push: true` needs `core_notifications` composed, and its `platforms:`
-///   to list the platform — otherwise the service would be asked to start
-///   where Firebase Messaging has no implementation;
+/// - `push: true` needs `core_notifications` composed, its
+///   `composition.push_platforms` to list the platform — otherwise the
+///   service would be asked to start where Firebase Messaging has no
+///   implementation — and a committed runner: a generated one carries no
+///   google-services.json, aps-environment entitlement or service worker;
+/// - `deep_links: true` needs a committed runner, which can register a URL
+///   scheme, and is refused on the web, where the address bar is the deep
+///   link and app_links would route the page's own URL a second time;
 /// - `window` is for the desktop platforms, the only ones with a resizable
 ///   window.
 ///
@@ -290,13 +316,45 @@ List<String> checkPlatformSwitches(AppView view) {
           'push is on, but $kNotificationsPackage is not composed — add it to '
               'a di_groups entry, or delete the key (push is off without it)',
         );
-      } else if (notifications != null && !notifications.supports(name)) {
+      } else if (platform.isScaffold) {
         bad(
           'platforms.$name.push',
-          'push is on, but $kNotificationsPackage does not support $name '
-              '(its pubspec `platforms:` lists '
-              '${notifications.platforms?.join(', ')}) — set `push: false`, '
-              'or delete the key',
+          'push is on, but the $name runner is generated (`runner: scaffold`) '
+              'and carries none of the native push setup '
+              '(google-services.json, the aps-environment entitlement, '
+              'web/firebase-messaging-sw.js) — commit the runner, set it up, '
+              'then switch push on; or delete the key',
+        );
+      } else if (notifications != null && !notifications.pushes(name)) {
+        final listed = notifications.pushPlatforms != null
+            ? 'its composition.push_platforms lists '
+                  '${notifications.pushPlatforms!.join(', ')}'
+            : 'its pubspec `platforms:` lists '
+                  '${notifications.platforms?.join(', ')}';
+        bad(
+          'platforms.$name.push',
+          'push is on, but $kNotificationsPackage does not push on $name '
+              '($listed; Firebase Messaging has no $name implementation) — '
+              'set `push: false`, or delete the key',
+        );
+      }
+    }
+    if (platform.deepLinks == true) {
+      if (name == 'web') {
+        bad(
+          'platforms.web.deep_links',
+          'on the web the address bar is the deep link and the router '
+              'already reads it; app_links would route the page\'s own URL a '
+              'second time — delete the key',
+        );
+      } else if (platform.isScaffold) {
+        bad(
+          'platforms.$name.deep_links',
+          'deep links are on, but the $name runner is generated '
+              '(`runner: scaffold`) and registers no URL scheme or app link, '
+              'so no link would arrive — commit the runner and register them '
+              '(docs/en/guides/13_app_composition.md § 7, "Deep links on a '
+              'committed runner"), or delete the key',
         );
       }
     }
@@ -343,6 +401,12 @@ List<String> checkPackagePlatforms(AppView view) {
   }
   return problems;
 }
+
+/// Every package [view] links: the composed ones, and every workspace package
+/// they reach through `dependencies:` — what V7 holds to the platforms, and
+/// what tells `composer runners` that an app opens a database.
+Set<String> linkedPackages(AppView view) =>
+    _dependencyChains(view).keys.toSet();
 
 /// For every package the app links, the shortest chain from a composed package
 /// to it (`[feature_foo, core_database]`); a composed package's chain is just
@@ -392,7 +456,7 @@ String _origin(AppView view, PackageFacts facts) {
 /// | V3  | `capabilities:` equals the code, both directions; every required row has an implementer |
 /// | V10 | what a composed package needs the app to register (`composition.app_provides`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares, and none exists for a flavor the manifest does not declare |
-/// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`) |
+/// | V12 | the entry point passes the profile; the DI smoke test exists, iterates `appFacts.platforms`, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`); the boot test exists and calls `debugBootStage(`; an app on the web has the `flutter drive` driver (RULE-83) |
 /// | V15 | a committed Android runner has a `productFlavor` per declared flavor, a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-` configurations per declared flavor, and neither names a flavor the manifest does not declare |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 /// | V17 | no member pubspec other than the root's has a top-level `workspace:` key ([checkNestedWorkspaces]) |
@@ -712,13 +776,17 @@ void _envFiles(
 /// manifest declares: a declared flavor the runner lacks is what makes
 /// `flutter run --flavor <f>` fail on a new app, and a native flavor the
 /// manifest does not declare is a leftover. An app with no runner committed
-/// says nothing here (V6 owns whether one is).
+/// says nothing here (V6 owns whether one is), and neither does a `scaffold`
+/// runner: `composer runners` generates it with no native flavors, and the
+/// flavor comes from `--dart-define=APP_FLAVOR=<f>` (RULE-83).
 void _nativeFlavors(
   AppView view,
   void Function(String file, String key, String problem) bad,
 ) {
   final declared = view.declaration.flavors.keys.toSet();
   final native = view.native;
+  bool committed(String platform) =>
+      view.declaration.platform(platform)?.runner == 'committed';
   const recipe =
       'docs/en/guides/13_app_composition.md § "Native flavors for '
       'a new mobile runner"';
@@ -747,14 +815,14 @@ void _nativeFlavors(
     }
   }
 
-  if (native.androidRunner) {
+  if (native.androidRunner && committed('android')) {
     compare(
       '${view.dir}/${native.androidFile}',
       native.android?.keys.toSet() ?? const {},
       'productFlavor',
     );
   }
-  if (native.iosRunner) {
+  if (native.iosRunner && committed('ios')) {
     final where = '${view.dir}/ios';
     compare(
       '$where/Runner.xcodeproj/xcshareddata/xcschemes',
@@ -913,6 +981,55 @@ void _entryAndSmokeTest(
             '`final recorder = FactoryRecorder(getIt); await '
             'configureDependencies(environment: ..., locator: recorder); ... '
             'await recorder.buildEvery(notBuilt: ...)` (platform_app_shell)',
+      );
+    }
+    if (!RegExp(r'\bappFacts\s*\.\s*platforms\b').hasMatch(code)) {
+      bad(
+        smoke,
+        'appFacts.platforms',
+        'does not iterate appFacts.platforms — boot every declared platform '
+            'but the web (RULE-63)',
+      );
+    }
+  }
+
+  // RULE-83: a build is not a boot. Each app keeps the test that runs main()
+  // on a device and waits for the first screen to be *drawn*.
+  final boot = p.posix.join(view.dir, 'integration_test', 'boot_test.dart');
+  final bootFile = File(p.join(root, boot));
+  if (!bootFile.existsSync()) {
+    bad(
+      boot,
+      'file',
+      'missing — every app keeps a boot test that runs main() on a device and '
+          'waits for debugBootStage() to reach BootStage.shown (RULE-83); '
+          '`composer new` writes one, or copy '
+          'apps/admin/integration_test/boot_test.dart',
+    );
+  } else {
+    final code = DartSource.scan(bootFile.readAsStringSync()).code;
+    if (!RegExp(r'\bdebugBootStage\s*\(').hasMatch(code)) {
+      bad(
+        boot,
+        'debugBootStage',
+        'never calls debugBootStage() — a boot test that only finds widgets '
+            'passes a blank screen (RULE-83)',
+      );
+    }
+  }
+  if (view.declaration.platform('web') != null) {
+    final driver = p.posix.join(
+      view.dir,
+      'test_driver',
+      'integration_test.dart',
+    );
+    if (!File(p.join(root, driver)).existsSync()) {
+      bad(
+        driver,
+        'file',
+        'missing — `flutter drive` on the web needs it: `import '
+            "'package:integration_test/integration_test_driver.dart'; "
+            'Future<void> main() => integrationDriver();`',
       );
     }
   }

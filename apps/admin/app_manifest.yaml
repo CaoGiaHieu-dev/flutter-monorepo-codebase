@@ -9,6 +9,7 @@
 app:
   id: admin
   name: Codebase Admin
+  org: com.example # your reverse domain: every generated runner's application / bundle id starts with it
   entrypoint: lib/main.dart
 
 flavors:
@@ -26,11 +27,11 @@ env:
   BASE_URL: { required_in: [prod] }
   APP_NAME: { } # optional: AppConfig.titleFor falls back to `app.name`
 
-platforms: # no runner is committed yet: `scaffold` says so and the report prints the flutter create line
+platforms: # generated runners: `dart tools/composer/composer.dart runners --app admin` writes them, git ignores them (RULE-83)
   windows: { runner: scaffold }
   macos: { runner: scaffold }
   linux: { runner: scaffold }
-  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links on, orientation phones_portrait, no window (a desktop platform may set `window: { initial: [w, h], min: [w, h] }` and pass ShellHooks.configureWindow)
+  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links off (a generated runner registers no URL scheme; on the web the address bar is the link), secure_storage required (memory_fallback on linux), orientation phones_portrait, no window (a desktop platform may set `window: { initial: [w, h], min: [w, h] }` and pass ShellHooks.configureWindow)
 
 capabilities:
   session: provided
@@ -42,7 +43,11 @@ capabilities:
   entry: { state: absent, reason: "no onboarding: boot goes straight to the sign-in check" }
   post_sign_in:
     { state: absent, reason: "no home module: after sign-in the router's first tab (settings) opens" }
-  splash: { state: absent, reason: "native splash is kept through boot" }
+  splash:
+    {
+      state: absent,
+      reason: "no splash module: the first frame is held until boot ends — the page or window stays empty, at most NetworkProfile.connectTimeout while the session restores",
+    }
   error_reporter:
     {
       state: absent,

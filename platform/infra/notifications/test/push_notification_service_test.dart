@@ -1,8 +1,10 @@
 import 'package:core_notifications/core_notifications.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_kernel/platform_kernel.dart';
@@ -287,5 +289,92 @@ void main() {
       );
       await service.dispose();
     });
+
+    // Last in the file: it configures a Firebase app, which stays for the
+    // rest of the isolate.
+    group('macOS', () {
+      const messaging = MethodChannel('plugins.flutter.io/firebase_messaging');
+      const local = MethodChannel('dexterous.com/flutter/local_notifications');
+      late TestDefaultBinaryMessenger messenger;
+      late FlutterLocalNotificationsPlatform previousLocal;
+      late List<MethodCall> localCalls;
+
+      setUp(() {
+        // The channel doubles need the test binding's messenger.
+        TestWidgetsFlutterBinding.ensureInitialized();
+        messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        previousLocal = FlutterLocalNotificationsPlatform.instance;
+        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        MacOSFlutterLocalNotificationsPlugin.registerWith();
+        TestFirebaseCoreHostApi.setUp(_FirebaseCoreHost());
+        localCalls = [];
+        messenger
+          ..setMockMethodCallHandler(
+            messaging,
+            (call) async => switch (call.method) {
+              'Messaging#getToken' => {'token': 'macos-test'},
+              // getInitialMessage (none), getAPNSToken, presentation options…
+              _ => null,
+            },
+          )
+          ..setMockMethodCallHandler(local, (call) async {
+            localCalls.add(call);
+            return switch (call.method) {
+              'initialize' => true,
+              // getNotificationAppLaunchDetails: not launched by one.
+              _ => null,
+            };
+          });
+      });
+
+      tearDown(() {
+        messenger
+          ..setMockMethodCallHandler(messaging, null)
+          ..setMockMethodCallHandler(local, null);
+        TestFirebaseCoreHostApi.setUp(null);
+        FlutterLocalNotificationsPlatform.instance = previousLocal;
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      test('macOS initialises local notifications', () async {
+        const macos = PlatformFacts(
+          runner: RunnerKind.scaffold,
+          splash: SplashMode.native,
+          orientation: OrientationPolicy.free,
+          deepLinks: false,
+          push: true,
+        );
+        final service = PushNotificationService(_options, macos);
+
+        // Without macOS settings the plugin throws `ArgumentError('macOS
+        // settings must be set when targeting macOS platform.')`.
+        await service.init();
+
+        expect(localCalls.map((c) => c.method), contains('initialize'));
+        await service.dispose();
+      });
+    });
   });
+}
+
+/// Firebase core's host side on a fresh install: no app configured natively,
+/// and `initializeApp` echoes the options the service passes.
+class _FirebaseCoreHost implements TestFirebaseCoreHostApi {
+  @override
+  Future<List<CoreInitializeResponse>> initializeCore() async => [];
+
+  @override
+  Future<CoreInitializeResponse> initializeApp(
+    String appName,
+    CoreFirebaseOptions initializeAppRequest,
+  ) async => CoreInitializeResponse(
+    name: appName,
+    options: initializeAppRequest,
+    pluginConstants: {},
+  );
+
+  @override
+  Future<CoreFirebaseOptions> optionsFromResource() =>
+      throw UnsupportedError('the service always passes its options');
 }

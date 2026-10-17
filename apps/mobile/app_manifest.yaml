@@ -21,6 +21,7 @@
 app:
   id: mobile
   name: Codebase
+  org: com.example # your reverse domain: every generated runner's application / bundle id starts with it
   entrypoint: lib/main.dart
 
 flavors: # closed set: dev | staging | prod
@@ -40,8 +41,10 @@ env: # the keys of the env.<flavor> files; checked here, validated again at boot
   APP_LINK_MODE: { native_only: true }
 
 platforms: # a platform missing here is a platform this app does not run on
-  android: { runner: committed } # each platform may also set splash, push, deep_links, orientation, window; left out, they are derived or default — README §2 shows the effective values
+  android: { runner: committed } # each platform may also set splash, push, deep_links, secure_storage, orientation, window; left out, they are derived or default — README §2 shows the effective values
   ios: { runner: committed }
+  web: { runner: scaffold } # generated: drift on wasm; push and deep links derived off
+  linux: { runner: scaffold } # generated: push and deep links derived off; secure_storage derived memory_fallback
 
 capabilities: # the optional contracts the shell resolves; `composer describe --catalog` lists them
   session: provided # bundle: ISessionState + ISessionGateway + ISessionRefreshListenable + ISignInLocation

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../arch_check/native_imports.dart';
 import '../arch_check/platform_forks.dart';
 import 'support/tool_harness.dart';
 
@@ -2064,6 +2065,187 @@ void main() {
         isEmpty,
       );
     });
+    test(
+      'a configurable import is a fork: outside the list it fails',
+      () async {
+        final run = await check(
+          forkFixture({
+            'platform/x/pubspec.yaml': pubspec('core_x'),
+            'platform/x/lib/a.dart':
+                "import 'n.dart' if (dart.library.io) 'w.dart';\n",
+            'platform/x/lib/n.dart': 'int n = 1;\n',
+            'platform/x/lib/w.dart': 'int n = 2;\n',
+          }),
+        );
+        expectViolation(run, 'R17', 'platform/x/lib/a.dart:1');
+        expect(run.output, contains('`if(dart.library.io`'));
+      },
+    );
+
+    test('a configurable import in an allow-listed file is clean', () async {
+      const factory =
+          'platform/infra/database/lib/src/database_connection_factory.dart';
+      final run = await check(
+        forkFixture({
+          'platform/infra/database/pubspec.yaml': pubspec('core_database'),
+          factory:
+              "import 'connection/native_connection.dart'\n"
+              "    if (dart.library.js_interop) 'connection/web_connection.dart';\n",
+          'platform/infra/database/lib/src/connection/native_connection.dart':
+              'int n = 1;\n',
+          'platform/infra/database/lib/src/connection/web_connection.dart':
+              'int n = 2;\n',
+        }),
+      );
+      expect(
+        run.output,
+        isNot(contains('$factory:')),
+        reason: 'the allow-listed configurable import is not reported',
+      );
+      expect(run.output, isNot(contains('$factory: allow-listed')));
+    });
+  });
+
+  group('R22 native-only libraries stay behind a configurable import', () {
+    const factory =
+        'platform/infra/database/lib/src/database_connection_factory.dart';
+    const native =
+        'platform/infra/database/lib/src/connection/native_connection.dart';
+
+    Map<String, String> database({String nativeBody = ''}) => {
+      'platform/infra/database/pubspec.yaml': pubspec(
+        'core_database',
+        deps: _nativeDeps,
+      ),
+      factory:
+          "import 'connection/native_connection.dart'\n"
+          "    if (dart.library.js_interop) 'connection/web_connection.dart';\n",
+      native:
+          "import 'dart:io';\n"
+          "import 'package:drift/native.dart';\n"
+          "import 'package:path_provider/path_provider.dart';\n"
+          "import 'package:sqlite3/sqlite3.dart';\n"
+          'final t = defaultTargetPlatform;\n'
+          '$nativeBody',
+      'platform/infra/database/lib/src/connection/web_connection.dart':
+          "import 'package:drift/wasm.dart';\n",
+    };
+
+    test('an ordinary lib/ file of a web-linkable package fails, naming the '
+        'file, the line and the way out', () async {
+      final run = await check({
+        'modules/x/data/pubspec.yaml': pubspec('data_x', deps: _nativeDeps),
+        'modules/x/data/lib/a.dart':
+            "import 'package:drift/drift.dart';\n"
+            "import 'package:drift/native.dart';\n",
+      });
+      expectViolation(run, 'R22', 'modules/x/data/lib/a.dart:2');
+      expect(run.output, contains('imports package:drift/native.dart'));
+      expect(run.output, contains('kPlatformForkAllowList'));
+    });
+
+    for (final lib in kNativeOnlyLibraries.keys) {
+      test('$lib is one of them', () async {
+        final run = await check({
+          'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
+          'platform/x/lib/a.dart': "import '$lib';\n",
+        });
+        expectViolation(run, 'R22', 'platform/x/lib/a.dart:1');
+      });
+    }
+
+    test('an export counts as well as an import', () async {
+      final run = await check({
+        'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
+        'platform/x/lib/a.dart': "export 'package:sqlite3/sqlite3.dart';\n",
+      });
+      expectViolation(run, 'R22', 'platform/x/lib/a.dart:1');
+    });
+
+    test('the default target of an allow-listed configurable import is '
+        'clean', () async {
+      final run = await check(database());
+      expectClean(run, 'R22');
+    });
+
+    test('the same file, when no allow-listed file imports it that way, '
+        'fails', () async {
+      final files = database()
+        ..[factory] = "import 'connection/native_connection.dart';\n";
+      final run = await check(files);
+      expectViolation(run, 'R22', '$native:2');
+    });
+
+    test('a configurable import outside the allow-list does not make its '
+        'target clean', () async {
+      final run = await check({
+        'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
+        'platform/x/lib/a.dart':
+            "import 'n.dart' if (dart.library.js_interop) 'w.dart';\n",
+        'platform/x/lib/n.dart': "import 'dart:ffi';\n",
+        'platform/x/lib/w.dart': 'int w = 1;\n',
+      });
+      expectViolation(run, 'R22', 'platform/x/lib/n.dart:1');
+    });
+
+    test("a configuration's own URI is not judged", () async {
+      final run = await check({
+        'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
+        'platform/x/lib/a.dart': "import 'stub.dart' if (dart.library.io) 'package:path_provider/path_provider.dart';\n",
+        'platform/x/lib/stub.dart': 'int s = 1;\n',
+      });
+      // The configurable import itself is R17's business, not R22's.
+      expect(run.output, isNot(contains('R22 — ')));
+      expect(run.output, contains('R17 — '));
+    });
+
+    test('a package whose platforms: leave out web is clean', () async {
+      for (final platforms in [
+        'platforms:\n  android:\n  ios:\n',
+        'platforms: [android, ios, linux]\n',
+      ]) {
+        final run = await check({
+          'modules/x/data/pubspec.yaml':
+              '${pubspec('data_x', deps: _nativeDeps)}$platforms',
+          'modules/x/data/lib/a.dart': "import 'package:drift/native.dart';\n",
+        });
+        expectClean(run, 'R22');
+      }
+    });
+
+    test('a package whose platforms: list web is held to it', () async {
+      final run = await check({
+        'modules/x/data/pubspec.yaml':
+            '${pubspec('data_x', deps: _nativeDeps)}platforms:\n  android:\n  web:\n',
+        'modules/x/data/lib/a.dart': "import 'package:drift/native.dart';\n",
+      });
+      expectViolation(run, 'R22', 'modules/x/data/lib/a.dart:1');
+    });
+
+    test('a test file, or a file outside lib/, is not read', () async {
+      final run = await check({
+        'modules/x/data/pubspec.yaml': pubspec('data_x', deps: _nativeDeps),
+        'modules/x/data/test/a_test.dart':
+            "import 'package:drift/native.dart';\n",
+        'modules/x/data/tool/x.dart': "import 'dart:ffi';\n",
+        'platform/infra/database/pubspec.yaml': pubspec(
+          'core_database',
+          deps: _nativeDeps,
+        ),
+        'platform/infra/database/web/drift_worker.dart':
+            "import 'package:sqlite3/sqlite3.dart';\n",
+      });
+      expectClean(run, 'R22');
+    });
+
+    test('an app is not judged: its platforms are its manifest\'s', () async {
+      final run = await check({
+        'apps/demo/pubspec.yaml': pubspec('demo_app', deps: _nativeDeps),
+        'apps/demo/lib/main.dart':
+            "import 'package:path_provider/path_provider.dart';\n",
+      });
+      expectClean(run, 'R22');
+    });
   });
 
   group('R18 Bloc event handlers are async', () {
@@ -3033,3 +3215,6 @@ String pubspec(
       '${section('dependencies', deps)}'
       '${section('dev_dependencies', devDeps)}';
 }
+
+/// What the R22 fixtures import, declared so R5 stays quiet.
+const _nativeDeps = ['drift', 'path_provider', 'sqlite3'];

@@ -2,6 +2,7 @@ import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../contracts/storage_interface.dart';
@@ -17,27 +18,46 @@ const String _TAG = 'SecureStorageImpl';
 /// The data is encrypted using AES-CBC encryption with a key and initialization vector (IV).
 ///
 /// Registered as [StorageInterface] with named qualifier 'Secure' via DI.
+///
+/// What happens when the platform offers no secure store at all is the
+/// app's decision per platform ([PlatformFacts.secureStorage], from
+/// `platforms.<p>.secure_storage` in its manifest): stop the boot with
+/// nothing deleted, or keep secure values in memory for the run.
 @Injectable(as: StorageInterface)
 @Named('Secure')
 class SecureStorageImpl extends EncryptedStorage {
-  /// Constructor – no singleton pattern, fully managed by DI.
-  SecureStorageImpl()
-    : _storage = EncryptedStorage.secureStorage,
+  /// Constructor – no singleton pattern, fully managed by DI. [platform] is
+  /// the running platform's facts (`registerAppProfile` registers them
+  /// before DI starts).
+  SecureStorageImpl([PlatformFacts platform = const PlatformFacts.today()])
+    : _platform = platform,
+      _storage = EncryptedStorage.secureStorage,
       _retryDelay = StorageConstants.MASTER_KEY_RETRY_DELAY;
 
-  /// Over a given [storage] backend, retrying after [retryDelay] — for tests
-  /// that need a platform failure the real plugin cannot produce on demand.
+  /// Over a given storage backend, retrying after `retryDelay`, on the
+  /// `platform` given — for tests that need a platform failure the real
+  /// plugin cannot produce on demand.
   @visibleForTesting
   SecureStorageImpl.withStorage(
-    this._storage, [
+    this._storage, {
     this._retryDelay = Duration.zero,
-  ]);
+    this._platform = const PlatformFacts.today(),
+  });
 
   /// FlutterSecureStorage instance for storing data
   final FlutterSecureStorage _storage;
 
   /// Base delay between master-key read attempts (grows linearly).
   final Duration _retryDelay;
+
+  /// The running platform's facts: [PlatformFacts.secureStorage] decides
+  /// what [init] does when the secure store cannot be reached.
+  final PlatformFacts _platform;
+
+  /// This run's secure values, sealed as in the store, when the platform has
+  /// no secure store and the policy is [SecureStoragePolicy.memoryFallback].
+  /// `null` while the real store is in use.
+  Map<String, String>? _volatile;
 
   /// Initializes the storage: first-launch cleanup, then the master key.
   ///
@@ -55,6 +75,14 @@ class SecureStorageImpl extends EncryptedStorage {
   /// can see is a master key that is present but unusable (not a 256-bit
   /// base64 key); only that key is replaced — values sealed with it then
   /// fail to decrypt and are dropped one by one by [read].
+  ///
+  /// **A platform with no secure store** (a Linux session without a Secret
+  /// Service) fails the master-key read or write for good. What happens then
+  /// is [PlatformFacts.secureStorage]: [SecureStoragePolicy.required]
+  /// rethrows, with nothing deleted, and the boot stops (B01);
+  /// [SecureStoragePolicy.memoryFallback] keeps this run's secure values in
+  /// memory under a fresh key, writes nothing secure to disk, and logs one
+  /// WARNING.
   @override
   Future<void> init() async {
     final preferences = await SharedPreferences.getInstance();
@@ -66,38 +94,60 @@ class SecureStorageImpl extends EncryptedStorage {
     }
 
     // 2. Initialize Master Key for software-level encryption
-    var masterKey = await _readMasterKey();
+    final String masterKey;
+    try {
+      masterKey = await _establishMasterKey();
+    } catch (e) {
+      if (_platform.secureStorage == SecureStoragePolicy.required) rethrow;
+      _volatile = <String, String>{};
+      setMasterKey(EncryptedStorage.generateKey());
+      DynamicLogger.log(
+        'Secure storage is unavailable (${e.runtimeType}): secure values are '
+        'kept in memory for this run only and nothing secure is written to '
+        'disk. On Linux, start and unlock a Secret Service (gnome-keyring, '
+        'KWallet) — or decide `platforms.<p>.secure_storage` in '
+        'apps/<id>/app_manifest.yaml.',
+        tag: _TAG,
+        level: LogLevel.WARNING,
+      );
+      return;
+    }
 
-    if (masterKey != null && !EncryptedStorage.isUsableKey(masterKey)) {
+    setMasterKey(masterKey);
+  }
+
+  /// The stored master key, or a new one written to the store: a key that
+  /// is missing, or present but unusable, is replaced. Throws when the store
+  /// cannot be read (after the retries) or written.
+  Future<String> _establishMasterKey() async {
+    final stored = await _readMasterKey();
+    if (stored != null && EncryptedStorage.isUsableKey(stored)) return stored;
+
+    if (stored != null) {
       DynamicLogger.log(
         'Stored master key is corrupt; replacing it. Values sealed with it '
         'will be dropped as they are read.',
         tag: _TAG,
         level: LogLevel.WARNING,
       );
-      masterKey = null;
     }
 
-    if (masterKey == null) {
-      // Generate a new 32-byte (256-bit) random key for AES
-      final newKey = EncryptedStorage.generateKey();
-      try {
-        await _storage.write(
-          key: StorageConstants.SECURE_MASTER_KEY_ID,
-          value: newKey,
-        );
-        masterKey = newKey;
-      } catch (e) {
-        DynamicLogger.log(
-          'Failed to write master key to SecureStorage: ${e.runtimeType}',
-          tag: _TAG,
-          level: LogLevel.ERROR,
-        );
-        rethrow;
-      }
+    // Generate a new 32-byte (256-bit) random key for AES
+    final newKey = EncryptedStorage.generateKey();
+    try {
+      await _storage.write(
+        key: StorageConstants.SECURE_MASTER_KEY_ID,
+        value: newKey,
+      );
+    } catch (e) {
+      DynamicLogger.log(
+        'Failed to write master key to SecureStorage: ${e.runtimeType}',
+        tag: _TAG,
+        level: LogLevel.ERROR,
+      );
+      rethrow;
     }
-
-    setMasterKey(masterKey);
+    return newKey;
   }
 
   /// Reads the master key, retrying a platform failure before giving up.
@@ -142,6 +192,11 @@ class SecureStorageImpl extends EncryptedStorage {
     // before passing to the hardware-backed secure storage.
     final encryptedData = encryptData(dataString);
 
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile[key] = encryptedData;
+      return;
+    }
     await _storage.write(key: key, value: encryptedData);
   }
 
@@ -156,9 +211,12 @@ class SecureStorageImpl extends EncryptedStorage {
     // A platform failure says nothing about the stored bytes — the Keychain
     // may simply be locked — so it must never delete them. The value reads
     // as absent this time and is still there for the next read.
+    final volatile = _volatile;
     final String? encryptedData;
     try {
-      encryptedData = await _storage.read(key: key);
+      encryptedData = volatile != null
+          ? volatile[key]
+          : await _storage.read(key: key);
     } catch (e) {
       DynamicLogger.log(
         'Failed to read key: $key (platform error, value kept). '
@@ -184,7 +242,11 @@ class SecureStorageImpl extends EncryptedStorage {
       // The bytes are unreadable with this key: drop them so the read does
       // not fail the same way forever.
       try {
-        await _storage.delete(key: key);
+        if (volatile != null) {
+          volatile.remove(key);
+        } else {
+          await _storage.delete(key: key);
+        }
       } catch (_) {
         // Best effort: the read already returns null for these bytes, and
         // the next read retries the delete.
@@ -200,6 +262,11 @@ class SecureStorageImpl extends EncryptedStorage {
   @override
   Future<void> delete(String key) async {
     checkKey(key);
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile.remove(key);
+      return;
+    }
     return _storage.delete(key: key); // Delete the value from storage
   }
 }

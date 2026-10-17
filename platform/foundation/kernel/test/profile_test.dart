@@ -39,6 +39,15 @@ void main() {
       expect(today.push, isTrue);
       expect(today.window, isNull);
     });
+
+    test('requires a secure store, as the template always did', () {
+      expect(
+        const PlatformFacts.today().secureStorage,
+        SecureStoragePolicy.required,
+      );
+      // A hand-built fact that says nothing about it gets the same.
+      expect(androidFacts.secureStorage, SecureStoragePolicy.required);
+    });
   });
 
   group('AppFacts.platformFor', () {
@@ -74,8 +83,10 @@ void main() {
         expect(
           problems.single.action,
           allOf(
+            contains('Add `linux: { runner: scaffold }` under `platforms:`'),
             contains('apps/mobile/app_manifest.yaml'),
             contains('dart tools/composer/composer.dart sync --app mobile'),
+            contains('dart tools/composer/composer.dart runners --app mobile'),
             contains('ALLOW_UNDECLARED_PLATFORM=true'),
           ),
         );
@@ -112,6 +123,14 @@ void main() {
         expect(problems.single.description, contains('`staging`'));
         expect(problems.single.description, contains('declared: dev, prod'));
         expect(problems.single.action, contains('apps/mobile/app_manifest'));
+        // Every runner without native flavors names its flavor by define.
+        expect(
+          problems.single.action,
+          contains(
+            '(on the web or a generated runner, which have no `--flavor`: '
+            '`--dart-define=APP_FLAVOR=<name>`)',
+          ),
+        );
       });
 
       test('skips the flavor-keyed checks', () {

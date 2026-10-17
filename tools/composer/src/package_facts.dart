@@ -9,16 +9,19 @@ import 'manifest_v2.dart';
 /// keys pub accepts and validates nothing about (so composer does):
 ///
 /// ```yaml
-/// platforms: [android, ios, macos, web]    # where the package works
+/// platforms: [android, ios, macos, web]    # where the package links (V7)
 /// composition:
+///   push_platforms: [android, ios, macos, web]  # where it delivers push (V8)
 ///   app_provides:                          # what the app must register for it
 ///     FirebaseOptions:
 ///       per_flavor: true
 ///       hint: "apps/<id>/lib/firebase/firebase_module.dart ..."
 /// ```
 ///
-/// Both are read by the app report. `platforms:` is also what the report names
-/// when it says what blocks a platform the app does not declare.
+/// All are read by the app report. `platforms:` is also what the report names
+/// when it says what blocks a platform the app does not declare;
+/// `composition.push_platforms` is what the `push` derivation and check V8
+/// read — a package can link on a platform where it delivers no push.
 
 /// One thing a package needs the app to register.
 class AppProvides {
@@ -44,6 +47,7 @@ class PackageFacts {
     required this.name,
     required this.platforms,
     required this.appProvides,
+    this.pushPlatforms,
     this.pubspec = '',
     this.dependencies = const [],
   });
@@ -59,6 +63,11 @@ class PackageFacts {
 
   final List<AppProvides> appProvides;
 
+  /// Where the package delivers push (`composition.push_platforms`), in the
+  /// order the pubspec lists them (messages quote it as written); null when
+  /// it says nothing, and then it pushes wherever it links.
+  final List<String>? pushPlatforms;
+
   /// The package names under `dependencies:` (not `dev_dependencies:`: those
   /// are not linked into an app's build). V7 follows them so a package
   /// reached only through another one is held to the same platforms.
@@ -67,6 +76,50 @@ class PackageFacts {
   /// Whether the package works on [platform].
   bool supports(String platform) =>
       platforms == null || platforms!.contains(platform);
+
+  /// Whether the package delivers push on [p]: where `push_platforms` lists
+  /// it, or — without that key — wherever it links.
+  bool pushes(String p) => pushPlatforms?.contains(p) ?? supports(p);
+}
+
+/// The platform names of [raw] (a list, or a map keyed by name) — in
+/// canonical order, or as written when [canonical] is false — each problem
+/// added to [problems]. Null when [raw] is neither.
+List<String>? _platformNames(
+  Object? raw,
+  String key,
+  String rel,
+  List<String> problems, {
+  bool canonical = true,
+}) {
+  final items = switch (raw) {
+    YamlList() => raw.nodes.map((n) => n.value).toList(),
+    YamlMap() => raw.keys.toList(),
+    _ => null,
+  };
+  if (items == null) {
+    problems.add(
+      '$rel: $key: expected a list of platform names, got '
+      '${describeValue(raw)}',
+    );
+    return null;
+  }
+  final names = <String>[];
+  for (final item in items) {
+    if (item is String && kPlatformNames.contains(item)) {
+      if (!names.contains(item)) names.add(item);
+    } else {
+      problems.add(
+        '$rel: $key: expected one of ${kPlatformNames.join(', ')}, '
+        'got ${describeValue(item)}',
+      );
+    }
+  }
+  if (!canonical) return names;
+  return [
+    for (final platform in kPlatformNames)
+      if (names.contains(platform)) platform,
+  ];
 }
 
 /// Reads [packageDir]'s pubspec. [rel] is the pubspec's repo-relative path and
@@ -101,41 +154,25 @@ PackageFacts readPackageFacts(
         ]
       : const <String>[];
 
-  List<String>? platforms;
   final raw = doc['platforms'];
-  if (raw != null) {
-    final names = <String>[];
-    final items = switch (raw) {
-      YamlList() => raw.nodes.map((n) => n.value).toList(),
-      YamlMap() => raw.keys.toList(),
-      _ => null,
-    };
-    if (items == null) {
-      problems.add(
-        '$rel: platforms: expected a list of platform names, got '
-        '${describeValue(raw)}',
-      );
-    } else {
-      for (final item in items) {
-        if (item is String && kPlatformNames.contains(item)) {
-          names.add(item);
-        } else {
-          problems.add(
-            '$rel: platforms: expected one of ${kPlatformNames.join(', ')}, '
-            'got ${describeValue(item)}',
-          );
-        }
-      }
-      platforms = [
-        for (final platform in kPlatformNames)
-          if (names.contains(platform)) platform,
-      ];
-    }
-  }
+  final platforms = raw == null
+      ? null
+      : _platformNames(raw, 'platforms', rel, problems);
 
+  List<String>? pushPlatforms;
   final provides = <AppProvides>[];
   final composition = doc['composition'];
   if (composition is YamlMap) {
+    final rawPush = composition['push_platforms'];
+    if (rawPush != null) {
+      pushPlatforms = _platformNames(
+        rawPush,
+        'composition.push_platforms',
+        rel,
+        problems,
+        canonical: false,
+      );
+    }
     final rawProvides = composition['app_provides'];
     if (rawProvides is YamlMap) {
       for (final entry in rawProvides.entries) {
@@ -169,6 +206,7 @@ PackageFacts readPackageFacts(
     name: name,
     platforms: platforms,
     appProvides: provides,
+    pushPlatforms: pushPlatforms,
     pubspec: rel,
     dependencies: dependencies,
   );

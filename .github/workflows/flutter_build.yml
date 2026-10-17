@@ -34,7 +34,10 @@ permissions:
 jobs:
   build:
     name: Build & Release
-    runs-on: macos-latest
+    # Android only (the IPA steps below are commented out), so ubuntu: a
+    # macOS runner bills ten times the minutes for nothing. Uncommenting the
+    # IPA build needs `macos-latest` back.
+    runs-on: ubuntu-latest
     env:
       FLAVOR: ${{ inputs.flavor }}
 

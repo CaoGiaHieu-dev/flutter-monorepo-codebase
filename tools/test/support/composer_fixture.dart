@@ -11,8 +11,10 @@
 // The declaration is also true of the source: `core_common` registers the one
 // required contract, `feature_foo` registers what `session` and `routes` say
 // are provided, nothing registers `splash` (declared absent), the entry point
-// passes the profile and the smoke test calls `checkAppContract` — so `verify`
-// (V3, V12) is green until a test breaks one of them.
+// passes the profile, the smoke test iterates the declared platforms and calls
+// `checkAppContract`, the boot test waits on `debugBootStage()` and the web
+// driver is there — so `verify` (V3, V12, V13) is green until a test breaks
+// one of them.
 
 /// Repo-relative path of the fixture's catalog source.
 const String kFixtureCatalogPath =
@@ -141,7 +143,8 @@ void main() => runShellApp(
 );
 ''';
 
-/// The `demo` app's DI smoke test: boots a flavor and holds the contract.
+/// The `demo` app's DI smoke test: boots every declared platform and holds
+/// the contract.
 const String kFixtureSmokeTest = '''
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
@@ -149,20 +152,50 @@ import 'package:platform_app_shell/platform_app_shell.dart';
 import '../lib/app/app_profile.dart';
 
 void main() {
-  test('the declared contract holds', () async {
-    getIt.findAll<Object>(instantiateLazySingletons: true);
-    final recorder = FactoryRecorder(getIt);
-    await configureDependencies(locator: recorder);
-    await recorder.buildEvery();
-    final report = checkAppContract(
-      appProfile,
-      flavor: Flavor.dev,
-      platform: AppPlatform.android,
-    );
-    expect(report.problems, isEmpty, reason: report.explain());
+  for (final platform in appFacts.platforms.keys) {
+    test('the declared contract holds', () async {
+      getIt.findAll<Object>(instantiateLazySingletons: true);
+      final recorder = FactoryRecorder(getIt);
+      await configureDependencies(locator: recorder);
+      await recorder.buildEvery();
+      final report = checkAppContract(
+        appProfile,
+        flavor: Flavor.dev,
+        platform: platform,
+      );
+      expect(report.problems, isEmpty, reason: report.explain());
+    });
+  }
+}
+''';
+
+/// The `demo` app's boot test (RULE-83): waits until the first screen is
+/// drawn.
+const String kFixtureBootTest = '''
+import 'package:demo_app/main.dart' as app;
+import 'package:platform_app_shell/platform_app_shell.dart';
+
+void main() {
+  testWidgets('boots', (tester) async {
+    app.main();
+    expect(debugBootStage(), BootStage.shown);
   });
 }
 ''';
+
+/// The driver `flutter drive` runs the boot test through on the web.
+const String kFixtureDriver = '''
+import 'package:integration_test/integration_test_driver.dart';
+
+Future<void> main() => integrationDriver();
+''';
+
+/// The `demo` app's `.gitignore`, with the `runners` region empty.
+const String kFixtureGitignore =
+    '.dart_tool/\n'
+    '\n'
+    '# composer:managed:runners — generated from app_manifest.yaml\n'
+    '# composer:end:runners\n';
 
 /// What `core_common` registers: the fixture catalog's one required contract.
 const String kFixtureCoreRegistrations = '''
@@ -265,6 +298,9 @@ Map<String, String> demoWorkspaceFiles({
       '<!-- composer:end:report -->\n',
   'apps/demo/lib/main.dart': kFixtureMain,
   'apps/demo/test/di_smoke_test.dart': kFixtureSmokeTest,
+  'apps/demo/integration_test/boot_test.dart': kFixtureBootTest,
+  'apps/demo/test_driver/integration_test.dart': kFixtureDriver,
+  'apps/demo/.gitignore': kFixtureGitignore,
   // `runner: committed` for android needs the folder.
   'apps/demo/android/README.txt': 'runner\n',
   'platform/foundation/common/pubspec.yaml': 'name: core_common\n',

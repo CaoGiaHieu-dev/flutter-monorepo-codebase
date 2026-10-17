@@ -25,6 +25,10 @@ dev_dependencies:
   # plugins' in-memory doubles.
   flutter_test:
     sdk: flutter
+  # integration_test/boot_test.dart: main() on a device, until the first
+  # screen is drawn (RULE-83); test_driver/ runs it on the web.
+  integration_test:
+    sdk: flutter
 {{#usesDatabase}}
   drift: {{v.drift}}                      # closes the package-owned databases between boots
 {{/usesDatabase}}

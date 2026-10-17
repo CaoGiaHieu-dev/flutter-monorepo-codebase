@@ -17,8 +17,8 @@ import 'profile_summary.dart';
 ///
 /// A backticked repo path in the output would be checked by `docs_check` (the
 /// report is Markdown), so a path that may not exist — a runner folder of a
-/// `scaffold` platform — appears only inside the `flutter create` command
-/// block, never as a span.
+/// `scaffold` platform, which `composer runners` generates and git ignores —
+/// never appears as a span.
 
 /// One check or problem code, as `describe --catalog` lists it.
 class CodedLine {
@@ -47,7 +47,7 @@ const List<CodedLine> kComposerChecks = [
   CodedLine('V5', '`splash: dart` needs capability `splash` provided'),
   CodedLine(
     'V6',
-    '`runner: committed` needs the platform folder; `scaffold` needs it absent',
+    '`runner: committed` needs the platform folder; a runner folder of a platform `platforms:` does not declare is refused',
   ),
   CodedLine(
     'V7',
@@ -55,7 +55,7 @@ const List<CodedLine> kComposerChecks = [
   ),
   CodedLine(
     'V8',
-    '`push: true` needs core_notifications composed and supporting the platform; `window` only on a desktop platform',
+    '`push: true` needs core_notifications composed, the platform in its `composition.push_platforms` and a committed runner; `deep_links: true` needs a committed runner and is refused on the web; `window` only on a desktop platform',
   ),
   CodedLine(
     'V9',
@@ -71,11 +71,11 @@ const List<CodedLine> kComposerChecks = [
   ),
   CodedLine(
     'V12',
-    'the entry point passes `profile:`; test/di_smoke_test.dart exists, calls checkAppContract and builds every factory (`FactoryRecorder` + `buildEvery`)',
+    'the entry point passes `profile:`; test/di_smoke_test.dart exists, iterates `appFacts.platforms`, calls checkAppContract and builds every factory (`FactoryRecorder` + `buildEvery`); integration_test/boot_test.dart exists and calls `debugBootStage(`; with web declared, test_driver/integration_test.dart exists (RULE-83)',
   ),
   CodedLine(
     'V13',
-    'the generated regions (facts, report, imports, modules) equal regeneration; injection.dart holds only comments and blank lines outside its two regions',
+    'the generated regions (facts, report, imports, modules, the .gitignore runners) equal regeneration; injection.dart holds only comments and blank lines outside its two regions',
   ),
   CodedLine('V14', 'no reason is empty, `TODO` or `TBD`'),
   CodedLine(
@@ -225,10 +225,10 @@ String renderReport(AppView view) {
   // -- 2. platforms --------------------------------------------------------
   line('### 2. Platforms (c) — effective values, `value (source)`');
   line(
-    '| Platform | Runner | Splash | Push | Deep links | Orientation | '
-    'TLS pinning | Window |',
+    '| Platform | Runner | Splash | Push | Deep links | Secure storage | '
+    'Orientation | TLS pinning | Window |',
   );
-  line('|:--|:--|:--|:--|:--|:--|:--|:--|');
+  line('|:--|:--|:--|:--|:--|:--|:--|:--|:--|');
   for (final platform in derived) {
     line(
       '| ${platform.name} '
@@ -237,7 +237,9 @@ String renderReport(AppView view) {
       '| ${platform.push.value ? 'on' : 'off'} '
       '(${_cell(platform.push.source)}) '
       '| ${platform.deepLinks.value ? 'on' : 'off'} '
-      '(${platform.deepLinks.source}) '
+      '(${_cell(platform.deepLinks.source)}) '
+      '| ${platform.secureStorage.value} '
+      '(${_cell(platform.secureStorage.source)}) '
       '| ${_orientation(platform.orientation.value)} '
       '(${platform.orientation.source}) '
       '| ${_tls(platform.name)} '
@@ -252,20 +254,9 @@ String renderReport(AppView view) {
   ];
   if (scaffold.isNotEmpty) {
     line(
-      'The runner of ${scaffold.join(', ')} is not in the repository. Create '
-      'it once, from the app directory, then declare it `runner: committed`:',
+      'Generate the runners (never committed): '
+      '`dart tools/composer/composer.dart runners --app ${view.id}`',
     );
-    line();
-    line('```bash');
-    line('cd ${view.dir}');
-    line(
-      'flutter create --platforms=${scaffold.join(',')} --org com.example '
-      '--project-name ${view.pubspecName} .',
-    );
-    for (final cleanup in kFlutterCreateCleanup) {
-      line(cleanup);
-    }
-    line('```');
     line();
     line('Native notes (not checked):');
     for (final name in scaffold) {
@@ -273,6 +264,7 @@ String renderReport(AppView view) {
         line('- **$name** — $note');
       }
     }
+    line('- **all generated runners** — $kAllGeneratedRunnersNote');
     line();
   }
 
@@ -622,9 +614,20 @@ String renderCatalog(ShellCatalog catalog) {
   );
   line(
     '  push                       on when core_notifications is composed '
-    'and supports the platform; off on web (no service worker is shipped)',
+    'and its composition.push_platforms lists the platform; off on web (no '
+    'messaging service worker is shipped) and on a scaffold runner (no push '
+    'setup)',
   );
-  line('  deep links                 on');
+  line(
+    '  deep links                 on for a committed android or ios runner; '
+    'off on web (the address bar is the deep link), on a scaffold runner (no '
+    'URL scheme) and on a committed desktop runner (until its scheme is '
+    'registered)',
+  );
+  line(
+    '  secure storage             linux: memory_fallback (a session may run '
+    'no Secret Service); elsewhere required',
+  );
   line(
     '  orientation                phones_portrait: displays under the phone '
     'threshold locked to portrait',
@@ -645,9 +648,15 @@ String renderCatalog(ShellCatalog catalog) {
   line();
   line('  platforms: [android, ios, ...]');
   line(
-    '      where the package works: ${kPlatformNames.join(', ')}; left out, '
+    '      where the package links: ${kPlatformNames.join(', ')}; left out, '
     'everywhere. An app that declares a platform a composed package '
     '(or one it links through another) does not list is refused.',
+  );
+  line('  composition.push_platforms: [android, ios, ...]');
+  line(
+    '      where the package delivers push (core_notifications); left out, '
+    'wherever it links. `push: true` on a platform it does not list is '
+    'refused (V8), and the derived push is off there.',
   );
   line('  composition.app_provides.<Type>: { per_flavor: bool, hint: "..." }');
   line(
@@ -682,12 +691,14 @@ String renderCatalog(ShellCatalog catalog) {
   line('NEW APP');
   line(
     '  composer new <id> --platforms <a,b> [--modules <x,y>] [--name "<text>"] '
+    '[--org <reverse domain>] '
     'renders tools/composer/app_template/ into apps/<id>/, derives '
     '`capabilities:` from what the modules register (an absent contract '
     'carries what the shell does without it as its reason), then runs sync '
     'and verify. It refuses an id that exists or a platform a module blocks '
-    'before writing, and prints the `flutter create` line instead of running '
-    'it.',
+    'before writing. `--org <reverse domain>` is written as `app.org`. It '
+    'generates no runner: `composer runners --app <id>` does, ignored by '
+    'git.',
   );
   return b.toString();
 }

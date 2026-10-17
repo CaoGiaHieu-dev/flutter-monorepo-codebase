@@ -149,11 +149,20 @@ Set<String> getDartFilesForPackage(String pkgRoot, String projectRoot) {
   final root = Directory(pkgRoot);
   if (!root.existsSync()) return files;
 
-  // A normal package is read through lib/, bin/, test/ and tool/. A script
+  // A normal package is read through lib/, bin/, test/ and tool/ — and an
+  // app's integration_test/ and test_driver/, where the boot test (RULE-83)
+  // is the only importer of `integration_test`. A script
   // package with no lib/ — `core_tools`, whose scripts sit directly under
   // `tools/<tool>/` — is read whole; scanning only lib/ reported every one
   // of its dependencies as unused.
-  const sourceRoots = {'lib', 'bin', 'test', 'tool'};
+  const sourceRoots = {
+    'lib',
+    'bin',
+    'test',
+    'tool',
+    'integration_test',
+    'test_driver',
+  };
   const neverScanned = {'.dart_tool', 'build'};
   final scriptPackage = !Directory(p.join(pkgRoot, 'lib')).existsSync();
 

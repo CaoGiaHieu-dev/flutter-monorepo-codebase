@@ -1,3 +1,4 @@
+import 'package:core_common/core_common.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:injectable/injectable.dart';
 
@@ -19,23 +20,38 @@ import 'firebase_options_staging.dart' as stg;
 /// `core_notifications`, whose `PushNotificationService` injects these
 /// options. (Its background-message handler runs in an isolate without DI,
 /// so it initializes Firebase from the native config files instead.)
+///
+/// Each method takes the running platform's [PlatformFacts] and reads the
+/// generated options only where push is on: `currentPlatform` throws on a
+/// platform the Firebase project has no app for (web, Linux), and where push
+/// is off nothing hands the options to Firebase.
 @module
 abstract class FirebaseModule {
   /// Provides development Firebase options.
   @lazySingleton
   @Environment('dev')
-  FirebaseOptions get devFirebaseOptions =>
-      dev.DefaultFirebaseOptions.currentPlatform;
+  FirebaseOptions devFirebaseOptions(PlatformFacts platform) =>
+      platform.push ? dev.DefaultFirebaseOptions.currentPlatform : _pushOff;
 
   /// Provides staging Firebase options.
   @lazySingleton
   @Environment('staging')
-  FirebaseOptions get stagingFirebaseOptions =>
-      stg.DefaultFirebaseOptions.currentPlatform;
+  FirebaseOptions stagingFirebaseOptions(PlatformFacts platform) =>
+      platform.push ? stg.DefaultFirebaseOptions.currentPlatform : _pushOff;
 
   /// Provides production Firebase options.
   @lazySingleton
   @Environment('prod')
-  FirebaseOptions get prodFirebaseOptions =>
-      prod.DefaultFirebaseOptions.currentPlatform;
+  FirebaseOptions prodFirebaseOptions(PlatformFacts platform) =>
+      platform.push ? prod.DefaultFirebaseOptions.currentPlatform : _pushOff;
 }
+
+/// Never handed to Firebase: `PushNotificationService` initialises nothing
+/// where push is off, and `currentPlatform` throws on a platform the
+/// Firebase project has no app for (web, Linux).
+const FirebaseOptions _pushOff = FirebaseOptions(
+  apiKey: 'push-off',
+  appId: 'push-off',
+  messagingSenderId: 'push-off',
+  projectId: 'push-off',
+);

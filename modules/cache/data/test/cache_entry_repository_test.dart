@@ -1,5 +1,6 @@
 import 'package:core_database/core_database.dart';
 import 'package:data_cache/data_cache.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A data source whose every call fails, to prove the repository turns a
@@ -17,7 +18,7 @@ class _ThrowingDataSource implements ICacheEntryLocalDataSource {
 void main() {
   test('a saved value comes back as a domain entity, a missing key as null',
       () async {
-    final database = CacheDatabase.forTesting();
+    final database = CacheDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     final repository = CacheEntryRepositoryImpl(
       CacheEntryLocalDataSource(DatabaseHandle<CacheDatabase>(database)),

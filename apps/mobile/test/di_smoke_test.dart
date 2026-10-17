@@ -5,6 +5,7 @@ import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:drift/drift.dart' show GeneratedDatabase;
 import 'package:firebase_core_platform_interface/test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -30,25 +31,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - Firebase, messaging and local notifications — `PushNotificationService`
 ///   initialises all three while DI runs (`@PostConstruct(preResolve: true)`):
 ///   FlutterFire's own Pigeon test API for Firebase core, and a stub of each
-///   plugin's method channel. A test runs no plugin registrant, so the
-///   Android local-notifications implementation is registered by hand — a
-///   test binding reports Android as its target platform.
+///   plugin's method channel. A test runs no plugin registrant, so each boot
+///   registers the local-notifications implementation of its platform by
+///   hand where push is on (`_registerLocalNotificationsFor`).
 ///
 /// It names no module on purpose (only `injection.dart` may — arch_check
 /// R10): it checks what the shell resolves, however the manifest composes
 /// the app. Like the app itself it compiles against
 /// `lib/firebase/firebase_options_*.dart` (gitignored; CI writes stubs).
 ///
-/// For every flavor the manifest declares, the graph is booted with the app's
-/// profile registered, as `runShellApp` does, and then held to what
-/// `app_manifest.yaml` declares: `checkAppContract` compares each optional
-/// contract's `provided` / `absent` with what the graph registered, and
-/// asserts the required ones, a screen, unique tab orders and a router that
-/// assembles (RULE-63, RULE-81).
+/// For every platform the manifest declares but the web, times every flavor,
+/// the graph is booted with the app's profile registered, as `runShellApp`
+/// does, and then held to what `app_manifest.yaml` declares:
+/// `checkAppContract` compares each optional contract's `provided` /
+/// `absent` with what the graph registered, and asserts the required ones, a
+/// screen, unique tab orders and a router that assembles (RULE-63, RULE-81).
+/// Each boot names its platform twice — to the shell
+/// (`debugAppPlatformOverride`, so the platform's facts reach DI: push, the
+/// secure-storage policy, which Firebase options `FirebaseModule` reads) and
+/// to the plugins (`debugDefaultTargetPlatformOverride`, so each picks that
+/// platform's side).
 ///
-/// A VM test reports Android and never the web, so the platform is named
-/// explicitly instead of read from the device.
-const _platform = AppPlatform.android;
+/// The VM cannot be a browser: the web graph is proven by
+/// integration_test/boot_test.dart in one (RULE-83).
 
 /// Factories this check does not build: those with a non-nullable
 /// `@factoryParam`, which only the screen that creates them can supply — a
@@ -61,7 +66,6 @@ const _factoriesNeedingArguments = <String, String>{};
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   TestFirebaseCoreHostApi.setUp(_FirebaseCoreHost());
-  AndroidFlutterLocalNotificationsPlugin.registerWith();
 
   late Directory documents;
   final messenger =
@@ -119,68 +123,79 @@ void main() {
     documents.deleteSync(recursive: true);
   });
 
-  for (final flavor in appFacts.flavors) {
-    test(
-      'the ${flavor.name} graph boots, every lazy singleton builds and the '
-      'declaration matches it',
-      () async {
-        registerAppProfile(appProfile, platform: _platform);
-        // The recorder stands in for the locator while the graph registers,
-        // so each factory is seen — and built — one at a time.
-        final recorder = FactoryRecorder(getIt);
-        await configureDependencies(
-          environment: flavor.name,
-          locator: recorder,
-        );
+  for (final platform in appFacts.platforms.keys.where(
+    (p) => p != AppPlatform.web,
+  )) {
+    for (final flavor in appFacts.flavors) {
+      test(
+        '${platform.name} · ${flavor.name}: the graph boots, every lazy '
+        'singleton and factory builds, and the declaration matches it',
+        () async {
+          debugAppPlatformOverride = platform;
+          debugDefaultTargetPlatformOverride = _targetOf(platform);
+          addTearDown(() {
+            debugAppPlatformOverride = null;
+            debugDefaultTargetPlatformOverride = null;
+          });
+          _registerLocalNotificationsFor(platform);
+          registerAppProfile(appProfile, platform: platform);
+          // The recorder stands in for the locator while the graph registers,
+          // so each factory is seen — and built — one at a time.
+          final recorder = FactoryRecorder(getIt);
+          await configureDependencies(
+            environment: flavor.name,
+            locator: recorder,
+          );
 
-        // Every `@lazySingleton` in the graph built now instead of on first
-        // use, and every `@injectable` factory built once — a missing
-        // dependency throws here rather than on some screen (RULE-63).
-        //
-        // A factory takes its `@factoryParam` arguments from the screen that
-        // creates it, and here there is none: a nullable parameter gets
-        // `null` (HomeProfileBloc's reads "no session contract registered"),
-        // an async factory is awaited, and a non-nullable parameter is F01
-        // unless the factory is listed in `_factoriesNeedingArguments`. A
-        // failure names the factory's type.
-        final built = getIt.findAll<Object>(instantiateLazySingletons: true);
-        expect(built, isNotEmpty);
-        final factories = await recorder.buildEvery(
-          notBuilt: _factoriesNeedingArguments,
-        );
-        expect(factories.problems, isEmpty, reason: factories.explain());
+          // Every `@lazySingleton` in the graph built now instead of on first
+          // use, and every `@injectable` factory built once — a missing
+          // dependency throws here rather than on some screen (RULE-63).
+          //
+          // A factory takes its `@factoryParam` arguments from the screen that
+          // creates it, and here there is none: a nullable parameter gets
+          // `null` (HomeProfileBloc's reads "no session contract registered"),
+          // an async factory is awaited, and a non-nullable parameter is F01
+          // unless the factory is listed in `_factoriesNeedingArguments`. A
+          // failure names the factory's type.
+          final built = getIt.findAll<Object>(instantiateLazySingletons: true);
+          expect(built, isNotEmpty);
+          final factories = await recorder.buildEvery(
+            notBuilt: _factoriesNeedingArguments,
+          );
+          expect(factories.problems, isEmpty, reason: factories.explain());
 
-        // The graph is built from the sections the profile registered before
-        // it: the router got the app's own `RouterProfile`, not a default.
-        expect(getIt<AppRouter>().profile, same(appProfile.router));
+          // The graph is built from the sections the profile registered before
+          // it: the router got the app's own `RouterProfile`, not a default.
+          expect(getIt<AppRouter>().profile, same(appProfile.router));
 
-        // The same for the locale: the language set is the profile's, and
-        // every localization delegate a feature contributes supports every
-        // language the app offers — a language the app declares but a feature
-        // has no translations for would show that feature's raw keys.
-        final languages = getIt<LanguageProvider>().languageSet;
-        expect(
-          languages.fallback.languageCode,
-          appProfile.locale.fallback,
-        );
-        for (final feature in getAllOrEmpty<IFeatureLocalization>()) {
-          for (final locale in languages.supported) {
-            expect(
-              feature.delegate.isSupported(locale),
-              isTrue,
-              reason: '${feature.runtimeType} / ${locale.languageCode}',
-            );
+          // The same for the locale: the language set is the profile's, and
+          // every localization delegate a feature contributes supports every
+          // language the app offers — a language the app declares but a feature
+          // has no translations for would show that feature's raw keys.
+          final languages = getIt<LanguageProvider>().languageSet;
+          expect(
+            languages.fallback.languageCode,
+            appProfile.locale.fallback,
+          );
+          for (final feature in getAllOrEmpty<IFeatureLocalization>()) {
+            for (final locale in languages.supported) {
+              expect(
+                feature.delegate.isSupported(locale),
+                isTrue,
+                reason: '${feature.runtimeType} / ${locale.languageCode}',
+              );
+            }
           }
-        }
 
-        final report = checkAppContract(
-          appProfile,
-          flavor: flavor,
-          platform: _platform,
-        );
-        expect(report.problems, isEmpty, reason: report.explain());
-      },
-    );
+          final report = checkAppContract(
+            appProfile,
+            flavor: flavor,
+            platform: platform,
+          );
+          expect(report.problems, isEmpty, reason: report.explain());
+        },
+      );
+    }
   }
 
   test('every declared platform and flavor is a valid way to start', () {
@@ -189,6 +204,33 @@ void main() {
     // `window` needs `appHooks.configureWindow` (P05).
     expect(checkDeclaredStarts(appProfile, appHooks), isEmpty);
   });
+}
+
+/// What the plugins see for [platform]. The web is never booted on the VM.
+TargetPlatform _targetOf(AppPlatform platform) => switch (platform) {
+  AppPlatform.android => TargetPlatform.android,
+  AppPlatform.ios => TargetPlatform.iOS,
+  AppPlatform.macos => TargetPlatform.macOS,
+  AppPlatform.windows => TargetPlatform.windows,
+  AppPlatform.linux => TargetPlatform.linux,
+  AppPlatform.web => throw StateError('the web is not booted on the VM'),
+};
+
+/// A test runs no plugin registrant: the local-notifications implementation
+/// `PushNotificationService` initialises is registered by hand, for the
+/// platforms where push can be on. Elsewhere push is off and nothing is
+/// initialised.
+void _registerLocalNotificationsFor(AppPlatform platform) {
+  switch (platform) {
+    case AppPlatform.android:
+      AndroidFlutterLocalNotificationsPlugin.registerWith();
+    case AppPlatform.ios:
+      IOSFlutterLocalNotificationsPlugin.registerWith();
+    case AppPlatform.macos:
+      MacOSFlutterLocalNotificationsPlugin.registerWith();
+    case AppPlatform.web || AppPlatform.windows || AppPlatform.linux:
+      break;
+  }
 }
 
 /// Firebase core's host side, as a real one behaves on a fresh install: no

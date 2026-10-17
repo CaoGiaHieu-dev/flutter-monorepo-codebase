@@ -16,16 +16,16 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Dem
 | `WEB_DOMAIN` | native only (Gradle / Xcode) — no Dart reader | — |
 
 ### 2. Platforms (c) — effective values, `value (source)`
-| Platform | Runner | Splash | Push | Deep links | Orientation | TLS pinning | Window |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| android | committed (manifest) | dart (derived: capability `splash` is provided) | on (derived: core_notifications is composed and supports android) | on (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
-| ios | committed (manifest) | native (default: iOS keeps its native splash for the whole boot) | on (derived: core_notifications is composed and supports ios) | on (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
+| Platform | Runner | Splash | Push | Deep links | Secure storage | Orientation | TLS pinning | Window |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| android | committed (manifest) | dart (derived: capability `splash` is provided) | on (derived: core_notifications is composed and pushes on android) | on (default: the committed runner registers its links) | required (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
+| ios | committed (manifest) | native (default: iOS keeps its native splash for the whole boot) | on (derived: core_notifications is composed and pushes on ios) | on (default: the committed runner registers its links) | required (default) | phone-sized displays portrait, larger free (default) | can pin (decision per flavor, §1) | — |
 
 Not targeted — and what blocks it:
 - **web** — no composed package blocks it; declare it under `platforms:` and add its runner.
-- **windows** — core_notifications does not support it (`platforms:` in the package pubspec).
+- **windows** — no composed package blocks it; declare it under `platforms:` and add its runner.
 - **macos** — no composed package blocks it; declare it under `platforms:` and add its runner.
-- **linux** — core_notifications does not support it (`platforms:` in the package pubspec).
+- **linux** — no composed package blocks it; declare it under `platforms:` and add its runner.
 
 ### 3. Composition, in boot order (a)
 | # | Group (phase) | Packages | Why |

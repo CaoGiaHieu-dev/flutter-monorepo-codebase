@@ -13,14 +13,16 @@ typedef DriftDatabaseBuilder<T extends GeneratedDatabase> = T Function(
   QueryExecutor executor,
 );
 
-/// Opens a drift database on a background isolate, with recovery.
+/// Opens a drift database — on a background isolate natively, in drift's
+/// wasm worker on the web — with recovery.
 ///
 /// This is the mechanism half of persistence: it knows how to open a SQLite
-/// file safely, but nothing about tables, DAOs or schemas. A package that
+/// database safely, but nothing about tables, DAOs or schemas. A package that
 /// owns data declares its own [GeneratedDatabase] and opens it through
 /// [open].
 abstract final class DriftDatabaseOpener {
-  /// Opens [build]'s database on a background isolate.
+  /// Opens [build]'s database through
+  /// [DatabaseConnectionFactory.createBackgroundExecutor].
   ///
   /// The connection is verified before the future completes, so a database
   /// whose file is unreadable fails here rather than at the first query.
@@ -33,6 +35,8 @@ abstract final class DriftDatabaseOpener {
   /// matches [DatabaseConstants.CORRUPTION_ERROR_MARKERS] causes the file to
   /// be **moved aside** (see
   /// [DatabaseConnectionFactory.quarantineDatabaseFile]) and reopened empty.
+  /// On the web there is no file to move: the quarantine does nothing and the
+  /// reopen meets the same database.
   ///
   /// Recovery is deliberately narrow. Any failure that also looks like an
   /// environment problem — no permission, full disk, transient I/O, listed in

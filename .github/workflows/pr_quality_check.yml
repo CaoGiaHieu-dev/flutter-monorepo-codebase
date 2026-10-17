@@ -21,6 +21,9 @@ jobs:
     name: Analyze, test and audit
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # The apps the `platforms` job boots on the web and Linux (last step).
+    outputs:
+      platform_apps: ${{ steps.platforms.outputs.apps }}
 
     steps:
       - name: Checkout
@@ -34,6 +37,10 @@ jobs:
           flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
+          # No lockfile is committed, so the default key (it hashes
+          # **/pubspec.lock) never changes: key the pub cache on what decides
+          # the versions instead.
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
 
       # Lock files are generated and not committed: versions come from
       # pubspec_dependencies.yaml (Gate 4 holds every pubspec to it). This
@@ -52,7 +59,7 @@ jobs:
       - name: Composition in sync with manifest
         run: dart tools/composer/composer.dart verify
 
-      # Gate 1 — architecture rules.
+      # Gate 1 — architecture rules (R1–R22).
       # Needs no codegen of its own: it reads imports and pubspecs, so it
       # runs straight after `pub get` and fails in seconds on a layering
       # mistake instead of after the full setup + analyze + test cycle.
@@ -66,7 +73,7 @@ jobs:
       # quietly stopped failing looks exactly like a clean PR. tools/test/
       # builds throwaway workspaces in a temp directory and runs each gating
       # tool against them as a subprocess, asserting exit code and output:
-      # arch_check (a clean and a violating fixture for every rule R1-R21),
+      # arch_check (a clean and a violating fixture for every rule R1-R22),
       # composer verify, dependency_sync --check, docs_check (paths and en↔vi
       # parity), the barrel generator, composer bootstrap, the module
       # generator's argument checks, configure's Firebase stubs and the
@@ -76,8 +83,12 @@ jobs:
         working-directory: tools
         run: dart test
 
-      # flutter clean → pub get → gen-l10n → build_runner → barrels. Gates 2+
-      # need the generated code; Gates 0 and 1 above did not.
+      # flutter clean → pub get → gen-l10n → build_runner → barrels → runners.
+      # Gates 2+ need the generated code; Gates 0 and 1 above did not. The
+      # last step, `composer runners`, generates the native project of every
+      # platform an app declares `runner: scaffold` (RULE-83): each app's
+      # .gitignore `runners` region ignores them, and a generated runner holds
+      # no .dart file, so the barrel gate below is unchanged.
       #
       # --stub-firebase: each app that uses Firebase owns
       # `lib/firebase/firebase_module.dart`, which imports generated
@@ -193,6 +204,14 @@ jobs:
       - name: Unused dependency audit
         run: dart tools/unused_checker/check_unused_packages.dart
 
+      # The `platforms` job's matrix, read from the manifests rather than
+      # written here: one row per app that declares web or Linux, e.g.
+      # [{"app":"admin","web":true,"linux":true}]. `describe --ci-matrix`
+      # prints that one line of JSON and nothing else.
+      - name: Platforms to boot (from the manifests, RULE-83)
+        id: platforms
+        run: echo "apps=$(dart tools/composer/composer.dart describe --ci-matrix pr)" >> "$GITHUB_OUTPUT"
+
   # Template regression check: generate a module the way a developer would,
   # then hold the result to the same gates as hand-written code. Nothing else
   # exercises the generator's templates — they are mustache files no analyzer
@@ -217,6 +236,7 @@ jobs:
           flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
 
       - name: Get dependencies
         run: flutter pub get
@@ -274,8 +294,9 @@ jobs:
   # contribution), the API package (type 6, which wires the feature that
   # already exists), a domain and a data package (types 2 and 3), and a whole
   # new app made by `composer new` that composes them. It holds the result to
-  # the same gates and then to the new app's own smoke test, so a template or a
-  # composer change that leaves a new app unable to boot fails here. Names are
+  # the same gates, then to the new app's own smoke test, and finally boots the
+  # new app on the web (RULE-83), so a template or a composer change that
+  # leaves a new app unable to boot fails here. Names are
   # `smoke_p` / `smoke_d` / `smoke_app` so they never collide with the other
   # job. Nothing here is committed; the checkout is thrown away.
   generator-smoke-compose:
@@ -294,6 +315,7 @@ jobs:
           flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
 
       - name: Get dependencies
         run: flutter pub get
@@ -322,10 +344,12 @@ jobs:
 
       # A whole app composing the new modules. Without --modules it composes
       # nothing with a screen, and its own smoke test fails with C05 by design.
-      # composer never runs `flutter create`, so the app has no native runner;
-      # that is enough for everything below.
+      # Every platform of a new app is `runner: scaffold`: `composer new`
+      # writes no native folder (its .gitignore `runners` region ignores
+      # them), and the gates below need none. Only the web runner is generated,
+      # after codegen, for the boot at the end of the job.
       - name: Create a new app
-        run: dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+        run: dart tools/composer/composer.dart new smoke_app --platforms android,ios,web,linux --modules smoke_p,smoke_d
 
       # composer new does not run pub get or codegen (its output says so).
       # The barrel pass is per package and must follow codegen (RULE-75); an
@@ -338,6 +362,11 @@ jobs:
           for lib in modules/smoke_p/feature/lib modules/smoke_p/api/lib modules/smoke_d/domain/lib modules/smoke_d/data/lib modules/smoke_n/feature/lib modules/smoke_nd/data/lib platform/infra/smoke_core/lib platform/infra/smoke_custom/lib; do
             dart tools/barrel_generator/generate.dart "$lib"
           done
+
+      # `flutter create` in a temporary directory, then only apps/smoke_app/web/
+      # is copied in (plus the database assets, had it linked core_database).
+      - name: Generate the new app's web runner
+        run: dart tools/composer/composer.dart runners --app smoke_app --platform web
 
       - name: Composition in sync with manifest
         run: dart tools/composer/composer.dart verify
@@ -392,6 +421,136 @@ jobs:
           fi
           exit "$code"
 
+      # A DI graph that resolves is not a screen that is drawn (RULE-83): the
+      # new app's integration_test/boot_test.dart runs main() in headless
+      # Chrome until the first frame reaches the engine. The same step as the
+      # `platforms` job, on the app `composer new` just wrote.
+      - name: Chrome and the chromedriver that matches it
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+
+      - name: The new app boots on the web
+        working-directory: apps/smoke_app
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          "${{ steps.chrome.outputs.chromedriver-path }}" --port=4444 &
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart \
+            -d web-server --browser-name=chrome --headless --chrome-binary="$CHROME_EXECUTABLE" \
+            --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+
+  # RULE-83: a build is not a boot. Every web and Linux target an app declares
+  # is generated, built and booted to its first frame, on every PR. One job
+  # per app, from the quality job's `platform_apps` (`composer describe
+  # --ci-matrix pr`), so a new app or platform needs no edit here. The test is
+  # apps/<id>/integration_test/boot_test.dart: it fails while the first frame
+  # is deferred (the web blank page) and on any boot error screen. It runs in
+  # parallel with `build`. macOS, Windows, iOS and the Android emulator are
+  # platforms_full.yml.
+  platforms:
+    name: Boot ${{ matrix.app }} on web and Linux
+    needs: quality
+    if: needs.quality.outputs.platform_apps != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40            # a keyring prompt (M4) blocks forever: never wait on it
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.quality.outputs.platform_apps) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # A matched pair: a chromedriver refuses a Chrome of another build, and
+      # the image's own pair can drift apart.
+      - name: Chrome and the chromedriver that matches it
+        if: matrix.web
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
+
+      # The Linux runner's build toolchain and the libsecret that
+      # flutter_secure_storage links; Xvfb for a display; a session bus and
+      # gnome-keyring for the Secret Service.
+      - name: Linux desktop toolchain, X server, session bus, keyring
+        if: matrix.linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev xvfb dbus-x11 gnome-keyring
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # Exactly what an adopter runs on a fresh clone: codegen, the Firebase
+      # stubs, then `composer runners` (the gitignored web and Linux runners,
+      # with sqlite3.wasm and drift_worker.js for an app that links
+      # core_database).
+      - name: Set up the workspace (codegen, stubs) and generate the runners
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
+
+      - name: Native build-hook downloads (sqlite3) and the wasm cache
+        uses: actions/cache@v6      # after configure: its flutter clean wipes .dart_tool
+        with:
+          path: |
+            .dart_tool/hooks_runner/shared
+            ~/.cache/flutter_monorepo/sqlite3
+          key: hooks-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      # `flutter drive -d web-server` asks the chromedriver on port 4444 for a
+      # browser; --chrome-binary names the Chrome it must launch (the tool does
+      # not read CHROME_EXECUTABLE for a web-server device).
+      - name: Boot on the web (flutter drive, headless Chrome)
+        if: matrix.web
+        working-directory: apps/${{ matrix.app }}
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          "${{ steps.chrome.outputs.chromedriver-path }}" --port=4444 &
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart \
+            -d web-server --browser-name=chrome --headless --chrome-binary="$CHROME_EXECUTABLE" \
+            --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+
+      # A private session bus and an unlocked login keyring: the Secret
+      # Service answers, so secure values are stored there. Fresh XDG
+      # directories, so no state survives from another step.
+      - name: Boot on Linux (an unlocked keyring)
+        if: matrix.linux
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          xvfb-run -a dbus-run-session -- bash -ec '
+            T=$(mktemp -d); export XDG_DATA_HOME=$T/data XDG_CONFIG_HOME=$T/config XDG_CACHE_HOME=$T/cache XDG_RUNTIME_DIR=$T/run
+            mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+            eval "$(printf "ci\n" | gnome-keyring-daemon --unlock --components=secrets)"; export GNOME_KEYRING_CONTROL
+            flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev'
+
+      # No Secret Service at all: the bus address points nowhere, so libsecret
+      # fails at once and `secure_storage: memory_fallback` (Linux's derived
+      # policy) keeps secure values in memory — the app still boots.
+      - name: Boot on Linux (no Secret Service — secure values stay in memory)
+        if: matrix.linux
+        working-directory: apps/${{ matrix.app }}
+        env:
+          DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent/bus"   # fails fast (M5); an unset bus autolaunches and hangs
+        run: |
+          T=$(mktemp -d); export XDG_DATA_HOME=$T/data XDG_CONFIG_HOME=$T/config XDG_CACHE_HOME=$T/cache XDG_RUNTIME_DIR=$T/run
+          mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+          xvfb-run -a flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+
   # Not a gate: the proof that the app actually builds. Gate 2 cannot give it
   # (analysis_options.yaml excludes every generated file), and the release
   # workflows run on demand only — without this job a PR that breaks a
@@ -422,6 +581,7 @@ jobs:
           flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
 
       - name: Get dependencies
         run: flutter pub get

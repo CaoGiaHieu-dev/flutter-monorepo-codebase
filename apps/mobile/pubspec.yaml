@@ -74,9 +74,13 @@ dev_dependencies:
   # test/di_smoke_test.dart: boots the generated DI graph with the plugins'
   # test doubles — the storage plugins' in-memory stores, FlutterFire's
   # Firebase core test API (`firebase_core_platform_interface/test.dart`) and
-  # the Android local-notifications implementation, registered by hand;
+  # each platform's local-notifications implementation, registered by hand;
   # `drift` to close the package-owned databases between boots.
   flutter_test:
+    sdk: flutter
+  # integration_test/boot_test.dart: main() on a device, until the first
+  # screen is drawn (RULE-83); test_driver/ runs it on the web.
+  integration_test:
     sdk: flutter
   drift: "^2.34.3"
   firebase_core_platform_interface: "^8.1.1"
@@ -86,9 +90,9 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"
-  # Run from this directory by tools/theme_generator and by hand. The
-  # runtime half of the native splash (`FlutterNativeSplash.remove()`) is
-  # `platform_app_shell`'s dependency, not this app's.
+  # Run from this directory by tools/theme_generator and by hand. It has no
+  # runtime half here: the shell holds the first frame itself
+  # (`deferFirstFrame` until boot ends), which keeps the native launch screen.
   flutter_native_splash: ^2.4.8
   icons_launcher: ^3.1.0
 

@@ -1,4 +1,6 @@
 flutter_native_splash:
+  # no web splash: the shell holds the first frame and nothing would remove an HTML splash
+  web: false
   color: "#FFFFFF"
   image: ../../assets/branding/ic_launcher_foreground.png
   android_12:

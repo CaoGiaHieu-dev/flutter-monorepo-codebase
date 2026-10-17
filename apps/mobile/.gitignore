@@ -43,3 +43,9 @@ firebase_options_*.dart
 firebase.json
 google-services.json
 **/google-services.json
+
+# Generated runners (RULE-83): `composer runners` writes them, git never tracks them.
+# composer:managed:runners — generated from app_manifest.yaml
+/web/
+/linux/
+# composer:end:runners

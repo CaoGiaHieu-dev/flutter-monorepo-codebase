@@ -3,8 +3,6 @@ import 'package:flutter/services.dart' as services;
 import 'package:material_ui/material_ui.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
-import 'platform_resolver.dart';
-
 /// Central configuration class for the application
 ///
 /// This class provides access to environment-specific configurations
@@ -33,34 +31,34 @@ class AppConfig {
   /// Default language for the application
   static Locale defaultLanguage = PlatformDispatcher.instance.locale;
 
-  /// The flavor the build declared (`--flavor`, i.e. `FLUTTER_APP_FLAVOR`),
-  /// or `null` when it declared none or one this app does not know.
+  /// The flavor the build declared (`--flavor`, i.e. `FLUTTER_APP_FLAVOR`,
+  /// or `--dart-define=APP_FLAVOR=<name>` where the tool set none), or `null`
+  /// when it declared none or one this app does not know.
   ///
   /// Anything security-relevant must read this, not [appFlavor]: only an
   /// explicit declaration may relax a safeguard.
   static Flavor? get declaredFlavor => parseFlavor(
     declaredFlavorName(
       toolFlavor: services.appFlavor,
-      webDefine: ProfileConstants.APP_FLAVOR,
-      isWeb: resolveAppPlatform() == AppPlatform.web,
+      define: ProfileConstants.APP_FLAVOR,
     ),
   );
 
   /// The flavor name a build declared: the Flutter tool's own
-  /// ([toolFlavor], `--flavor`) when there is one, else — on the web only,
-  /// whose tool has no `--flavor` — the `--dart-define=APP_FLAVOR=<name>`
-  /// ([webDefine]). `null` when the build declared none.
+  /// ([toolFlavor], `--flavor`) when there is one, else the
+  /// `--dart-define=APP_FLAVOR=<name>` ([define]) — wherever the Flutter tool
+  /// set no flavor: the web, and any generated runner (no native flavors).
+  /// `null` when the build declared none.
   ///
-  /// The define never overrides a flavor the tool set, and is ignored off the
-  /// web: a native build that names its flavor twice has one source of truth.
+  /// The define never overrides a flavor the tool set: a build that names
+  /// its flavor twice has one source of truth, the tool's.
   @visibleForTesting
   static String? declaredFlavorName({
     required String? toolFlavor,
-    required String webDefine,
-    required bool isWeb,
+    required String define,
   }) {
     if (toolFlavor != null && toolFlavor.trim().isNotEmpty) return toolFlavor;
-    if (isWeb && webDefine.trim().isNotEmpty) return webDefine;
+    if (define.trim().isNotEmpty) return define;
     return null;
   }
 
@@ -73,8 +71,7 @@ class AppConfig {
   static Flavor get appFlavor => resolveFlavor(
     declaredFlavorName(
       toolFlavor: services.appFlavor,
-      webDefine: ProfileConstants.APP_FLAVOR,
-      isWeb: resolveAppPlatform() == AppPlatform.web,
+      define: ProfileConstants.APP_FLAVOR,
     ),
     isDebug: kDebugMode,
   );

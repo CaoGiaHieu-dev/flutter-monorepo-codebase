@@ -33,3 +33,11 @@ env.prod
 /macos/Flutter/ephemeral/
 /windows/flutter/ephemeral/
 /linux/flutter/ephemeral/
+
+# Generated runners (RULE-83): `composer runners` writes them, git never tracks them.
+# composer:managed:runners — generated from app_manifest.yaml
+/web/
+/windows/
+/macos/
+/linux/
+# composer:end:runners

@@ -80,6 +80,24 @@ String orientationConstant(String policy) => switch (policy) {
   _ => policy,
 };
 
+/// `SecureStoragePolicy` in `platform_kernel`, spelled snake_case as the
+/// manifest writes it (`memory_fallback` is `SecureStoragePolicy.memoryFallback`).
+const List<String> kSecureStoragePolicies = ['required', 'memory_fallback'];
+
+/// `memory_fallback` as the kernel's `SecureStoragePolicy` constant.
+String secureStorageConstant(String policy) => switch (policy) {
+  'memory_fallback' => 'memoryFallback',
+  _ => policy,
+};
+
+/// The reverse domain every generated runner's application / bundle id starts
+/// with when the manifest names none (`app.org`).
+const String kDefaultOrg = 'com.example';
+
+/// What `app.org` must look like: lowercase dotted segments, at least two —
+/// what `flutter create --org` accepts for every platform.
+final RegExp kOrgPattern = RegExp(r'^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$');
+
 /// What `composer new` writes as the reason of an `absent` capability: the
 /// state of the app, not yet a decision of its author. The report lists every
 /// reason that starts with it under "Decisions to revisit", so absence stays
@@ -138,8 +156,8 @@ class KeySpec {
 
 /// The parse table: every key of the declaration half, with its consumer.
 ///
-/// A key exists only together with its consumer. Where a platform's
-/// `push`, `deep_links`, `orientation` or `window` is left out, the generated
+/// A key exists only together with its consumer. Where a platform's `push`,
+/// `deep_links`, `secure_storage`, `orientation` or `window` is left out, the generated
 /// facts carry the derived default of each (`facts_emit.dart`), so a generated
 /// app never depends on a Dart default.
 const List<KeySpec> kManifestKeys = [
@@ -176,6 +194,22 @@ const List<KeySpec> kManifestKeys = [
     consumer: 'tools/composer/src/report.dart',
     reads: 'decl.entrypoint',
     replaces: 'the dead key of manifest v1 (nothing read it)',
+  ),
+  KeySpec(
+    key: 'app.org',
+    type: 'reverse-domain string (`com.acme`)',
+    defaultValue:
+        '$kDefaultOrg — every generated runner\'s application / bundle id '
+        'starts with it',
+    validation:
+        'lowercase dotted segments, at least two '
+        '(`^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+\$`)',
+    consumer: 'tools/composer/src/runners.dart',
+    reads: 'decl.org',
+    replaces:
+        'the `--org com.example` hard-coded in the report and in '
+        '`composer new`',
+    reportOnly: true,
   ),
   KeySpec(
     key: 'flavors.<f>',
@@ -222,11 +256,15 @@ const List<KeySpec> kManifestKeys = [
   ),
   KeySpec(
     key: 'platforms.<p>.runner',
-    type: 'committed | scaffold',
+    type:
+        'committed: apps/<id>/<p>/ is tracked and exists (V6); scaffold: '
+        'written by `composer runners`, gitignored through the '
+        '`composer:managed:runners` region of apps/<id>/.gitignore, never '
+        'committed; carries no native flavors, push or deep links',
     defaultValue: 'required',
     validation:
-        'committed: apps/<id>/<p>/ exists; scaffold: it does not '
-        '(the report prints the flutter create line)',
+        'committed: apps/<id>/<p>/ exists; a runner folder of a platform the '
+        'manifest does not declare is refused (V6)',
     consumer: 'tools/composer/src/checks.dart',
     reads: 'platform.runner',
     replaces: 'a runner folder was the only sign of a platform',
@@ -247,9 +285,12 @@ const List<KeySpec> kManifestKeys = [
     key: 'platforms.<p>.push',
     type: 'bool',
     defaultValue:
-        'true when core_notifications is composed and supports the platform '
-        '(web: false, no service worker is shipped), else false',
-    validation: 'true needs core_notifications composed and supporting <p>',
+        'false on a scaffold runner and on web; else true when '
+        'core_notifications is composed and lists <p> in '
+        '`composition.push_platforms`',
+    validation:
+        'true needs core_notifications composed, <p> in its push_platforms, '
+        'and `runner: committed`',
     consumer:
         'platform/infra/notifications/lib/src/push_notification_service.dart',
     reads: '_platform.push',
@@ -258,12 +299,27 @@ const List<KeySpec> kManifestKeys = [
   KeySpec(
     key: 'platforms.<p>.deep_links',
     type: 'bool',
-    defaultValue: 'true',
-    validation: 'none',
+    defaultValue:
+        'true on a committed android or ios runner; false on web (the address '
+        'bar is the deep link), on a scaffold runner (no URL scheme '
+        'registered) and on a committed desktop runner until its scheme is '
+        'registered',
+    validation: 'true needs `runner: committed`; never on web',
     consumer:
         'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart',
     reads: '_platform.deepLinks',
     replaces: 'deep links were subscribed on every platform',
+  ),
+  KeySpec(
+    key: 'platforms.<p>.secure_storage',
+    type: 'required | memory_fallback',
+    defaultValue:
+        'linux: memory_fallback (a Linux session may run no Secret Service); '
+        'else required',
+    validation: 'closed vocabulary (SecureStoragePolicy)',
+    consumer: 'platform/infra/storage/lib/src/impl/secure_storage_impl.dart',
+    reads: '_platform.secureStorage',
+    replaces: 'a missing Secret Service stopped the boot (B01)',
   ),
   KeySpec(
     key: 'platforms.<p>.orientation',
@@ -369,12 +425,16 @@ class PlatformDecl {
     this.splash, {
     this.push,
     this.deepLinks,
+    this.secureStorage,
     this.orientation,
     this.window,
   });
 
   final String name;
   final String runner;
+
+  /// Whether the runner is generated by `composer runners` (never committed).
+  bool get isScaffold => runner == 'scaffold';
 
   /// `dart` / `native`, or null when the manifest leaves it to the default.
   final String? splash;
@@ -385,6 +445,10 @@ class PlatformDecl {
   /// Whether deep links are on, or null when the manifest leaves it to the
   /// default.
   final bool? deepLinks;
+
+  /// One of [kSecureStoragePolicies], or null when the manifest leaves it to
+  /// the default.
+  final String? secureStorage;
 
   /// One of [kOrientationPolicies], or null when the manifest leaves it to the
   /// default.
@@ -409,6 +473,7 @@ class CapabilityDecl {
 class AppDeclaration {
   AppDeclaration({
     required this.name,
+    this.org = kDefaultOrg,
     required this.entrypoint,
     required this.flavors,
     required this.env,
@@ -417,6 +482,10 @@ class AppDeclaration {
   });
 
   final String name;
+
+  /// The reverse domain the generated runners' ids start with (`app.org`),
+  /// [kDefaultOrg] unless the manifest says otherwise.
+  final String org;
 
   /// `lib/main.dart` unless the manifest says otherwise.
   final String entrypoint;
@@ -461,6 +530,7 @@ const _platformKeys = [
   'splash',
   'push',
   'deep_links',
+  'secure_storage',
   'orientation',
   'window',
 ];
@@ -580,6 +650,7 @@ AppDeclaration? parseDeclaration(
 
   // -- app ------------------------------------------------------------------
   String? name;
+  var org = kDefaultOrg;
   var entrypoint = 'lib/main.dart';
   final app = doc['app'];
   if (app is YamlMap) {
@@ -598,6 +669,18 @@ AppDeclaration? parseDeclaration(
         'expected a non-empty string, got ${describeValue(rawName)} — '
             'add `name: <display name>` under `app:`',
       );
+    }
+    final rawOrg = app['org'];
+    if (rawOrg != null) {
+      if (rawOrg is String && kOrgPattern.hasMatch(rawOrg)) {
+        org = rawOrg;
+      } else {
+        fail(
+          'app.org',
+          'expected a reverse domain such as `com.acme`, got '
+              '${describeValue(rawOrg)}',
+        );
+      }
     }
     final rawEntry = app['entrypoint'];
     if (rawEntry != null) {
@@ -798,8 +881,8 @@ AppDeclaration? parseDeclaration(
           '$path.runner',
           'expected one of ${kRunnerKinds.join(', ')}, got '
               '${describeValue(runner)} — `committed` when apps/<id>/$platform/ '
-              'is in the repository, `scaffold` when the owner runs '
-              '`flutter create` for it',
+              'is in the repository, `scaffold` when `composer runners` '
+              'generates it (never committed)',
         );
         continue;
       }
@@ -815,6 +898,17 @@ AppDeclaration? parseDeclaration(
       }
       final push = _parseSwitch(value, 'push', path, fail);
       final deepLinks = _parseSwitch(value, 'deep_links', path, fail);
+      final secureStorage = value['secure_storage'];
+      if (secureStorage != null &&
+          (secureStorage is! String ||
+              !kSecureStoragePolicies.contains(secureStorage))) {
+        fail(
+          '$path.secure_storage',
+          'expected ${kSecureStoragePolicies.join(' or ')}, got '
+              '${describeValue(secureStorage)}',
+        );
+        continue;
+      }
       final orientation = value['orientation'];
       if (orientation != null &&
           (orientation is! String ||
@@ -836,6 +930,7 @@ AppDeclaration? parseDeclaration(
         splash as String?,
         push: push,
         deepLinks: deepLinks,
+        secureStorage: secureStorage as String?,
         orientation: orientation as String?,
         window: window,
       );
@@ -904,6 +999,7 @@ AppDeclaration? parseDeclaration(
   if (!ok || name == null) return null;
   return AppDeclaration(
     name: name,
+    org: org,
     entrypoint: entrypoint,
     flavors: flavors,
     env: env,

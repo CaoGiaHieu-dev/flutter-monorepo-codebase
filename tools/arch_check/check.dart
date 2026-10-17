@@ -9,6 +9,7 @@ import '../shared/contract_scan.dart';
 import '../unused_checker/monorepo_helper.dart';
 import '../unused_checker/output_formatter.dart';
 import 'dart_source.dart';
+import 'native_imports.dart';
 import 'platform_forks.dart';
 import 'source_rules.dart';
 
@@ -1516,6 +1517,9 @@ List<Violation> _hygieneViolations(String root) {
     }
   }
 
+  // Hand-written Dart, for R22 once every file has been read.
+  final handWritten = <String>[];
+
   for (final rel in files) {
     final segments = p.posix.split(rel);
 
@@ -1568,6 +1572,7 @@ List<Violation> _hygieneViolations(String root) {
     )) {
       continue;
     }
+    handWritten.add(rel);
 
     final inProductTree =
         segments.first == 'modules' ||
@@ -1703,6 +1708,19 @@ List<Violation> _hygieneViolations(String root) {
     }
   }
 
+  // --- R22: native-only libraries stay behind a configurable import -------
+  // (RULE-82) after R17, whose allow-list says which configurable imports
+  // may name a native-only default target.
+  for (final problem in nativeImportProblems(root, handWritten)) {
+    out.add(
+      Violation(
+        'R22',
+        '${problem.rel}:${problem.line}',
+        problem.message.substring('${problem.rel}:${problem.line}: '.length),
+      ),
+    );
+  }
+
   // --- R14: data_sources/, never datasources/ -----------------------------
   // Walked as directories so an empty `datasources/` is caught as well.
   for (final top in const ['modules', 'platform', 'apps']) {
@@ -1760,6 +1778,7 @@ void _report(
     'R19': 'Runtime diagnostics go through DynamicLogger',
     'R20': 'No raw numeric literals for layout and paint',
     'R21': 'Translations agree: same keys in every ARB, lowerCamelCase',
+    'R22': 'Native-only libraries stay behind a configurable import',
   };
 
   if (warnings.isNotEmpty) {
@@ -2037,7 +2056,8 @@ RULES CHECKED
 
   R17 Platform forks are an app decision
       `Platform.isX`, `Platform.operatingSystem`, `kIsWeb`,
-      `defaultTargetPlatform` and `TargetPlatform.` in hand-written Dart under
+      `defaultTargetPlatform`, `TargetPlatform.` and `if (dart.library.…)`
+      configurations (a configurable import or export) in hand-written Dart under
       platform/*/lib, modules/*/lib and apps/*/lib (comments and strings
       blanked) may appear only in the files of `kPlatformForkAllowList`
       (tools/arch_check/platform_forks.dart), each with a reason: the one
@@ -2098,7 +2118,22 @@ RULES CHECKED
       `@` (metadata, `@@locale`). Placeholders are not compared. An ARB file
       that is not a JSON object is a violation.
 
-  R12, R13, R15 and R17-R20 read every file in the working tree that git does not
+  R22 Native-only libraries stay behind a configurable import  (RULE-82)
+      In lib/ of a package under platform/ or modules/ that may link on the
+      web (its pubspec has no `platforms:`, or `platforms:` lists web), no
+      file imports or exports `dart:ffi`, `package:drift/native.dart`,
+      `package:sqlite3/sqlite3.dart` or `package:path_provider/path_provider.dart`
+      — every web build of an app that links the package fails while
+      flutter analyze stays clean — unless the file is the default target of
+      a configurable import (`import 'native.dart' if (dart.library.js_interop)
+      'web.dart';`) in a file of the same package that is in
+      `kPlatformForkAllowList`. A configuration's own URI is not judged: it
+      loads only where its library exists. File-level only, no reachability;
+      test/ is not read. A package that wraps a native-only SDK declares
+      `platforms:` without web instead (composer V7 then refuses web for the
+      apps that link it).
+
+  R12, R13, R15, R17-R20 and R22 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out
   as submodules included). Outside a git checkout every file is read.
 

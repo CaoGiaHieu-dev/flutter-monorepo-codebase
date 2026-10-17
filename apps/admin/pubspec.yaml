@@ -55,6 +55,10 @@ dev_dependencies:
   # plugins' in-memory doubles.
   flutter_test:
     sdk: flutter
+  # integration_test/boot_test.dart: main() on a device, until the first
+  # screen is drawn (RULE-83); test_driver/ runs it on the web.
+  integration_test:
+    sdk: flutter
   flutter_secure_storage: "11.2.0"
   shared_preferences: "^2.5.5"
   flutter_lints: ^6.0.0

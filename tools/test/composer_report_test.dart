@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -19,7 +20,10 @@ import 'support/tool_harness.dart';
 ///   backticked path would fail Gate 5;
 /// - the facts text is a **fixed point of `dart format`** under the
 ///   repository's formatter options, so a local format pass cannot put an app
-///   out of step with `composer verify`.
+///   out of step with `composer verify`;
+/// - `describe --ci-matrix pr|full` prints one line of JSON and nothing else
+///   (goldens `ci_matrix_pr.json` / `ci_matrix_full.json`, over a workspace
+///   holding an admin-like and a mobile-like app — the repository's shape).
 void main() {
   late CompiledTool composer;
   late CompiledTool docsCheck;
@@ -36,73 +40,112 @@ void main() {
   const readmePath = 'apps/demo/README.md';
   const profilePath = 'apps/demo/lib/app/app_profile.dart';
 
-  /// `core_notifications` as the repository declares it: not on the web with a
-  /// service worker, and an app that composes it provides `FirebaseOptions`.
+  /// `core_notifications` as the repository declares it: it links on every
+  /// platform, Firebase Messaging delivers on four, and an app that composes
+  /// it provides `FirebaseOptions`.
   const notificationsPubspec =
       'name: core_notifications\n'
-      'platforms:\n'
-      '  android:\n'
-      '  ios:\n'
-      '  macos:\n'
-      '  web:\n'
       'composition:\n'
+      '  push_platforms: [android, ios, macos, web]\n'
       '  app_provides:\n'
       '    FirebaseOptions:\n'
       '      per_flavor: true\n'
       '      hint: "apps/<id>/lib/firebase/firebase_module.dart"\n';
 
-  /// An app like `apps/mobile`: Android and iOS, push, a splash, two flavors
-  /// that pin nothing yet.
-  TempWorkspace mobileLike() => TempWorkspace.create(
-    demoWorkspaceFiles(
-      manifest:
-          demoManifest(
-            env:
-                'env:\n'
-                '  BASE_URL: { required_in: [prod] }\n'
-                '  WEB_DOMAIN: { native_only: true }\n',
-            platforms:
-                'platforms:\n'
-                '  android: { runner: committed }\n'
-                '  ios: { runner: committed }\n',
-            capabilities: kCapabilities.replaceFirst(
-              'splash: { state: absent, reason: "the native splash is kept through boot" }',
-              'splash: provided',
+  /// The files of an app like `apps/mobile`: Android and iOS, push, a splash,
+  /// two flavors that pin nothing yet; [platforms] replaces its platforms.
+  Map<String, String> mobileLikeFiles({String? platforms}) =>
+      demoWorkspaceFiles(
+        manifest:
+            demoManifest(
+              env:
+                  'env:\n'
+                  '  BASE_URL: { required_in: [prod] }\n'
+                  '  WEB_DOMAIN: { native_only: true }\n',
+              platforms:
+                  platforms ??
+                  'platforms:\n'
+                      '  android: { runner: committed }\n'
+                      '  ios: { runner: committed }\n',
+              capabilities: kCapabilities.replaceFirst(
+                'splash: { state: absent, reason: "the native splash is kept through boot" }',
+                'splash: provided',
+              ),
+              why: '    why: "mechanism only, before anything else"\n',
+            ).replaceFirst(
+              '  - name: shell\n',
+              '  - name: notifications\n'
+                  '    phase: after\n'
+                  '    packages: [core_notifications]\n'
+                  '    why: "FirebaseOptions come from the app, after core"\n'
+                  '  - name: shell\n',
             ),
-            why: '    why: "mechanism only, before anything else"\n',
-          ).replaceFirst(
-            '  - name: shell\n',
-            '  - name: notifications\n'
-                '    phase: after\n'
-                '    packages: [core_notifications]\n'
-                '    why: "FirebaseOptions come from the app, after core"\n'
-                '  - name: shell\n',
-          ),
-      extra: {
-        'apps/demo/ios/README.txt': 'runner\n',
-        'platform/infra/notifications/pubspec.yaml': notificationsPubspec,
-        'platform/infra/notifications/lib/di/module.dart': diModule(),
-        'modules/foo/feature/lib/src/splash.dart': kFixtureSplashRegistration,
-        'apps/demo/lib/firebase/firebase_module.dart': kFixtureFirebaseModule,
-      },
-    ),
-  );
+        extra: {
+          'apps/demo/ios/README.txt': 'runner\n',
+          'platform/infra/notifications/pubspec.yaml': notificationsPubspec,
+          'platform/infra/notifications/lib/di/module.dart': diModule(),
+          'modules/foo/feature/lib/src/splash.dart': kFixtureSplashRegistration,
+          'apps/demo/lib/firebase/firebase_module.dart': kFixtureFirebaseModule,
+        },
+      );
+
+  TempWorkspace mobileLike() => TempWorkspace.create(mobileLikeFiles());
 
   /// An app like `apps/admin`: web and a desktop platform, runners still to
   /// create, no push. Windows can pin, so the default `flavors:` block decides
   /// staging and prod.
-  TempWorkspace adminLike() {
-    final files = demoWorkspaceFiles(
-      manifest: demoManifest(
+  Map<String, String> adminLikeFiles({String? platforms}) => demoWorkspaceFiles(
+    manifest: demoManifest(
+      platforms:
+          platforms ??
+          'platforms:\n'
+              '  windows: { runner: scaffold }\n'
+              '  web: { runner: scaffold }\n',
+      capabilities: kCapabilities,
+    ),
+  )..remove('apps/demo/android/README.txt');
+
+  TempWorkspace adminLike() => TempWorkspace.create(adminLikeFiles());
+
+  /// [files] (a `demo` workspace) with its app moved to `apps/<id>` and
+  /// renamed `<id>` / `<id>_app`; the shared packages stay where they are.
+  Map<String, String> asApp(Map<String, String> files, String id) => {
+    for (final entry in files.entries)
+      if (entry.key.startsWith('apps/demo/'))
+        entry.key.replaceFirst('apps/demo/', 'apps/$id/'): entry.value
+            .replaceAll('id: demo\n', 'id: $id\n')
+            .replaceAll('demo_app', '${id}_app')
+      else
+        entry.key: entry.value,
+  };
+
+  /// The repository's shape: `admin` on the web and the three desktops,
+  /// generated runners only, no push; `mobile` on committed Android and iOS
+  /// runners with push, plus a generated web and Linux runner.
+  TempWorkspace twoApps() => TempWorkspace.create({
+    ...asApp(
+      adminLikeFiles(
         platforms:
             'platforms:\n'
             '  windows: { runner: scaffold }\n'
+            '  macos: { runner: scaffold }\n'
+            '  linux: { runner: scaffold }\n'
             '  web: { runner: scaffold }\n',
-        capabilities: kCapabilities,
       ),
-    )..remove('apps/demo/android/README.txt');
-    return TempWorkspace.create(files);
-  }
+      'admin',
+    ),
+    ...asApp(
+      mobileLikeFiles(
+        platforms:
+            'platforms:\n'
+            '  android: { runner: committed }\n'
+            '  ios: { runner: committed }\n'
+            '  web: { runner: scaffold }\n'
+            '  linux: { runner: scaffold }\n',
+      ),
+      'mobile',
+    ),
+  });
 
   Future<ToolRun> run(TempWorkspace ws, List<String> args) =>
       composer.run(args, workingDirectory: ws.root);
@@ -181,13 +224,58 @@ void main() {
       final ws = mobileLike();
       final report = (await run(ws, ['describe', '--app', 'demo'])).stdout;
 
+      // core_notifications links everywhere: nothing blocks a platform.
       expect(report, contains('- **web** — no composed package blocks it'));
-      expect(report, contains('- **macos** — no composed package blocks it'));
+      expect(report, contains('- **windows** — no composed package blocks it'));
+
+      // A package that declares `platforms:` does.
+      ws.write({
+        'platform/infra/notifications/pubspec.yaml':
+            'name: core_notifications\nplatforms: [android, ios]\n',
+      });
+      final blocked = (await run(ws, ['describe', '--app', 'demo'])).stdout;
       expect(
-        report,
+        blocked,
         contains('- **windows** — core_notifications does not support it'),
       );
     });
+
+    test(
+      'an admin-like app: generated runners, deep links and push off',
+      () async {
+        final report = (await run(adminLike(), [
+          'describe',
+          '--app',
+          'demo',
+        ])).stdout;
+        expect(
+          report,
+          contains(
+            'Generate the runners (never committed): '
+            '`dart tools/composer/composer.dart runners --app demo`',
+          ),
+        );
+        expect(report, contains('| Deep links | Secure storage |'));
+        expect(
+          report,
+          contains(
+            'off (derived: a generated runner registers no URL scheme)',
+          ),
+        );
+        expect(
+          report,
+          contains(
+            'off (derived: the address bar is the deep link; the router reads '
+            'it)',
+          ),
+        );
+        expect(
+          report,
+          contains('- **all generated runners** — no native flavors'),
+        );
+        expect(report, isNot(contains('flutter create')));
+      },
+    );
 
     test('lists what the app must provide, from the composed packages', () async {
       final report = (await run(mobileLike(), [
@@ -226,6 +314,79 @@ void main() {
         ),
       );
     });
+  });
+
+  group('describe --ci-matrix', () {
+    Future<String> matrix(String kind) async {
+      final result = await run(twoApps(), ['describe', '--ci-matrix', kind]);
+      expect(result, exitsWith(0), reason: result.output);
+      // One line of JSON and nothing else, so `>> $GITHUB_OUTPUT` works.
+      expect(result.stdout.trimRight().split('\n'), hasLength(1));
+      expect(result.stdout, isNot(contains('Composer')));
+      expect(jsonDecode(result.stdout), isA<List<Object?>>());
+      return result.stdout;
+    }
+
+    test('pr: every app that declares web or linux', () async {
+      final out = await matrix('pr');
+      expectGolden('ci_matrix_pr.json', out);
+      expect(
+        out.trim(),
+        '[{"app":"admin","web":true,"linux":true},'
+        '{"app":"mobile","web":true,"linux":true}]',
+      );
+    });
+
+    test(
+      'full: android, ios, windows and macos legs, with how each boots',
+      () async {
+        final out = await matrix('full');
+        expectGolden('ci_matrix_full.json', out);
+        final rows = (jsonDecode(out) as List).cast<Map<String, Object?>>();
+        expect(
+          [for (final r in rows) '${r['app']}/${r['platform']}'],
+          [
+            'admin/windows',
+            'admin/macos',
+            'mobile/android',
+            'mobile/ios',
+          ],
+        );
+        // A committed Android / iOS runner has native flavors; a generated
+        // one is told with APP_FLAVOR. Push on: the leg boots only with real
+        // Firebase files.
+        expect(rows[0]['flavor'], '--dart-define=APP_FLAVOR=dev');
+        expect(rows[2]['flavor'], '--flavor dev');
+        expect(rows[0]['boot'], 'test');
+        expect(rows[2]['boot'], 'firebase');
+        expect(rows[1]['os'], 'macos-latest');
+        expect(rows[0]['os'], 'windows-latest');
+        expect(rows[2]['os'], 'ubuntu-latest');
+      },
+    );
+
+    test('an app on neither web nor linux is not in the pr matrix', () async {
+      final result = await run(mobileLike(), ['describe', '--ci-matrix', 'pr']);
+      expect(result, exitsWith(0));
+      expect(result.stdout.trim(), '[]');
+    });
+
+    test(
+      'a value other than pr or full, or with --catalog, is a usage error',
+      () async {
+        final ws = adminLike();
+        expect(
+          await run(ws, ['describe', '--ci-matrix', 'nightly']),
+          exitsWith(64),
+        );
+        expect(await run(ws, ['describe', '--ci-matrix']), exitsWith(64));
+        expect(
+          await run(ws, ['describe', '--catalog', '--ci-matrix', 'pr']),
+          exitsWith(64),
+        );
+        expect(await run(ws, ['verify', '--ci-matrix', 'pr']), exitsWith(64));
+      },
+    );
   });
 
   group('describe --catalog', () {

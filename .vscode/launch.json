@@ -48,6 +48,8 @@
       "program": "lib/main.dart",
       "deviceId": "chrome",
       "args": [
+        "--web-port",
+        "5310",
         "--dart-define-from-file",
         "env.dev",
         "--dart-define",
@@ -62,7 +64,39 @@
       "program": "lib/main.dart",
       "args": [
         "--dart-define-from-file",
-        "env.dev"
+        "env.dev",
+        "--dart-define",
+        "APP_FLAVOR=dev"
+      ]
+    },
+    {
+      "name": "Mobile (Web, Dev)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": [
+        "--web-port",
+        "5320",
+        "--dart-define-from-file",
+        "env.dev",
+        "--dart-define",
+        "APP_FLAVOR=dev"
+      ]
+    },
+    {
+      "name": "Mobile (Linux, Dev)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
+      "deviceId": "linux",
+      "args": [
+        "--dart-define-from-file",
+        "env.dev",
+        "--dart-define",
+        "APP_FLAVOR=dev"
       ]
     }
   ]

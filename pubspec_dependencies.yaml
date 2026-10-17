@@ -66,6 +66,8 @@ dependencies:
 
   # CLI tools (tools/, core_tools): the repo's own gates and generators
   args: "^2.7.0"
+  # tools: sha256 of sqlite3.wasm (composer runners)
+  crypto: "^3.0.7"
   glob: "^2.1.3"
   http: "^1.6.0"
   mustache_template: "^2.0.5"

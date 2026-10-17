@@ -54,6 +54,41 @@ dependencies:
     });
 
     test(
+      'an import in integration_test/ or test_driver/ counts, as the boot '
+      'test makes it (RULE-83)',
+      () async {
+        final ws = workspace({
+          // Only `dependencies:` is audited; a dev dependency (the boot
+          // test's `integration_test`) is never reported, so the case that
+          // can fail is a dependency only those folders import.
+          'pkg/pubspec.yaml':
+              'name: pkg\n'
+              'dependencies:\n'
+              '  boot_dep: any\n'
+              '  driver_dep: any\n'
+              '  unused_dep: any\n'
+              'dev_dependencies:\n'
+              '  integration_test:\n'
+              '    sdk: flutter\n',
+          'pkg/lib/pkg.dart': '',
+          'pkg/integration_test/boot_test.dart':
+              "import 'package:boot_dep/boot_dep.dart';\n"
+              "import 'package:integration_test/integration_test.dart';\n",
+          'pkg/test_driver/integration_test.dart':
+              "import 'package:driver_dep/driver_dep.dart';\n",
+        });
+
+        final run = await check(ws);
+
+        expect(run, exitsWith(2));
+        expect(run.output, contains('- unused_dep'));
+        expect(run.output, isNot(contains('- boot_dep')));
+        expect(run.output, isNot(contains('- driver_dep')));
+        expect(run.output, isNot(contains('- integration_test')));
+      },
+    );
+
+    test(
       'an import in test/ counts; one in another package does not',
       () async {
         final ws = workspace({

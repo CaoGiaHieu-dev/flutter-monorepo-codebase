@@ -84,8 +84,10 @@ final class AppProfile {
               'manifest does not declare (declared: '
               '${_names(facts.platforms.keys)}).',
           action:
-              'Add `${platform.name}:` under `platforms:` in $manifest and '
-              'run `$sync`; or run on a declared platform; or pass '
+              'Add `${platform.name}: { runner: scaffold }` under '
+              '`platforms:` in $manifest, run `$sync` and '
+              '`dart tools/composer/composer.dart runners --app $id`; or run '
+              'on a declared platform; or pass '
               '--dart-define=ALLOW_UNDECLARED_PLATFORM=true for a quick '
               'look.',
         ),
@@ -104,8 +106,8 @@ final class AppProfile {
           action:
               'Add `${flavor.name}:` under `flavors:` in $manifest and run '
               '`$sync`; or build a declared flavor with `--flavor <name>` '
-              '(on the web, which has no `--flavor`: '
-              '`--dart-define=APP_FLAVOR=<name>`).',
+              '(on the web or a generated runner, which have no '
+              '`--flavor`: `--dart-define=APP_FLAVOR=<name>`).',
         ),
       );
     }

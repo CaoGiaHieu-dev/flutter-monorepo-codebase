@@ -2,11 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:core_storage/core_storage.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// `DynamicLogger`'s level number for `LogLevel.WARNING`.
+const _warning = 900;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -200,6 +205,106 @@ void main() {
 
       expect(await secure.read<String>('token'), isNull);
       expect(store.containsKey('token'), isFalse);
+    });
+  });
+
+  group('SecureStorageImpl — memory fallback', () {
+    // Not the first launch, so init's first-run cleanup stays out of the way.
+    const notFirstLaunch = <String, Object>{'firstTimeOpenApp': false};
+
+    PlatformFacts linuxFacts(SecureStoragePolicy policy) => PlatformFacts(
+      runner: RunnerKind.scaffold,
+      splash: SplashMode.native,
+      orientation: OrientationPolicy.free,
+      deepLinks: false,
+      push: false,
+      secureStorage: policy,
+    );
+
+    late List<({int level, String message})> logged;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues(notFirstLaunch);
+      logged = [];
+      DynamicLogger.configure(
+        logHandler: (
+          message, {
+          error,
+          level = 0,
+          name = '',
+          sequenceNumber,
+          stackTrace,
+          time,
+          zone,
+        }) => logged.add((level: level, message: message)),
+      );
+    });
+
+    tearDown(DynamicLogger.reset);
+
+    test(
+      'memory_fallback: init completes, values round-trip in memory and '
+      'nothing reaches the store',
+      () async {
+        final store = _NoSecureStore();
+        final secure = SecureStorageImpl.withStorage(
+          store,
+          platform: linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await secure.init();
+
+        await secure.write('token', 'abc');
+        expect(await secure.read<String>('token'), 'abc');
+        await secure.delete('token');
+        expect(await secure.read<String>('token'), isNull);
+
+        // Only the master-key reads reached the platform: no write, no
+        // delete, and never a read of a value.
+        expect(store.calls.toSet(), {
+          'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        });
+        final fallbackWarnings = logged.where(
+          (l) => l.message.contains('Secure storage is unavailable'),
+        );
+        expect(fallbackWarnings, hasLength(1));
+        expect(fallbackWarnings.single.level, _warning);
+        expect(
+          fallbackWarnings.single.message,
+          allOf(
+            contains('PlatformException'),
+            contains('platforms.<p>.secure_storage'),
+          ),
+        );
+      },
+    );
+
+    test('required: init rethrows and nothing is deleted', () async {
+      final store = _NoSecureStore();
+      final secure = SecureStorageImpl.withStorage(
+        store,
+        platform: linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(
+        store.calls.where((c) => c.startsWith('delete')),
+        isEmpty,
+      );
+      expect(
+        logged.where(
+          (l) => l.message.contains('Secure storage is unavailable'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('the default facts are required, as before', () async {
+      final store = _NoSecureStore();
+      final secure = SecureStorageImpl.withStorage(store);
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
     });
   });
 
@@ -758,6 +863,65 @@ class _Point {
 
   @override
   int get hashCode => Object.hash(x, y);
+}
+
+/// A platform with no secure store at all — a Linux session that runs no
+/// Secret Service: every call fails as a platform error, and each attempt is
+/// recorded as `'<call> <key>'`.
+class _NoSecureStore extends FlutterSecureStorage {
+  final calls = <String>[];
+
+  Never _fail(String call) {
+    calls.add(call);
+    throw PlatformException(
+      code: 'Libsecret error',
+      message: 'Failed to unlock the keyring',
+    );
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('read $key');
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('write $key');
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('delete $key');
+
+  @override
+  Future<void> deleteAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('deleteAll');
 }
 
 /// Delegates to the mock platform, but throws a [PlatformException] — what a

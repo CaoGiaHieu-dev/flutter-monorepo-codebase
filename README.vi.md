@@ -192,7 +192,6 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── .gitignore                     # Code sinh tự động, secret, output build
 ├── analysis_options.yaml          # Lint cho cả workspace — file duy nhất (RULE-71)
 ├── azure-ci-cd.yml                # Pipeline Azure DevOps
-├── CHANGELOG.md                   # Thay đổi đáng chú ý theo từng bản phát hành (Keep a Changelog)
 ├── CLAUDE.md                      # Bản tóm lược cho Claude Code — luật nằm ở docs/vi/reference/01_rules.md
 ├── CODE_OF_CONDUCT.md             # Contributor Covenant 2.1
 ├── CONTRIBUTING.md                # Cài đặt, commit, các bước kiểm tra trước PR, hợp đồng tài liệu
@@ -668,7 +667,6 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Cài đặt, quy ước nhánh/commit, các bước kiểm tra trước khi mở PR (tiếng Anh) |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 và cách báo cáo vi phạm quy tắc ứng xử |
 | [SECURITY.md](SECURITY.md) | Phiên bản được hỗ trợ và cách báo cáo lỗ hổng bảo mật một cách riêng tư |
-| [CHANGELOG.md](CHANGELOG.md) | Thay đổi đáng chú ý theo từng bản phát hành (Keep a Changelog, tag SemVer `vX.Y.Z`) |
 | [LICENSE](LICENSE) | Giấy phép BSD 3-Clause |
 
 ---

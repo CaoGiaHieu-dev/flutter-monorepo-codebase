@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/01_setup.md@8240431 -->
+<!-- translated-from: docs/en/getting-started/01_setup.md@fddda5f -->
 # 01 · Cài đặt & Chạy lần đầu
 
 **Trang này trả lời:** cần cài gì, và gõ đúng những lệnh nào để đi từ `git clone` đến lúc app chạy được?
@@ -456,7 +456,6 @@ Tên package Dart (`codebase` ở gốc, hai app `mobile_app` và `admin_app`, m
 | `.github/CODEOWNERS` | mọi `@your-org/<team>`: GitHub âm thầm bỏ qua team không tồn tại, nên rule trông như có hiệu lực mà thật ra không |
 | `.github/ISSUE_TEMPLATE/config.yml` | ba link `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` |
 | `LICENSE`, tiêu đề và chân trang của `README.md` / `README.vi.md`, `CLAUDE.md` | tên tác giả và tên dự án |
-| `CHANGELOG.md` | link `[Unreleased]` ở cuối, và lịch sử riêng của template |
 | `tools/code_review/` | tên dự án trong `review_prompt.md` và chân trang báo cáo trong `lib/services/language_service.dart` (phần AI review tuỳ chọn). Ngôn ngữ báo cáo mặc định là `en` (`reportLanguage` trong `code_review_config.json`; `.github/workflows/code_review.yml` dùng nó cho pull request) |
 | `.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml` | các label `bug`, `enhancement` và `triage` phải tồn tại trong repository của bạn; hãy tạo chúng, hoặc sửa `labels:` — một label không tồn tại thì không được gắn |
 | `azure-ci-cd.yml` | tên pool `codebase`: một pool self-hosted do bạn tạo (chỉ khi dùng Azure) |

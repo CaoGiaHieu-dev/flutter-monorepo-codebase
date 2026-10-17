@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/operations/02_fastlane_release.md@1879db7 -->
+<!-- translated-from: docs/en/operations/02_fastlane_release.md@fddda5f -->
 # Fastlane & Phát hành
 
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.
@@ -423,7 +423,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 - [ ] `Config.yaml` đầy đủ; các file JSON/`.p8` credential có mặt đúng đường dẫn đã cấu hình
 - [ ] `flutter analyze` sạch và test các package pass — `pr_quality_check.yml` chặn ở PR, nhưng các pipeline phát hành thì không (xem [`01_cicd.md`](01_cicd.md#6-quality-gate))
 - [ ] `flavors.prod.ssl_pinning` trong manifest của app chứa pin thật nếu bản build này chạy với traffic production — các app mẫu khai `disabled` kèm lý do, tức traffic không được pin
-- [ ] Đã viết changelog
+- [ ] Đã viết ghi chú phát hành cho store ("What's new")
 - [ ] Build number không trùng với bản release đã có
 
 ---

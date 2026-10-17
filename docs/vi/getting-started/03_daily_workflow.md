@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/03_daily_workflow.md@d109d3f -->
+<!-- translated-from: docs/en/getting-started/03_daily_workflow.md@8240431 -->
 # 03 · Vòng lặp làm việc hàng ngày
 
 **Trang này trả lời:** khi nào thì gõ lệnh nào? Bỏ qua thì hỏng chuyện gì?
@@ -17,6 +17,7 @@
         ├─ có thêm/đổi tên/xoá file trong lib/?  ──► dart tools/barrel_generator/generate.dart <pkg>/lib
         │
         ├─ có sửa app_manifest.yaml?  ──► dart tools/composer/composer.dart sync
+        │       └─ thêm một platform, hoặc nâng Flutter?  ──► dart tools/composer/composer.dart runners --app <id> [--force]
         │
         ├─ có sửa pubspec_dependencies.yaml?  ──► dart tools/dependency_sync.dart
         │
@@ -167,7 +168,7 @@ Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Vòng
 Import thiếu khai báo bị `arch_check` (R5) bắt; unused checker lo chiều ngược lại.
 
 > [!CAUTION]
-> `flutter analyze` **không** bắt được lỗi thứ tự DI (RULE-13): một `@Singleton` eager phụ thuộc type do module chạy *sau* đăng ký vẫn compile bình thường rồi ném `not registered` lúc khởi động. Vòng lặp Gate 3 bắt được nó — `test/di_smoke_test.dart` của mỗi app boot đồ thị thật cho mọi flavor và dựng mọi factory (RULE-63). Khi nó fail, [../guides/05_di.md](../guides/05_di.md) § 8 chỉ cách đọc các file sinh ra để tìm thủ phạm.
+> `flutter analyze` **không** bắt được lỗi thứ tự DI (RULE-13): một `@Singleton` eager phụ thuộc type do module chạy *sau* đăng ký vẫn compile bình thường rồi ném `not registered` lúc khởi động. Vòng lặp Gate 3 bắt được nó — `test/di_smoke_test.dart` của mỗi app boot đồ thị thật cho mọi platform đã khai trừ web, nhân với mọi flavor, và dựng mọi factory (RULE-63). Khi nó fail, [../guides/05_di.md](../guides/05_di.md) § 8 chỉ cách đọc các file sinh ra để tìm thủ phạm.
 
 ### Tuỳ chọn: chứng minh app vẫn build được
 
@@ -177,6 +178,28 @@ Phân tích tĩnh sạch không có nghĩa là build Android sạch (lỗi Gradl
 cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
+
+### Chạy và boot web và desktop
+
+Runner web và desktop được sinh (`configure.dart` ghi chúng; `dart tools/composer/composer.dart runners --app <id>` sinh lại), nên chúng nhận flavor qua một define, không phải `--flavor`. Một cổng web cố định giữ nguyên vùng lưu trữ của trình duyệt giữa các lần chạy — admin 5310, mobile 5320:
+
+```bash
+cd apps/mobile
+flutter run -d chrome --web-port 5320 --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+flutter run -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+```
+
+Một thay đổi chạm vào một platform — boot của shell, storage, database, một runner, composer — chạy boot test của từng platform nó chạm (RULE-83). Nó đợi đến khi màn hình đầu tiên được vẽ, nên nó fail trên một trang trắng mà mọi unit test đều qua:
+
+```bash
+cd apps/mobile
+flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart \
+  -d web-server --browser-name=chrome --headless --chrome-binary=<chrome> \
+  --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+```
+
+Boot web cần một chromedriver cùng bản build với Chrome đó ở cổng 4444; boot Linux cần một màn hình và một Secret Service. Cả hai, và công thức cho CI, nằm ở [`../guides/13_app_composition.md` § 7](../guides/13_app_composition.md#chạy-và-boot-một-platform).
 
 ---
 
@@ -190,6 +213,8 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Sửa tay một `app_manifest.yaml`, hoặc một vùng `composer:managed`, mà không chạy sync | `composer verify` báo lỗi (Gate 0) | Chỉ sửa manifest, rồi `dart tools/composer/composer.dart sync` (RULE-16) |
 | Chạy `pub get` bên trong package con | Xuất hiện `pubspec.lock` lạc chỗ | Xoá chúng đi, chạy `flutter pub get` tại root |
 | Chạy `flutter build apk` từ gốc repo | `Target file "lib\main.dart" not found` | `cd apps/mobile` trước |
+| Nêu flavor bằng `--flavor` trên web hoặc một runner được sinh | Web không có tuỳ chọn `--flavor`; runner được sinh không có native flavor để chọn | `--dart-define=APP_FLAVOR=<flavor>`, như CI làm trên mọi runner được sinh |
+| Chạy `flutter run -d chrome` mà không có `--web-port` | Mỗi lần chạy là một lần khởi chạy đầu tiên: vùng lưu trữ của trình duyệt thuộc về origin | `--web-port 5310` (admin) hoặc `5320` (mobile) |
 | Hardcode version trong pubspec của package | `dependency_sync --check` báo lỗi | Đưa version về `pubspec_dependencies.yaml`, sync lại |
 | Import package mà không khai báo | Compile được cục bộ (workspace dùng chung `package_config.json`), gãy khi tách package | Khai vào `pubspec.yaml` của package đó (`dependencies:`, không phải `dev_dependencies:`); kiểm tra bằng `dart tools/arch_check/check.dart` (R5). Unused checker lo chiều ngược lại — khai mà không import |
 | Đăng ký controller màn hình là singleton | State rò rỉ giữa các lần mở màn hình | Controller của feature là `@injectable` (RULE-10) — xem [../guides/05_di.md](../guides/05_di.md) |

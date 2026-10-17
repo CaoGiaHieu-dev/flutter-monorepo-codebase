@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/01_setup.md@37796af -->
+<!-- translated-from: docs/en/getting-started/01_setup.md@8240431 -->
 # 01 · Cài đặt & Chạy lần đầu
 
 **Trang này trả lời:** cần cài gì, và gõ đúng những lệnh nào để đi từ `git clone` đến lúc app chạy được?
@@ -16,6 +16,10 @@
 | JDK | **17 trở lên** (build được trên 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` là mức bytecode đích, không phải giới hạn trên |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
+| Chrome | chỉ để chạy hoặc boot một app trên **web** | boot test điều khiển nó qua một chromedriver cùng bản build |
+| Toolchain desktop Linux | chỉ cho **Linux**: `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev`, và một Secret Service đang chạy (gnome-keyring, KWallet) | các package mà CI cài (`.github/workflows/pr_quality_check.yml`, job `platforms`); không có Secret Service thì các giá trị secure nằm trong bộ nhớ suốt lần chạy ([`06_storage.md`](../guides/06_storage.md)) |
+| Visual Studio 2022 | chỉ cho **Windows**: workload "Desktop development with C++" kèm thành phần ATL | bản build Windows của `flutter_secure_storage` cần ATL |
+| Xcode | chỉ cho desktop **macOS** (và CocoaPods cho iOS của `apps/mobile`) | — |
 | Ruby ≥ 3.2 | chỉ cần cho Fastlane | `bundle install` ghi `Gemfile.lock` (bị git bỏ qua); xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, một tài khoản Google, một Firebase project | chỉ cần cho cấu hình Firebase **thật** (§3) | Firebase CLI là một package npm; nếu dùng stub ở §3 thì bỏ qua cả ba |
 
@@ -69,6 +73,7 @@ dart tools/workspace_setup/configure.dart
 4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings.
 5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì app không có barrel. Trên một bản clone mới bước này không đổi gì: các barrel đã được commit.
+7. `dart tools/composer/composer.dart runners` — runner của mọi platform mà một app khai `runner: scaffold` (runner web và desktop của `apps/admin`, `web/` và `linux/` của `apps/mobile`): `flutter create` trong một thư mục tạm, `flutter pub get`, rồi một bộ patch nhỏ (entitlement network của macOS; `sqlite3.wasm` và `drift_worker.js` cho database web của mobile). git bỏ qua chúng (RULE-83). Bước này cần mạng một lần, cho `sqlite3.wasm`; `--no-runners` bỏ qua nó (build chỉ Android, máy offline), và `dart tools/composer/composer.dart runners` ghi chúng sau.
 
 Script tự dùng `fvm` nếu máy bạn đã cài sẵn. Không có bản bọc `configure.sh` hay `configure.bat`, vì một script Dart chạy y hệt nhau trên mọi nền tảng.
 
@@ -109,9 +114,9 @@ Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** 
 Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Khi chưa có chúng, `flutter analyze` báo:
 
 ```
-error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:4:8 • uri_does_not_exist
-error • Target of URI doesn't exist: 'firebase_options_prod.dart' • apps/mobile/lib/firebase/firebase_module.dart:5:8 • uri_does_not_exist
-error • Target of URI doesn't exist: 'firebase_options_staging.dart' • apps/mobile/lib/firebase/firebase_module.dart:6:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:5:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_prod.dart' • apps/mobile/lib/firebase/firebase_module.dart:6:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_staging.dart' • apps/mobile/lib/firebase/firebase_module.dart:7:8 • uri_does_not_exist
 ```
 
 Có hai lối ra: dùng Firebase project thật (§3.1), hoặc dùng stub chỉ để biên dịch (§3.2).
@@ -283,14 +288,20 @@ Một app đọc những key nào, và flavor nào phải có chúng khác rỗn
 Cả `flutter run` lẫn `flutter build` đều phải gọi **từ `apps/mobile/`**. Thư mục gốc workspace không có project `android/` hay `ios/`, nên chạy `-t apps/mobile/lib/main.dart` từ root không thể chạy được.
 
 > [!NOTE]
-> **`apps/mobile` chỉ dành cho Android + iOS.** Nó không commit runner `linux/`, `macos/`,
-> `windows/` hay `web/`, nên `flutter run -d linux` hoặc `flutter build linux` ở đó dừng với
-> *No Linux desktop project configured*. Muốn build desktop, hãy dùng app thứ hai:
-> [`apps/admin/README.md`](../../../apps/admin/README.md) sinh runner desktop cho nó và chạy nó.
-> Muốn thêm một nền tảng còn thiếu cho một app, chạy `flutter create --platforms=linux .` (hoặc
-> `macos`, `windows`) **bên trong thư mục của app đó** — không bao giờ ở gốc workspace — rồi xoá
-> `test/widget_test.dart` và `analysis_options.yaml` mà lệnh này sinh ra, như README đó giải thích.
-> Chạy desktop vẫn nhận `--flavor`, dù repo này chỉ cấu hình flavor ở phía native cho Android và iOS; còn **web** hoàn toàn không có tuỳ chọn `--flavor` — hãy truyền `--dart-define=APP_FLAVOR=<flavor>` ở đó (công cụ Flutter từ chối `FLUTTER_APP_FLAVOR`, tên riêng của framework; shell chỉ đọc `APP_FLAVOR` trên web). Một app khai các platform nó chạy trong manifest (`platforms:`), và `describe --app <id>` in đúng dòng `flutter create` cho từng platform còn chờ được tạo.
+> **`apps/mobile` chạy trên Android, iOS, web và Linux.** Runner `android/` và `ios/` của nó được
+> commit, kèm native flavor; runner `web/` và `linux/` của nó do bước 7 của `configure.dart` sinh và
+> git bỏ qua, như mọi runner của `apps/admin` (web, macOS, Windows, Linux).
+> Một runner được sinh không có native flavor, nên hãy nêu flavor bằng `--dart-define=APP_FLAVOR=<flavor>`
+> thay cho `--flavor` (công cụ Flutter từ chối `FLUTTER_APP_FLAVOR`, tên riêng của framework; shell
+> đọc `APP_FLAVOR` ở nơi công cụ không đặt flavor). Hãy giữ cổng web cố định — `localStorage` và
+> IndexedDB thuộc về origin, nên một cổng mới là một lần khởi chạy đầu tiên:
+>
+> `flutter run -d chrome --web-port 5320 --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev` (admin: 5310)
+> · `flutter run -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev`
+>
+> Một app khai các platform nó chạy trong manifest (`platforms:`); để thêm, eject hay gỡ một platform,
+> và để boot nó như CI làm, xem [`13_app_composition.md` § 7](../guides/13_app_composition.md#7-công-thức).
+> Không bao giờ chạy `flutter create` ở gốc workspace.
 
 ### Từ dòng lệnh
 
@@ -384,7 +395,7 @@ Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <appli
 
 ### Từ VS Code
 
-`.vscode/launch.json` đã định nghĩa sẵn năm cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)** cho `apps/mobile`, và **Admin (Web, Dev)**, **Admin (Desktop, Dev)** cho `apps/admin`. Chọn một trong panel Run and Debug. Các cấu hình App tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project); các cấu hình Admin chạy `apps/admin/lib/main.dart` với `env.dev` của nó, trên Chrome hoặc trên desktop, và cần runner `web/` hay desktop tương ứng đã được scaffold trước: công thức nằm trong [`apps/admin/README.md`](../../../apps/admin/README.md).
+`.vscode/launch.json` đã định nghĩa sẵn bảy cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)**, **Mobile (Web, Dev)** và **Mobile (Linux, Dev)** cho `apps/mobile`, và **Admin (Web, Dev)**, **Admin (Desktop, Dev)** cho `apps/admin`. Chọn một trong panel Run and Debug. Các cấu hình App tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project); các cấu hình web và desktop truyền `env.dev` và `--dart-define APP_FLAVOR=dev`, các cấu hình web dùng một cổng cố định (admin 5310, mobile 5320), và cần các runner được sinh mà `configure.dart` ghi (hoặc `dart tools/composer/composer.dart runners --app <id>`).
 
 ---
 
@@ -402,6 +413,7 @@ Nếu `flutter analyze` chưa sạch:
 | `Target of URI doesn't exist: 'firebase_options_dev.dart'` (và `_prod`, `_staging`) trong `firebase_module.dart` | Thiếu các file Firebase options bị gitignore | [Bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được), dùng file thật hoặc stub |
 | `Target of URI doesn't exist` cho một file dưới `lib/src/gen/`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` | gen-l10n chưa chạy: các barrel export output bị gitignore của nó | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `flutter gen-l10n` trong package báo lỗi) |
 | `Undefined class '_$…'`, không tìm thấy `… .g.dart` / `.freezed.dart` / `.module.dart` | build_runner chưa chạy hoặc đã cũ | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `dart run build_runner build --workspace` nếu đã setup một lần) |
+| `configure.dart` dừng ở bước cuối của nó, `composer runners`, nêu tên một `flutter create` hay `flutter pub get` thất bại | Không có mạng, hoặc một Flutter SDK chưa bật platform đó (`flutter config`) | Sửa nguyên nhân rồi chạy lại `dart tools/composer/composer.dart runners` — nó sửa phần còn thiếu; hoặc `configure.dart --no-runners` khi bạn chỉ build Android |
 
 ---
 
@@ -424,7 +436,7 @@ Template được phát hành với các tên giữ chỗ, và vài định danh
 | Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo). Trên iOS, các build configuration có flavor dùng bộ icon riêng — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` trong `Runner/Assets.xcassets`, do `icons_launcher` ghi từ yaml của từng flavor — qua `ASSETCATALOG_COMPILER_APPICON_NAME` trong `project.pbxproj`; các configuration không có flavor giữ `AppIcon` mặc định. Vì vậy một ảnh đã đổi chỉ tới được build iOS qua một flavor |
 | Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb` — giữ cùng các key ở cả hai file (`arch_check` R21). Splash không có chữ |
 
-`apps/admin` chưa có project native. Khi tạo runner cho nó ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)), hãy truyền reverse domain của bạn cho `flutter create --org` thay vì `com.example`.
+Mọi runner được sinh lấy application hay bundle ID từ `app.org` trong manifest của app (`com.example` như được phát hành): hãy đặt reverse domain của bạn ở đó, rồi sinh lại bằng `dart tools/composer/composer.dart runners --app <id> --force` ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)).
 
 ### 8.2 Những tên nên để nguyên
 

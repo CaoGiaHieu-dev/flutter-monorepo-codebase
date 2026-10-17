@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/06_app_shell.md@b455ad2 -->
+<!-- translated-from: docs/en/architecture/06_app_shell.md@8240431 -->
 # App Shell (`platform/shell/` + `apps/<id>/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cho shell, và hiểu vì sao thứ tự các nhóm DI trong `app_manifest.yaml` không hề tuỳ tiện.
@@ -26,7 +26,10 @@ apps/mobile/                         điểm lắp ráp
 │   ├── di/injection.dart            do composer sinh — không bao giờ sửa tay
 │   └── firebase/firebase_module.dart FirebaseOptions của app này (file options bị git-ignore)
 ├── test/                            di_smoke_test.dart, app_profile_test.dart, boot_undeclared_platform_test.dart
-├── android/  ios/  fastlane/        project native và lane phát hành
+├── integration_test/boot_test.dart  main() trên thiết bị, cho đến khi màn hình đầu tiên được vẽ (RULE-83)
+├── test_driver/integration_test.dart  driver mà `flutter drive` chạy boot web qua
+├── android/  ios/  fastlane/        project native đã commit và lane phát hành
+├── web/  linux/                     do `composer runners` sinh, bị git-ignore (vùng `runners` của .gitignore)
 └── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
 
 platform/shell/app_shell/lib/              dùng chung cho mọi app
@@ -35,6 +38,7 @@ platform/shell/app_shell/lib/              dùng chung cho mọi app
     ├── bootstrap.dart               runShellApp — error hook, kiểm tra profile, DI, splash, init
     ├── shell_hooks.dart             ShellHooks — code của app tại các điểm cố định của quá trình boot
     ├── boot/boot_error_app.dart     màn hình hiện ra khi boot bị dừng
+    ├── boot/boot_stage.dart         BootStage, debugBootStage() — thứ boot test đợi
     ├── composition/                 shell_contracts.dart (ShellContract), composition_check.dart (checkAppContract), factory_check.dart
     ├── main_scope.dart              splash → init → chuyển sang root
     ├── root_app.dart                MaterialApp có router
@@ -66,7 +70,7 @@ platform/foundation/kernel/lib/src/profile/   những gì một app khai báo (p
 
 ### App thứ hai: `apps/admin`
 
-[`apps/admin`](../../../apps/admin/README.md) là cùng shell này ghép một tập con khác — `auth` và `settings`, không có dashboard, splash, onboarding, home hay Firebase — trên các platform khác: web và desktop, chưa cái nào được tạo (`runner: scaffold`). `lib/` của nó là `main.dart`, `app/` và `di/injection.dart` được sinh ra. Sáu contract tuỳ chọn — `dashboard`, `entry`, `post_sign_in`, `splash`, `error_reporter`, `analytics` — không có đóng góp nào ở đó và được khai là `absent` kèm lý do trong manifest của nó, nên các fallback mô tả bên dưới có một bản ghép thật dựa vào chúng; smoke test của nó boot graph cho mọi flavor. CI không build binary nào của nó.
+[`apps/admin`](../../../apps/admin/README.md) là cùng shell này ghép một tập con khác — `auth` và `settings`, không có dashboard, splash, onboarding, home hay Firebase — trên các platform khác: web, macOS, Windows và Linux, mọi runner đều do `composer runners` sinh và git bỏ qua (`runner: scaffold`). `lib/` của nó là `main.dart`, `app/` và `di/injection.dart` được sinh ra. Sáu contract tuỳ chọn — `dashboard`, `entry`, `post_sign_in`, `splash`, `error_reporter`, `analytics` — không có đóng góp nào ở đó và được khai là `absent` kèm lý do trong manifest của nó, nên các fallback mô tả bên dưới có một bản ghép thật dựa vào chúng; smoke test của nó boot graph trên từng platform desktop cho mọi flavor, và boot test của nó chạy trên web và Linux ở mọi PR và trên macOS và Windows trong `platforms_full.yml`.
 
 ---
 
@@ -83,7 +87,7 @@ sequenceDiagram
     participant DI as configureDependencies()
     participant C as checkAppContract()
     participant S as MainScope.run()
-    participant N as FlutterNativeSplash
+    participant N as WidgetsBinding
     participant I as AppInitializer.init()
     participant R as RootApp / AppRouter
 
@@ -103,12 +107,11 @@ sequenceDiagram
     M->>S: MainScope(splashScreen, root, initService).run()
 
     alt splashScreen == null (iOS, hoặc không ghép splash)
-        S->>N: preserve()
+        S->>N: deferFirstFrame()
         S->>I: await initService()
-        S->>N: remove()
+        S->>N: allowFirstFrame()  (in finally: on a throw too)
         S->>R: runApp(root)
     else splashScreen != null
-        S->>N: remove()
         S->>S: runApp(AppMaterialWrapper(home: splash))
         S->>S: await endOfFrame
         S->>I: await initService()
@@ -137,7 +140,7 @@ Trình tự này nằm trong `runShellApp()` ([`platform/shell/app_shell/lib/src
 
 Một `AppProfile` ([`lib/src/profile/` của `platform_kernel`](../../../platform/foundation/kernel/lib/src/profile/)) là đối tượng duy nhất nói app là gì. Nó có hai nửa, đến từ hai file trong `apps/<id>/`:
 
-- **`facts`** — `AppFacts`, được **sinh** từ `app_manifest.yaml` vào vùng `facts` của `lib/app/app_profile.dart`: `id` và `name` của app; các `flavors`; các `platforms` nó chạy trên, mỗi platform kèm một `PlatformFacts` (runner, chế độ splash, chính sách hướng màn hình, deep link, push, cửa sổ desktop); các key `--dart-define` nó đọc (`EnvRule`, kèm các flavor bắt buộc có key đó); một khai báo `capabilities` cho mọi contract tuỳ chọn mà shell resolve — `CapabilityExpectation.provided()`, hoặc `.absent(reason)`; và một quyết định certificate pinning cho mỗi flavor — `SslPinning.pinned(leaf, backup)` hoặc `SslPinning.disabled(reason)`. Đây là những gì một gate phải đọc được trước khi có bất kỳ code nào được biên dịch, nên chúng nằm trong manifest.
+- **`facts`** — `AppFacts`, được **sinh** từ `app_manifest.yaml` vào vùng `facts` của `lib/app/app_profile.dart`: `id` và `name` của app; các `flavors`; các `platforms` nó chạy trên, mỗi platform kèm một `PlatformFacts` (runner, chế độ splash, chính sách hướng màn hình, deep link, push, chính sách secure-storage, cửa sổ desktop); các key `--dart-define` nó đọc (`EnvRule`, kèm các flavor bắt buộc có key đó); một khai báo `capabilities` cho mọi contract tuỳ chọn mà shell resolve — `CapabilityExpectation.provided()`, hoặc `.absent(reason)`; và một quyết định certificate pinning cho mỗi flavor — `SslPinning.pinned(leaf, backup)` hoặc `SslPinning.disabled(reason)`. Đây là những gì một gate phải đọc được trước khi có bất kỳ code nào được biên dịch, nên chúng nằm trong manifest.
 - **các phần (section)** — `display` (`DisplayProfile`: khung thiết kế, chính sách scale của từng lớp cửa sổ, trần cỡ chữ của hệ điều hành), `router` (`RouterProfile`: khi nào dùng entry location, vị trí fallback), `locale` (`LocaleProfile`), `theme` (`ThemeProfile`) và `network` (`NetworkProfile`), viết tay dưới dạng Dart `const` có kiểu bên dưới vùng được sinh. Mỗi phần ghi rõ mặc định và khoảng giá trị của nó, và phần nào bỏ qua thì là hành vi của template.
 
 ```dart
@@ -173,7 +176,7 @@ void runShellApp({
 | `C11` | Một vị trí mà shell điều hướng tới — `RouterProfile.fallbackPath`, `path` của một tab, hay path của `ISignInLocation`, `IPostSignInLocation` hoặc `IAppEntryLocation` — không phải route mà router đã lắp ráp có đăng ký (nó sẽ mở trang not-found) |
 | `C12` | hai tab điều hướng trở lên mà không có `IDashboardRouteModule` — không có chrome để chuyển giữa chúng |
 
-Mỗi vấn đề là một `ProfileProblem`: một `code`, một `Description:` nêu tên file và key trong manifest, và một `Action:` có thể dán nguyên xi khi đó là một dòng YAML hay một lệnh. **Nơi nó hiện ra tuỳ thuộc vào bản build.** Ở flavor dev hoặc staging, hoặc bản build debug hay profile, màn hình boot-error (`BootErrorApp` — một app tối giản không cần DI, router hay theme provider, vì chưa cái nào tồn tại) liệt kê đầy đủ mọi vấn đề, và một sai lệch phát hiện sau DI cũng dừng boot theo cách đó. Ở bản release production, vấn đề phát hiện trước DI chỉ hiện một thông báo chung, còn sai lệch phát hiện sau DI được log mức `ERROR` và báo cáo là non-fatal (`onNonFatalError`, rồi `IErrorReporter`) trong khi app vẫn khởi động — một module đã bị gỡ vẫn phải chạy được (RULE-05). Bản release không bao giờ là nơi gặp sai lệch đầu tiên: smoke test của mỗi app gọi `checkAppContract` cho mọi flavor (RULE-63), nên CI làm PR fail trước khi có bản release. Một lần boot *ném lỗi* (bước 10 ở trên) là trường hợp khác với một khai báo sai: nó dùng cùng màn hình đó với mã vấn đề `B01` và nút Retry, và hiện nội dung lỗi theo cùng quy tắc — đầy đủ ở nơi diagnostics được hiện, một thông báo chung ở bản release production.
+Mỗi vấn đề là một `ProfileProblem`: một `code`, một `Description:` nêu tên file và key trong manifest, và một `Action:` có thể dán nguyên xi khi đó là một dòng YAML hay một lệnh. **Nơi nó hiện ra tuỳ thuộc vào bản build.** Ở flavor dev hoặc staging, hoặc bản build debug hay profile, màn hình boot-error (`BootErrorApp` — một app tối giản không cần DI, router hay theme provider, vì chưa cái nào tồn tại) liệt kê đầy đủ mọi vấn đề, và một sai lệch phát hiện sau DI cũng dừng boot theo cách đó. Ở bản release production, vấn đề phát hiện trước DI chỉ hiện một thông báo chung, còn sai lệch phát hiện sau DI được log mức `ERROR` và báo cáo là non-fatal (`onNonFatalError`, rồi `IErrorReporter`) trong khi app vẫn khởi động — một module đã bị gỡ vẫn phải chạy được (RULE-05). Bản release không bao giờ là nơi gặp sai lệch đầu tiên: smoke test của mỗi app gọi `checkAppContract` cho mọi platform đã khai trừ web và mọi flavor (RULE-63), nên CI làm PR fail trước khi có bản release. Một lần boot *ném lỗi* (bước 10 ở trên) là trường hợp khác với một khai báo sai: nó dùng cùng màn hình đó với mã vấn đề `B01` và nút Retry, và hiện nội dung lỗi theo cùng quy tắc — đầy đủ ở nơi diagnostics được hiện, một thông báo chung ở bản release production.
 
 `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` là cách để lập trình viên chạy thử nhanh trên một platform manifest không liệt kê: `P01` trở thành một cảnh báo được log và platform đó nhận `PlatformFacts.today()`, tức mặc định của template. Nó không bỏ qua cho một flavor chưa khai báo.
 
@@ -203,7 +206,7 @@ Các dòng **bắt buộc** do chính các package của shell đăng ký — nh
 | `dashboard` | `IDashboardRouteModule` | tuỳ chọn | các destination hiển thị không có khung chrome — với hai tab trở lên, không tab nào sau tab đầu truy cập được (`C12`) |
 | `entry` | `IAppEntryLocation` | tuỳ chọn | không có điểm vào lần đầu; boot đi thẳng tới bước kiểm tra đăng nhập |
 | `post_sign_in` | `IPostSignInLocation` | tuỳ chọn | sau khi đăng nhập router mở fallback của nó, tab đầu tiên |
-| `splash` | `IAppSplashScreen` | tuỳ chọn | splash native được giữ suốt quá trình boot |
+| `splash` | `IAppSplashScreen` | tuỳ chọn | frame đầu được giữ đến khi boot xong: màn hình khởi chạy native trên Android và iOS, một trang hay cửa sổ trống ở nơi khác |
 | `tree_wrappers` | `IAppTreeWrapper` | tuỳ chọn, gom nhiều | cây widget được dựng không có wrapper |
 | `localization` | `IFeatureLocalization` | tuỳ chọn, gom nhiều | chỉ chuỗi của chính `core_base_ui` được dịch |
 | `error_reporter` | `IErrorReporter` | tuỳ chọn | lỗi được in ra và không gửi đi đâu (RULE-67) |
@@ -274,24 +277,27 @@ Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: st
 `runShellApp` chọn splash theo nền tảng, và lấy nó từ module nào đã đăng ký `IAppSplashScreen` — ở app mẫu là `feature_splash`:
 
 ```dart
-// The platform's declared `splash` decides — iOS keeps its native splash
-// for the whole boot by default, so no Dart splash is built there.
+// The platform's declared `splash` decides — iOS keeps its native launch
+// screen for the whole boot by default, so no Dart splash is built there.
+// `SplashMode.native` holds the first frame until boot ends: the launch
+// screen stays up on Android and iOS, and on the web and the desktop
+// nothing is painted meanwhile.
 final platformFacts =
     profile.facts.platformFor(runtime.platform) ??
     const PlatformFacts.today();
 final usesDartSplash = platformFacts.splash == SplashMode.dart;
 // ...
-splashScreen: usesDartSplash
-    ? getItOrNull<IAppSplashScreen>()?.build()
-    : null,
+  splashScreen: usesDartSplash
+      ? getItOrNull<IAppSplashScreen>()?.build()
+      : null,
 ```
 
 `platforms.<p>.splash` trong manifest là `dart` hoặc `native`; bỏ qua thì mặc định là `native` trên iOS và, ở nơi khác, là `dart` khi app khai báo capability `splash` là `provided`, còn không là `native` (`composer verify` từ chối `dart` khi thiếu capability đó, V5).
 
 | `splashScreen` | Hành vi |
 |:--|:--|
-| `null` (`splash: native`, hoặc không ghép splash nào) | Splash native được **giữ lại** suốt quá trình init rồi mới gỡ. Không có splash Dart nào được vẽ. Đây là mặc định của iOS. |
-| `IAppSplashScreen.build()` (`splash: dart`) | Splash native gỡ ngay lập tức; splash đã đăng ký được vẽ thay thế, rồi mờ dần sang `RootApp` qua `AnimatedSwitcher`. |
+| `null` (`splash: native`, hoặc không ghép splash nào) | Frame đầu được **giữ** (`WidgetsBinding.deferFirstFrame()`) suốt quá trình init và được nhả trong một `finally` (`allowFirstFrame()`), nên một lần boot thất bại vẫn tới được màn hình lỗi của nó. Trong lúc đó màn hình khởi chạy native vẫn hiện trên Android và iOS; trên web và desktop không có gì được vẽ cho đến lúc ấy. Không có splash Dart nào được vẽ. Đây là mặc định của iOS. |
+| `IAppSplashScreen.build()` (`splash: dart`) | Không có gì bị giữ: splash đã đăng ký là frame đầu, rồi mờ dần sang `RootApp` qua `AnimatedSwitcher`. |
 
 Cả hai đường chỉ chờ `initService()` và không chờ gì khác: splash hiện đúng bằng thời gian khởi tạo, không có mức tối thiểu nhân tạo nào. Khởi tạo kết thúc bằng việc khôi phục phiên đã lưu (bước 8), tối đa `NetworkProfile.connectTimeout`.
 
@@ -299,7 +305,9 @@ Cả hai đường chỉ chờ `initService()` và không chờ gì khác: splas
 > `SplashPage` do `MainScope` hiển thị, **không** phải do GoRouter. Nó không có route và không bao giờ xuất hiện trong ngăn xếp điều hướng.
 
 > [!NOTE]
-> **Web:** `MainScope` không bao giờ gọi `FlutterNativeSplash.remove()` trên web — chưa app nào ở đây sinh splash web, nên plugin không có phần web và lệnh gọi sẽ ném `PlatformException(… removeSplashFromWeb …)`, đẩy lỗi tới `IErrorReporter` ở mỗi lần mở.
+> **Không plugin splash, không nhánh.** `FlutterNativeSplash.preserve()` và `remove()` chính xác là `deferFirstFrame()` và `allowFirstFrame()` ngoài web, nên `MainScope` tự gọi binding và `platform_app_shell` không phụ thuộc `flutter_native_splash`. Plugin vẫn *sinh* các màn hình khởi chạy native (`dart tools/theme_generator/theme_setting.dart`); ba file `flutter_native_splash-*.yaml` ở gốc đặt `web: false`, vì sẽ không có gì gỡ một splash HTML. Web từng bỏ qua bước nhả sau một guard `kIsWeb` và nằm lại thành một trang trắng — lỗi mà boot test sinh ra để bắt.
+
+**Đã build không có nghĩa là đã hiện.** Khi frame đầu bị giữ, cả một app có thể được build và layout mà không bao giờ được vẽ: `find.byType(RootApp)` và post-frame callback đều qua với một trang trắng. `debugBootStage()` (`platform/shell/app_shell/lib/src/boot/boot_stage.dart`) phân biệt được chúng — `shown` khi `RootApp` đã mount và `RendererBinding.sendFramesToEngine` là true, `failed` khi một màn hình lỗi boot đang hiện, `starting` ở mọi trường hợp còn lại — và `integration_test/boot_test.dart` của mỗi app đợi `shown` trên một thiết bị thật của từng platform (RULE-83). `platform/shell/app_shell/test/main_scope_first_frame_test.dart` giữ việc giữ và nhả; `boot_stage_test.dart` giữ ba stage.
 
 ### `_ResponsiveWrapper`
 
@@ -396,7 +404,7 @@ Package mở database phải chạy sau mọi thứ đóng góp migration cho n�
 
 ### Vì sao `notifications` không nằm trong `core`
 
-`PushNotificationService` là `@singleton` eager inject `FirebaseOptions`, mà `FirebaseOptions` lại do chính app đăng ký, giữa hai phase — chúng gắn với một bundle ID, nên không package platform nào được sở hữu. Đặt ở `before` thì service sẽ resolve chúng trước khi chúng tồn tại và ném lỗi lúc khởi động. App nào không gửi push notification thì bỏ nhóm này, và cũng không cần `lib/firebase/`.
+`PushNotificationService` là `@singleton` eager inject `FirebaseOptions`, mà `FirebaseOptions` lại do chính app đăng ký, giữa hai phase — chúng gắn với một bundle ID, nên không package platform nào được sở hữu. Đặt ở `before` thì service sẽ resolve chúng trước khi chúng tồn tại và ném lỗi lúc khởi động. `core_notifications` link được trên mọi platform và chỉ khởi tạo push ở nơi `push` suy ra của platform đó bật (`composition.push_platforms` của nó liệt kê `android`, `ios`, `macos` và `web`; runner được sinh và web suy ra tắt). Các method của `FirebaseModule` trong `apps/mobile` nhận `PlatformFacts` đang chạy và chỉ đọc options được sinh ở nơi push bật — ở nơi khác chúng trả về một placeholder không bao giờ được đưa cho Firebase — vì `DefaultFirebaseOptions.currentPlatform` ném lỗi trên platform mà project Firebase không có app (web, Linux). App nào không gửi push notification thì bỏ nhóm này, và cũng không cần `lib/firebase/`.
 
 ### Cái bẫy thứ tự với eager singleton
 
@@ -405,7 +413,7 @@ Package mở database phải chạy sau mọi thứ đóng góp migration cho n�
 >
 > `flutter analyze` không thể phát hiện lỗi này (RULE-13) — đây là lỗi thứ tự lúc chạy, và smoke test DI bên dưới là thứ bắt được nó. Để chẩn đoán, đọc các file sinh ra: `apps/mobile/lib/di/injection.config.dart` cho thứ tự module, còn `lib/di/module.module.dart` của từng package cho đăng ký theo type — mọi `gh<Dep>()` mà một singleton eager gọi phải được đăng ký *phía trên* nó, hoặc bởi một module khởi tạo sớm hơn.
 
-Hoặc để test đọc giúp: `test/di_smoke_test.dart` của mỗi app chạy `configureDependencies()` được sinh ra cho từng flavor, với plugin được thay bằng test double (storage trong bộ nhớ, thư mục tạm cho `path_provider`, test API Firebase core của FlutterFire và channel messaging / local-notification giả trong `apps/mobile`), rồi dựng mọi lazy singleton và gọi `checkAppContract` cho nó: mọi contract bắt buộc, mọi contract tuỳ chọn được khai là `provided` hay `absent` trong manifest, có màn hình, `order` của tab không trùng và `AppRouter.router` lắp ráp được. Gate 3 của CI chạy nó như test của mọi package. Đảo `shell` và `ui` là test hỏng đúng với lỗi boot bên dưới.
+Hoặc để test đọc giúp: `test/di_smoke_test.dart` của mỗi app chạy `configureDependencies()` được sinh ra cho mọi platform đã khai trừ web, nhân với từng flavor, với plugin được thay bằng test double (storage trong bộ nhớ, thư mục tạm cho `path_provider`, test API Firebase core của FlutterFire và channel messaging / local-notification giả trong `apps/mobile`), rồi dựng mọi lazy singleton và gọi `checkAppContract` cho nó: mọi contract bắt buộc, mọi contract tuỳ chọn được khai là `provided` hay `absent` trong manifest, có màn hình, `order` của tab không trùng và `AppRouter.router` lắp ráp được. Gate 3 của CI chạy nó như test của mọi package. Đảo `shell` và `ui` là test hỏng đúng với lỗi boot bên dưới.
 
 Ví dụ thật: `ThemeProvider` của `core_base_ui` inject `IThemeStorage`, do nhóm `shell` đăng ký (qua `platform_shell_adapters`). Smoke test còn đòi `AppBootStorage` và `NetworkConfig`, và đòi `DioFailureClassifier` của `core_network` đã tự đăng ký vào `ErrorHandler` trong nhóm `core`. Đó là lý do `shell` được xếp trước `ui` trong `di_groups` của mọi app — đảo lại là app hỏng lúc boot.
 

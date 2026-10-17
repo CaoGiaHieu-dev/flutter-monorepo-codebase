@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/02_project_tour.md@37796af -->
+<!-- translated-from: docs/en/getting-started/02_project_tour.md@8240431 -->
 # 02 · Dạo quanh dự án
 
 **Trang này trả lời:** mỗi thư mục để làm gì, package nào sở hữu cái gì, và muốn sửa một thứ cụ thể thì vào đâu?
@@ -12,7 +12,7 @@
 ```text
 flutter-monorepo-codebase/
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
-│   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
+│   ├── admin/                     # App thứ hai: auth + settings, trên web và desktop — xem apps/admin/README.md
 │   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
 │       ├── app_manifest.yaml      # App là gì (flavor, env, platform, capability) và nó ghép gì
 │       ├── README.md              # Lộ trình đọc + báo cáo được sinh: app, trong mười phút
@@ -21,9 +21,12 @@ flutter-monorepo-codebase/
 │       │   ├── app/               # app_profile.dart (facts được sinh + tinh chỉnh có kiểu), app_hooks.dart
 │       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
 │       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
-│       ├── android/  ios/         # Project native — build APK từ apps/mobile/, không phải từ gốc
+│       ├── android/  ios/         # Project native đã commit — build APK từ apps/mobile/, không phải từ gốc
+│       ├── web/  linux/           # Do `composer runners` sinh, bị git-ignore (RULE-83)
 │       ├── fastlane/              # Lane phát hành
 │       ├── test/                  # di_smoke_test.dart, app_profile_test.dart, boot_undeclared_platform_test.dart
+│       ├── integration_test/      # boot_test.dart — main() trên thiết bị cho đến khi màn hình đầu tiên được vẽ
+│       ├── test_driver/           # integration_test.dart — driver mà `flutter drive` dùng cho boot web
 │       ├── env.dev  env.stg       # File env theo flavor (env.prod KHÔNG có trong repo)
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
 │

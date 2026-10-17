@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/02_core.md@a86e147 -->
+<!-- translated-from: docs/en/architecture/02_core.md@8240431 -->
 # Tầng Core
 
 Tài liệu này trả lời câu hỏi **"trong `platform/*` có gì, và khi nào thì dùng package nào?"**. Đọc xong bạn sẽ chọn đúng core package cho từng việc — và nhận ra khi nào thứ bạn định thêm vào thực ra *không* thuộc về core.
@@ -787,20 +787,18 @@ IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần
 
 ```dart
 // platform/infra/storage/lib/src/impl/secure_storage_impl.dart
-if (masterKey == null) {
-  // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = EncryptedStorage.generateKey();
-  try {
-    await _storage.write(
-      key: StorageConstants.SECURE_MASTER_KEY_ID,
-      value: newKey,
-    );
-    masterKey = newKey;
-  } catch (e) {
-    // … đã ghi log
-    rethrow;
-  }
+// Generate a new 32-byte (256-bit) random key for AES
+final newKey = EncryptedStorage.generateKey();
+try {
+  await _storage.write(
+    key: StorageConstants.SECURE_MASTER_KEY_ID,
+    value: newKey,
+  );
+} catch (e) {
+  // … đã ghi log
+  rethrow;
 }
+return newKey;
 ```
 
 **Che RAM.** Cả master key lẫn giá trị trong cache đều không nằm trong heap dưới dạng một mảng thô, dễ grep. Cả hai bị XOR với một mask ngẫu nhiên và chỉ lộ ra đúng khoảnh khắc được dùng — `StorageValue` giữ giá trị trong RAM dưới dạng `ObfuscatedBytes`, và master key cũng được xử lý y hệt:
@@ -848,7 +846,7 @@ static Future<String?> readKeyWithRetry(
 
 | Lỗi | Điều xảy ra |
 | :-- | :-- |
-| Lỗi platform khi đọc master key | thử lại (3 lần); nếu vẫn lỗi, `init` **ném lại lỗi** và kho giữ nguyên — sinh key mới sẽ bỏ rơi mọi giá trị đã mã hoá bằng key không đọc được |
+| Lỗi platform khi đọc master key | thử lại (3 lần); nếu vẫn lỗi, `platforms.<p>.secure_storage` quyết định: `required` khiến `init` **ném lại lỗi** với kho giữ nguyên, và boot dừng (B01), vì sinh key mới sẽ bỏ rơi mọi giá trị đã mã hoá bằng key không đọc được; `memory_fallback` giữ các giá trị secure của lần chạy này trong bộ nhớ dưới một key mới, không ghi gì secure xuống đĩa và log một WARNING ([`../guides/06_storage.md`](../guides/06_storage.md)) |
 | Master key có nhưng không dùng được (không phải key base64 256-bit) | chỉ thay key đó; các giá trị mã hoá bằng nó sẽ giải mã lỗi và bị `read()` xoá từng cái một |
 | Hỏng dữ liệu trong chính storage của plugin | xử lý ở tầng native: trên Android `AndroidOptions.resetOnError` (bật mặc định) reset phần không giải mã được trước khi trả kết quả |
 | Lỗi platform trong `read(key)` | trả `null` **và giữ nguyên giá trị** — lần đọc sau vẫn còn |
@@ -863,11 +861,11 @@ static Future<String?> readKeyWithRetry(
 | Lỗi platform khi đọc key | thử lại (3 lần) trước khi quyết định bất cứ điều gì |
 | Vẫn lỗi, chưa có preference nào được lưu | giữ một key mới trong SharedPreferences — không có gì để bỏ rơi |
 | Vẫn lỗi, và key trong SharedPreferences mở được các preference đã lưu | dùng key đó (thiết bị không có kho bảo mật dùng được) |
-| Vẫn lỗi, và các preference đã lưu phụ thuộc vào key không đọc được | **ném lại lỗi**, không ghi hay xoá gì — các giá trị mở lại được khi platform hồi phục |
+| Vẫn lỗi, và các preference đã lưu phụ thuộc vào key không đọc được | `required`: log một ERROR và **ném lại lỗi**, không ghi hay xoá gì, và các giá trị mở lại được khi platform hồi phục; `memory_fallback`: các giá trị đã lưu được để nguyên trên đĩa, lần chạy này phục vụ giá trị mặc định từ bộ nhớ dưới một key mới không bao giờ được lưu, và log một WARNING |
 | Đọc được lại trong khi vẫn còn key trong SharedPreferences | key nào giải mã được các giá trị đã lưu thì thắng; nếu key trong SharedPreferences thắng, nó được chuyển vào kho bảo mật và xoá khỏi SharedPreferences |
 | Key không có hoặc không dùng được (không phải key base64 256-bit) | sinh key mới — trong kho bảo mật, hoặc trong SharedPreferences nếu kho bảo mật từ chối ghi; giá trị mã hoá bằng key đã mất sẽ bị `read()` xoá từng cái một |
 
-`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/infra/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
+`StorageManager.initialize` chạy backend secure trước, nên dưới `required` một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/infra/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
 
 #### Tuỳ chọn cipher của plugin được ghim cố định
 
@@ -907,7 +905,7 @@ Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng h
 | Export | Loại | Ở đâu | Làm gì |
 |---|---|---|---|
 | `DriftDatabaseOpener` | `abstract final class` | `src/drift_database_opener.dart` | Mở bất kỳ `GeneratedDatabase` nào trên isolate nền, **verify** kết nối, cách ly file hỏng |
-| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Phân giải đường dẫn file trong app documents, dựng executor nền, cách ly file |
+| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Dựng executor qua một configurable import — một file trong thư mục riêng của app, trên các isolate nền, ở native (`src/connection/native_connection.dart`); worker wasm của drift trên web — và cách ly file (`false` trên web) |
 | `IDatabaseMigration<TDb>` | abstract class | `src/migration/` | Hợp đồng để một package đóng góp **một** bước schema |
 | `DatabaseMigrationRunner` | class | `src/migration/` | Sắp xếp, kiểm tra và replay các bước đó |
 | `driftMigrationStrategy(...)` | function | `src/migration/` | `MigrationStrategy` dùng chung: dispatch migration + các `PRAGMA` theo kết nối |
@@ -1013,7 +1011,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi có read pool (`readPool > 0`; mặc định là `1`); tránh lỗi "database is locked" khi tranh chấp. |
 | `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
 
-`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
+`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên connection native (`src/connection/native_connection.dart`) còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
 
 WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — nên một test khẳng định WAL phải chạy trên **file thật** (test của chính template không còn khẳng định các pragma; [`07_database.md`](../guides/07_database.md) § 12 nói khi nào nên thêm).
 
@@ -1048,11 +1046,11 @@ Ba quyết định có chủ đích:
 **File được đổi tên, không bao giờ bị xoá.**
 
 ```dart
-// platform/infra/database/lib/src/database_connection_factory.dart
+// platform/infra/database/lib/src/connection/native_connection.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
-/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
-/// an older one is replaced so repeated failures cannot fill the disk.
+/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept; an
+/// older one is replaced so repeated failures cannot fill the disk.
 ```
 
 Các sidecar `-wal` / `-shm` được chuyển theo, thành `<fileName>.corrupt-wal` / `.corrupt-shm`: chúng thuộc về database đã bị cách ly và không được áp vào database mới, còn WAL chứa các transaction đã commit mà chưa checkpoint — xoá nó là mất đúng phần dữ liệu mới nhất.
@@ -1137,26 +1135,28 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 
 ---
 
-## 11. Build web — hiện trạng
+## 11. Platform — hiện trạng
 
-Chưa app nào commit thư mục `web/`. `apps/admin` khai platform web với `runner: scaffold` (thư mục được tạo bằng `flutter create --platforms=web .`); `apps/mobile` không khai nó. Đo bằng `flutter build web`:
+Không app nào commit runner web hay desktop: mọi runner web, macOS, Windows và Linux đều là `runner: scaffold`, do `dart tools/composer/composer.dart runners` sinh (`tools/workspace_setup/configure.dart` chạy nó cuối cùng) và git bỏ qua (RULE-83). Chỉ `android/` và `ios/` của `apps/mobile` được commit. Mỗi app chứng minh từng platform nó khai bằng `integration_test/boot_test.dart`: cho mỗi PR với web và Linux, trong `platforms_full.yml` với phần còn lại ([`../operations/01_cicd.md`](../operations/01_cicd.md)).
 
-| App | Biên dịch |
-|:--|:--|
-| `apps/admin` (auth + settings) | có, sau khi tạo `web/` (dart2js; Wasm dry run cũng qua) |
-| `apps/mobile` (mọi module mẫu) | **không** — `core_database` import `package:drift/native.dart`, kéo theo `dart:ffi` của `sqlite3` |
+| App | android | ios | web | macos | windows | linux |
+|:--|:--|:--|:--|:--|:--|:--|
+| `apps/mobile` (mọi module mẫu) | committed | committed | generated: drift trên wasm, push và deep link tắt | — | — | generated: push và deep link tắt, `secure_storage: memory_fallback` |
+| `apps/admin` (auth + settings) | — | — | generated | generated, entitlement network-client | generated | generated, `memory_fallback` |
 
-`flutter build web` không có tuỳ chọn `--flavor`: hãy nêu flavor bằng `--dart-define=APP_FLAVOR=<flavor>`, nếu không `AppConfig.appFlavor` là `dev` ở bản debug và `prod` ở các bản còn lại. App web cũng cần secure context (`https` hoặc `localhost`) cho kho WebCrypto của `flutter_secure_storage`.
+Một runner được sinh không có native flavor, nên các bản build của nó nêu flavor bằng `--dart-define=APP_FLAVOR=<flavor>` — được đọc ở nơi công cụ Flutter không đặt flavor nào, kể cả web; `--flavor` của công cụ vẫn thắng (`AppConfig.declaredFlavorName`). Không có cái nào thì `AppConfig.appFlavor` là `dev` ở bản debug và `prod` ở các bản còn lại. App web cũng cần secure context (`https` hoặc `localhost`) cho kho WebCrypto của `flutter_secure_storage`.
 
-Điều gì giúp đường boot dùng chung an toàn trên web:
+Điều gì giúp đường boot dùng chung chạy được trên mọi platform:
 
-- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Platform được đọc ở đúng một chỗ, `resolveAppPlatform()`, và các quyết định lúc boot đến từ `PlatformFacts` mà app đã khai (splash bằng Dart là chế độ `splash` của platform, không phải một nhánh theo `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` bọc mọi page trong `RouteAwareWidget` trên mọi platform, nên analytics màn hình cũng chạy trên web, và trên web chỉ khác ở loại page (một `MaterialPage` thường, vì trình duyệt lo phần chuyển cảnh), `MainScope` bỏ qua `FlutterNativeSplash.remove()`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
+- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Platform được đọc ở đúng một chỗ, `resolveAppPlatform()`, và các quyết định lúc boot đến từ `PlatformFacts` mà app đã khai (splash bằng Dart là chế độ `splash` của platform, không phải một nhánh theo `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` bọc mọi page trong `RouteAwareWidget` trên mọi platform, nên analytics màn hình cũng chạy trên web, và trên web chỉ khác ở loại page (một `MaterialPage` thường, vì trình duyệt lo phần chuyển cảnh), còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
+- `MainScope` không có splash Dart thì giữ frame đầu (`deferFirstFrame`) trong lúc boot chạy và nhả nó trong một `finally`, trên mọi platform: màn hình khởi chạy native vẫn hiện trên Android và iOS, không có gì dựng dở bị vẽ ở nơi khác, và một lần boot thất bại vẫn hiện màn hình lỗi của nó. Web từng bỏ qua bước nhả đó và nằm lại thành một trang trắng; không còn plugin splash nào liên quan nữa ([`06_app_shell.md`](06_app_shell.md#hai-đường-splash)).
 - `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ: trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được. Nó giữ client của package dưới dạng `Object` và chỉ trả về sau khi kiểm tra `is HttpClient` (nếu không thì ném `UnsupportedError`), vì trên web `HttpSecurityPinningClient` là một `http.BaseClient`, không phải `HttpClient` (trả về trực tiếp hoặc dùng subclass làm `flutter build web` lỗi trong khi `flutter analyze` vẫn sạch). Trong test, truyền `platform: AppPlatform.web` cho `initBeforeRunApp`.
 
 Các lỗ hổng đã biết:
 
-- `apps/mobile` cần database cho web trước khi biên dịch được: `WasmDatabase` của drift (asset `sqlite3.wasm` + drift worker), mở qua conditional import trong connection factory của `core_database`.
-- `core_notifications` (chỉ `apps/mobile`) khởi tạo Firebase bằng options theo flavor của app, vốn không mô tả web app nào; `push` mặc định tắt trên web.
+- macOS, Windows, iOS và emulator Android chỉ boot trong `platforms_full.yml` (trên `main`, merge queue, hằng tuần, label `ci:platforms` và chạy tay), không phải cho mỗi PR.
+- Trên web, một database hỏng không thể bị cách ly: lỗi gốc được giữ nguyên cho đến khi dữ liệu của site bị xoá ([`../guides/07_database.md`](../guides/07_database.md#13-trên-web)).
+- Push trên web cần một messaging service worker mà template không đi kèm; `push` suy ra tắt ở đó.
 
 ---
 

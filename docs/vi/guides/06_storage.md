@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/06_storage.md@37796af -->
+<!-- translated-from: docs/en/guides/06_storage.md@8240431 -->
 # Hướng dẫn: Lưu trữ Key-Value
 
 ## Mục tiêu
@@ -32,7 +32,29 @@ enum StorageType {
 | Profile người dùng được cache / dữ liệu cá nhân | Cờ "đã xem onboarding" |
 | Mọi thứ kẻ tấn công cầm máy sẽ muốn lấy | Tuỳ chọn UI không nhạy cảm |
 
-`secure` dựa trên Keychain (iOS) / KeyStore (Android), chậm hơn. `pref` dựa trên SharedPreferences. Cả hai backend (`SecureStorageImpl`, `PrefStorageImpl`) đều kế thừa `EncryptedStorage`, thứ niêm phong mọi giá trị bằng AES-256-CBC trước khi ghi, nên `pref` không phải plaintext trên đĩa. Việc niêm phong chỉ là bảo mật nội dung — AES-CBC không có xác thực, nên một giá trị bị sửa không bị phát hiện là bị giả mạo; đừng dùng storage để chứng minh ai đã ghi một giá trị. Bạn không bao giờ chạm trực tiếp vào backend: bạn xin `StorageManager.getStorage(type)` một `StorageInterface` rồi bọc nó trong một `StorageValue`.
+`secure` dựa trên secure store của platform (mục kế tiếp), chậm hơn. `pref` dựa trên SharedPreferences. Cả hai backend (`SecureStorageImpl`, `PrefStorageImpl`) đều kế thừa `EncryptedStorage`, thứ niêm phong mọi giá trị bằng AES-256-CBC trước khi ghi, nên `pref` không phải plaintext trên đĩa. Việc niêm phong chỉ là bảo mật nội dung — AES-CBC không có xác thực, nên một giá trị bị sửa không bị phát hiện là bị giả mạo; đừng dùng storage để chứng minh ai đã ghi một giá trị. Bạn không bao giờ chạm trực tiếp vào backend: bạn xin `StorageManager.getStorage(type)` một `StorageInterface` rồi bọc nó trong một `StorageValue`.
+
+### `secure` là gì trên từng platform, và chuyện gì xảy ra khi không có
+
+| Platform | `secure` là | Ghi chú |
+|:--|:--|:--|
+| Android | KeyStore | cặp cipher được ghim cố định ([`02_core.md` § 7](../architecture/02_core.md#tuỳ-chọn-cipher-của-plugin-được-ghim-cố-định)) |
+| iOS | Keychain, đọc được sau lần mở khoá đầu tiên | một lần khởi chạy nền trước lần mở khoá đầu tiên làm lần đọc fail; nó được thử lại, không bao giờ bị xoá |
+| macOS | keychain **login** (`usesDataProtectionKeychain: false`, first unlock) | data-protection keychain cần entitlement keychain-access-groups và một signing team, mà runner được sinh không mang |
+| Windows | store Windows của `flutter_secure_storage` | build nó cần Visual Studio 2022 với "Desktop development with C++" và thành phần ATL |
+| Linux | một Secret Service (gnome-keyring, KWallet) qua libsecret | một session có thể không chạy cái nào: xem `memory_fallback` bên dưới |
+| Web | `localStorage` của trình duyệt, được plugin niêm phong bằng crypto API của trình duyệt | cần một secure context (`https` hoặc `localhost`); mọi thứ chạy trong origin của trang đều đọc được nó — một XSS đọc được token đã lưu, nên hãy giữ script bị chèn ra ngoài (một Content-Security-Policy) hoặc quyết định không lưu session ở đó |
+
+Cả hai backend giữ master key của chúng trong store này. Việc chúng làm khi platform **không** có secure store nào — lần đọc master key cứ thất bại sau các lần thử lại, hoặc lần ghi bị từ chối — là quyết định của app theo từng platform, `platforms.<p>.secure_storage` trong manifest của nó (RULE-80; suy ra `memory_fallback` trên Linux, `required` ở mọi nơi khác — [`13_app_composition.md` § 3](13_app_composition.md#3-manifest)):
+
+| | `required` | `memory_fallback` |
+|:--|:--|:--|
+| `SecureStorageImpl` | ném lại lỗi mà không xoá gì; boot dừng (`B01`) | giữ các giá trị secure của lần chạy này trong bộ nhớ dưới một key mới, không ghi gì secure xuống đĩa, và log một WARNING, *Secure storage is unavailable …*, nêu tên `platforms.<p>.secure_storage` |
+| `PrefStorageImpl` | dùng key dự phòng SharedPreferences của nó khi key đó mở được các giá trị đã lưu (hoặc tạo một key khi chưa lưu gì); nếu không thì log một ERROR và ném lại lỗi với mọi preference còn nguyên | cũng dùng key dự phòng đó trước; nếu không thì để nguyên các preference đã lưu trên đĩa, phục vụ giá trị mặc định cho lần chạy này từ bộ nhớ dưới một key mới không bao giờ được lưu, và log một WARNING |
+
+Vì vậy dưới `memory_fallback` một lần đăng nhập kéo dài đến khi app thoát. Preference vẫn được giữ khi SharedPreferences có một key mở được chúng, hoặc khi chưa lưu gì (một key được tạo ở đó). Chỉ những preference được niêm phong bằng key không đọc được của secure store mới được để nguyên trên đĩa trong khi lần chạy dùng giá trị mặc định, và các cài đặt đổi trong lần chạy đó không được giữ; lần chạy kế tiếp có Secret Service sẽ đọc lại chúng. Mặc định `required` của Android và iOS là có chủ ý: một Keychain bị khoá là lý do để dừng, không bao giờ để khởi động rỗng.
+
+**Prompt keyring của Linux.** Một session có login keyring bị khoá, hoặc chưa được tạo, trả lời lần đọc secure đầu tiên bằng một prompt, và libsecret chặn platform thread cho đến khi có người trả lời — không code nào trong app bỏ qua hay hết hạn khỏi nó được. Hãy mở khoá keyring lúc đăng nhập, hoặc, trong CI, khởi động một cái đã mở khoá hay trỏ session bus vào hư không ([`13_app_composition.md` § 7](13_app_composition.md#chạy-và-boot-một-platform)).
 
 ## 2. Phụ thuộc vào `core_storage`
 
@@ -265,11 +287,14 @@ Checklist review:
 | Giá trị vừa set ngay trước khi app bị tắt biến mất ở lần mở sau | Setter (hoặc một `save` không được await) chỉ bắt đầu ghi và tiến trình đã kết thúc trước | `await` `save` / `remove` ở chỗ giá trị phải sống sót (bước 7) |
 | `… is not registered` cho owner lúc boot | Chưa chạy codegen từ khi thêm annotation | `dart run build_runner build --workspace` (bước 6) |
 | Một package khác import package data của bạn để đọc giá trị | Không có hợp đồng ở ranh giới | Khai một interface (`core_di`, hoặc `<id>_api` của owner) và implement nó trong owner (bước 9) |
+| Cài đặt bị reset trong một lần chạy Linux; log nói *Secure storage is unavailable* | Không có Secret Service trong session đó, và chính sách là `memory_fallback` | Không mất gì: khởi động và mở khoá một Secret Service (gnome-keyring, KWallet) thì các giá trị đã lưu quay lại ở lần chạy sau |
+| Boot dừng với `B01` trên desktop hoặc máy CI; log nêu tên secure store | Không có secure store và chính sách là `required` | Cung cấp store, hoặc khai `secure_storage: memory_fallback` cho platform đó nếu chấp nhận được một lần chạy không có nó |
+| Một lần chạy Linux treo trước frame đầu | Một prompt keyring đang đợi câu trả lời | Trả lời nó; mở khoá keyring lúc đăng nhập |
 | Mọi giá trị đã lưu biến mất sau khi nâng cấp từ `flutter_secure_storage` 9.x trở xuống | 11.x đã bỏ các cipher trước bản 10 | Phát hành một bản 10.x trước ([`../architecture/02_core.md` § 7](../architecture/02_core.md#tuỳ-chọn-cipher-của-plugin-được-ghim-cố-định)) |
 
 ## Liên quan
 
-- Luật: RULE-09 (key trong `utils/`), RULE-44 (không có key dùng chung, vị trí đặt interface), RULE-45 (owner là singleton, được nạp sẵn), RULE-14 (interface thứ hai qua `@module`), RULE-74 (version chỉ nằm trong catalog) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Luật: RULE-09 (key trong `utils/`), RULE-44 (không có key dùng chung, vị trí đặt interface), RULE-45 (owner là singleton, được nạp sẵn), RULE-14 (interface thứ hai qua `@module`), RULE-74 (version chỉ nằm trong catalog), RULE-80 (quyết định `secure_storage` theo từng platform) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--lưu-trữ-keyvalue-có-mã-hoá) — mã hoá, che RAM, xử lý lỗi, các owner hiện tại
 - [`05_di.md`](05_di.md) — singleton hay factory, `@PostConstruct`, thứ tự module
 - [`07_database.md`](07_database.md) — khi nào bảng quan hệ tốt hơn cặp key-value

@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/07_database.md@b455ad2 -->
+<!-- translated-from: docs/en/guides/07_database.md@8240431 -->
 # Hướng dẫn: Cơ sở dữ liệu quan hệ (Drift + SQLite)
 
 ## Mục tiêu
@@ -52,7 +52,7 @@ dev_dependencies:
     sdk: flutter              # cho test database in-memory (bước 12)
 ```
 
-Phần còn lại của một package data thì thêm như thường lệ (`domain_core`, `data_core`, `domain_*` của bạn, `freezed_annotation` / `freezed` cho model). `sqlite3` và `path_provider` là dependency riêng của `core_database` — đừng khai lại. Version chỉ nằm trong catalog `pubspec_dependencies.yaml` (RULE-74): `dart tools/dependency_sync.dart` điền vào mục viết không kèm version (`drift:`) và ghi đè mục bị lệch. Sau đó `flutter pub get`.
+Phần còn lại của một package data thì thêm như thường lệ (`domain_core`, `data_core`, `domain_*` của bạn, `freezed_annotation` / `freezed` cho model). `sqlite3` và `path_provider` là dependency riêng của `core_database` — đừng khai lại, và đừng bao giờ import chúng, `package:drift/native.dart` hay `dart:ffi` từ `lib/` của bạn: package khi đó làm hỏng mọi bản build web của app link nó, trong khi `flutter analyze` vẫn sạch. `arch_check` R22 từ chối điều đó (RULE-82); import có điều kiện của `core_database` là nơi duy nhất chạm tới chúng ([§ 13](#13-trên-web)). Version chỉ nằm trong catalog `pubspec_dependencies.yaml` (RULE-74): `dart tools/dependency_sync.dart` điền vào mục viết không kèm version (`drift:`) và ghi đè mục bị lệch. Sau đó `flutter pub get`.
 
 ## 3. Định nghĩa bảng
 
@@ -126,7 +126,7 @@ class CacheConstants {
 ```
 
 > [!CAUTION]
-> Đặt tên file theo **package sở hữu**, không theo tên app. Nhiều database cùng tồn tại trong thư mục documents; một cái tên chung chung kiểu `app_database.sqlite` sẽ đụng nhau. Đổi chuỗi này sau khi đã phát hành sẽ khiến dữ liệu cũ trên máy người dùng không còn truy cập được.
+> Đặt tên file theo **package sở hữu**, không theo tên app. Nhiều database cùng tồn tại trong thư mục riêng của app — thư mục documents trên Android và iOS, thư mục application-support trên macOS, Windows và Linux (trên desktop "documents" là thư mục dùng chung của người dùng), vùng lưu trữ của trình duyệt cho origin trên web; một cái tên chung chung kiểu `app_database.sqlite` sẽ đụng nhau. Đổi chuỗi này sau khi đã phát hành sẽ khiến dữ liệu cũ trên máy người dùng không còn truy cập được.
 
 ## 6. Khai class database
 
@@ -134,7 +134,6 @@ class CacheConstants {
 // modules/cache/data/lib/src/database/cache_database.dart
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../utils/cache_constants.dart';
@@ -163,8 +162,8 @@ class CacheDatabase extends _$CacheDatabase {
   @override
   final int schemaVersion;
 
-  /// Opens the database on a background isolate, with corruption recovery
-  /// ([DriftDatabaseOpener]).
+  /// Opens the database — on a background isolate natively, in drift's wasm
+  /// worker on the web — with corruption recovery ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -174,19 +173,18 @@ class CacheDatabase extends _$CacheDatabase {
     );
   }
 
-  /// In-memory database for tests. [executor] and [schemaVersion] let an
-  /// upgrade test reopen a hand-written old file so the [migrations] run.
+  /// A database over [executor], for tests — `NativeDatabase.memory()` for
+  /// an in-memory one. The test passes the executor, so this library never
+  /// imports `drift/native` (`dart:ffi`), which no web build can compile.
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file so
+  /// the [migrations] run.
   @visibleForTesting
-  factory CacheDatabase.forTesting([
-    QueryExecutor? executor,
+  factory CacheDatabase.forTesting(
+    QueryExecutor executor, [
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
     int schemaVersion = 1,
   ]) {
-    return CacheDatabase._(
-      executor ?? NativeDatabase.memory(),
-      migrations,
-      schemaVersion,
-    );
+    return CacheDatabase._(executor, migrations, schemaVersion);
   }
 
   @override
@@ -201,6 +199,7 @@ Hai điểm cần copy nguyên xi:
 
 - **Migration được truyền vào, không bao giờ tra cứu bên trong class.** Nhờ vậy database không dính service-locator và dựng trực tiếp được trong test.
 - **`migration` uỷ quyền cho `driftMigrationStrategy`.** Tự viết `MigrationStrategy` riêng nghĩa là phải tự suy ra lại các `PRAGMA` — và một package quên `foreign_keys = ON` sẽ âm thầm mất toàn vẹn tham chiếu.
+- **`forTesting` nhận executor; thư viện không bao giờ import `drift/native`.** Test truyền `NativeDatabase.memory()` (hoặc một file) từ `test/`, nên class database cũng biên dịch được cho web (R22).
 
 ## 7. Đăng ký database trong module DI của bạn
 
@@ -415,10 +414,10 @@ class AddExpiresAtToCacheEntries
 
 ## 12. Test database
 
-`CacheDatabase.forTesting()` cho bạn database in-memory chạy trên isolate hiện tại — không cần `path_provider`, không isolate, không file:
+`CacheDatabase.forTesting(NativeDatabase.memory())` cho bạn database in-memory chạy trên isolate hiện tại — không cần `path_provider`, không isolate, không file. Chính test import `package:drift/native.dart`; `test/` là nơi duy nhất một package có thể chạy web được phép làm vậy:
 
 ```dart
-final database = CacheDatabase.forTesting();
+    final database = CacheDatabase.forTesting(NativeDatabase.memory());
 ```
 
 Bộ test hiện có được chia theo đúng vị trí code:
@@ -426,8 +425,8 @@ Bộ test hiện có được chia theo đúng vị trí code:
 | Package | File | Bao phủ |
 |---|---|---|
 | `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng, và upgrade trên file thật: mọi bước được replay và giữ nguyên các row, một bước lỗi làm các bước trước đó bị rollback, và file đã mở có `foreign_keys` bật cùng journal WAL |
-| `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
-| `core_database` | `database_connection_factory_test.dart` | Các kết nối trong read pool mang busy timeout, thứ mà `beforeOpen` chỉ đặt cho writer |
+| `core_database` | `drift_database_opener_test.dart` | Phục hồi khi hỏng — một file bị cách ly được mở lại rỗng; khi không dời được gì, lỗi gốc được giữ nguyên và không mở lại — và trực tiếp predicate phát hiện hỏng, gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
+| `core_database` | `database_connection_factory_test.dart` | Các kết nối trong read pool mang busy timeout, thứ mà `beforeOpen` chỉ đặt cho writer; thư mục database theo từng platform (documents trên Android và iOS, application support trên desktop); việc cách ly một file cùng các file phụ của nó, và `false` khi không có gì để dời |
 | `core_database` | `database_handle_test.dart` | `DatabaseHandle.transaction` commit khối của nó và trả về giá trị của khối; một khối ném lỗi thì rollback những gì nó đã ghi |
 | `data_cache` | `cache_database_test.dart` | Một lần nâng cấp trên **file thật**: một file version cũ viết tay (`user_version = 1`) mở lại như version 2 chạy lại bước của nó và giữ nguyên row |
 | `data_cache` | `cache_entry_repository_test.dart` | Repository trên một database in-memory thật (`DatabaseHandle` → DAO → model → entity): giá trị đã lưu quay về thành entity và key không có thành `null`; một data source ném lỗi trở thành `Failure`, không bao giờ là exception |
@@ -436,6 +435,27 @@ Hai thói quen đáng học:
 
 - **Test trực tiếp predicate phát hiện hỏng.** Nó quyết định database của người dùng có bị dời đi hay không — kiểm chứng gián tiếp qua một file hỏng thật là chưa đủ.
 - **Test pragma trên file thật.** Database in-memory báo `journal_mode = memory`, nên không thể chứng minh WAL đang bật. `migration_test.dart` mở một file thật vì lý do đó.
+
+## 13. Trên web
+
+Không có gì trong package của bạn đổi cho web: `DriftDatabaseOpener.open` và `CacheDatabase.open` là cùng những lời gọi. `core_database` chọn kết nối qua một import có điều kiện trong `database_connection_factory.dart` (được allow-list cho R17, là mẫu chuẩn cho R22):
+
+```dart
+import 'connection/native_connection.dart'
+    if (dart.library.js_interop) 'connection/web_connection.dart'
+    as connection;
+```
+
+Trên native, `connection/native_connection.dart` mở file trên các drift isolate nền. Trên web, `connection/web_connection.dart` mở bản wasm của SQLite do drift build trong một worker (`WasmDatabase.open`), lưu ở vùng lưu trữ nào của trình duyệt mà nó có — lúc boot log nói vùng nào, ở mức `INFO`, kèm các tính năng trình duyệt mà nó thiếu. Barrel không export đích nào, chỉ export factory (RULE-75).
+
+**Hai asset** phải nằm cạnh `index.html` của app: `sqlite3.wasm` và `drift_worker.js`. Chúng được mở bằng URI tương đối, nên trình duyệt phân giải chúng theo `<base href>` và một app phục vụ dưới sub-path vẫn tìm thấy. `dart tools/composer/composer.dart runners` ghi cả hai vào runner web được sinh của app khi app link `core_database` — được ghép, hoặc chạm tới qua `dependencies:` của một package được ghép:
+
+- **`sqlite3.wasm`** là binary của bản phát hành mà package `sqlite3` *đã resolve* nêu tên, được kiểm theo sha256 mà package đó đi kèm trong `lib/src/hook/asset_hashes.dart`. Nó được tải một lần từ bản phát hành GitHub của `sqlite3.dart` và cache dưới `$XDG_CACHE_HOME` (nếu không có thì `~/.cache`; `%LOCALAPPDATA%` trên Windows), rồi `flutter_monorepo/sqlite3/<tag>/`. Mọi bản sao đều bị giữ theo hash: bản tải về khác hash bị từ chối, bản cache khác hash bị xoá, và file đã có sẵn mà khớp thì không bao giờ bị ghi lại. Khi offline (hoặc với `--offline`, và không có bản cache), lần chạy cảnh báo và bản build web không có database: hãy chạy `dart tools/composer/composer.dart runners --app <id> --platform web` khi có mạng, hoặc tự đặt file khớp vào. Nếu `sqlite3` đã resolve không đi kèm bảng hash, không gì kiểm chứng được: hãy tự đặt `sqlite3.wasm` được phát hành cho phiên bản đó vào runner web, và `runners` dùng nó kèm cảnh báo *not verified* ở mỗi lần chạy.
+- **`drift_worker.js`** được biên dịch bằng `dart compile js -O4` từ `platform/infra/database/web/drift_worker.dart` (`WasmDatabase.workerMainForOpen()`), trong một thư mục tạm, và chỉ được chép vào khi byte của nó khác. Nguồn nằm ngoài `lib/`, nên barrel của package không bao giờ export nó.
+
+**Không cách ly trên web.** Một database ở đó không phải là một file có thể dời đi: `DatabaseConnectionFactory.quarantineDatabaseFile` trả về `false`, và opener ném lại lỗi gốc — không mở lại, không log "data is lost" — cho đến khi dữ liệu của site bị xoá.
+
+**Chỉ được chứng minh trên Chromium.** Boot test web chạy Chrome headless; các trình duyệt khác không được thử ở đây.
 
 ---
 
@@ -476,10 +496,13 @@ Checklist review:
 | Quan hệ không được ràng buộc | Một `MigrationStrategy` viết tay đã bỏ `foreign_keys = ON` | Uỷ quyền cho `driftMigrationStrategy` (bước 6) |
 | File bị đổi tên thành `<name>.corrupt` | Lệnh mở phát hiện database hỏng và cách ly nó | Dữ liệu vẫn được giữ để phục hồi; xem [`../architecture/02_core.md` § 8](../architecture/02_core.md#phục-hồi-khi-hỏng-cách-ly-không-bao-giờ-xoá) |
 | Test không chứng minh được WAL đang bật | Database in-memory báo `journal_mode = memory` | Test pragma trên một file thật (bước 12) |
+| `arch_check` R22: *imports package:drift/native.dart, which uses dart:ffi …* | Một file `lib/` của package có thể chạy web import một thư viện chỉ-native | Chuyển import sang `test/`, hoặc nhận một executor như `forTesting` làm (bước 6) |
+| Bản build web boot được, rồi database không mở được | Thiếu `sqlite3.wasm` hoặc `drift_worker.js` cạnh `index.html`, hoặc server gửi wasm không kèm `application/wasm` | Chạy `composer runners --app <id> --platform web`; phục vụ `.wasm` với `application/wasm` ([§ 13](#13-trên-web)) |
+| Một database hỏng trên web cứ fail lúc boot | Web không cách ly được | Xoá dữ liệu của site trong trình duyệt ([§ 13](#13-trên-web)) |
 
 ## Liên quan
 
-- Luật: RULE-41 (trả model, không trả row), RULE-46 (mỗi package sở hữu database của nó), RULE-47 (migration gắn kiểu với database của nó) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Luật: RULE-41 (trả model, không trả row), RULE-46 (mỗi package sở hữu database của nó), RULE-47 (migration gắn kiểu với database của nó), RULE-82 (không thư viện chỉ-native trong `lib/` có thể chạy web, R22) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--lưu-trữ-quan-hệ-drift--sqlite) — thiết kế đứng sau cơ chế
 - [`06_storage.md`](06_storage.md) — lưu trữ key-value, và khi nào nên dùng nó
 - [`02_new_domain_data.md`](02_new_domain_data.md) — tầng repository và model phía trên DAO

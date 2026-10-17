@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/reference/03_tooling.md@d109d3f -->
+<!-- translated-from: docs/en/reference/03_tooling.md@8240431 -->
 # Tra cứu công cụ
 
 **Trang này trả lời:** chạy script nào, với tham số gì, mã thoát của nó nghĩa là gì, và CI gate nào chạy nó?
@@ -21,6 +21,8 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 | Tạo package feature / domain / data / core / API mới | `dart tools/module_generator/generate.dart …` |
 | Ghép một app mới, hoặc xem một app khai báo gì | `dart tools/composer/composer.dart new <id> …` · `… describe --app <id>` |
 | Sinh lại các file được lắp ráp sau khi sửa `app_manifest.yaml` | `dart tools/composer/composer.dart sync` |
+| Sinh runner web và desktop mà một app khai `runner: scaffold` (sau khi nâng Flutter: `--force`) | `dart tools/composer/composer.dart runners --app <id>` |
+| Chứng minh một platform đã khai boot tới màn hình đầu tiên được vẽ | `cd apps/<id> && flutter test integration_test/boot_test.dart -d <device> --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev` (web: `flutter drive`, [guide 13 § 7](../guides/13_app_composition.md#7-công-thức)) |
 | Vừa thêm, đổi tên hoặc xoá file trong `lib/` | `dart tools/barrel_generator/generate.dart <package>/lib` |
 | Vừa đổi version dependency | `dart tools/dependency_sync.dart` |
 | CI cần chặn lệch version | `dart tools/dependency_sync.dart --check` |
@@ -49,9 +51,10 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 | 4 | `dart tools/dependency_sync.dart --check` | Có |
 | 5 | `dart tools/docs_check/check.dart` | Có |
 | — | `dart tools/unused_checker/check_unused_packages.dart` | Có |
+| — | `dart tools/composer/composer.dart describe --ci-matrix pr`, rồi job `platforms`: boot test của từng app trên web và trên Linux (RULE-83) | Có |
 | — | `dart tools/code_review/code_review.dart` (workflow riêng) | Không (tư vấn) |
 
-Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke`, `generator-smoke-compose` và `build` chạy sau job `quality`; bản build debug APK là bằng chứng cho RULE-77.
+Gate 0 và 1 chạy trước mọi codegen. Bước configure cũng sinh mọi runner `runner: scaffold` (bước 7 của nó, `composer runners`). Job `generator-smoke`, `generator-smoke-compose`, `platforms` và `build` chạy sau job `quality`; bản build debug APK là bằng chứng cho RULE-77, các boot test là bằng chứng cho RULE-83. macOS, Windows, iOS và Android boot trong `platforms_full.yml` ([`../operations/01_cicd.md`](../operations/01_cicd.md)).
 
 ---
 
@@ -59,25 +62,27 @@ Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke`, `generator-sm
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng và vệ sinh R1–R21 trên import, pubspec, tên file và mã nguồn | `0` sạch · `1` có vi phạm (mọi luật đều chặn) · `64` mọi tham số khác `--help` | 1 |
+| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng và vệ sinh R1–R22 trên import, pubspec, tên file và mã nguồn | `0` sạch · `1` có vi phạm (mọi luật đều chặn) · `64` mọi tham số khác `--help` | 1 |
 | `dart tools/arch_check/check.dart --help` | Mô tả từng luật | `0` | — |
 
 - Đọc import (bằng lexer, không khớp theo dòng) và file `pubspec.yaml`, không cần codegen, và chạy xong trong vài giây.
 - Các cạnh ngược chiều đã duyệt được in ra ở mọi lần chạy. Thêm cạnh khác phải cập nhật cùng lúc allow-list trong `check.dart` và RULE-01.
-- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (mọi lời tra cứu của shell đều có trong catalog contract) · R17 RULE-82 (một nhánh theo platform cần một mục allow-list kèm lý do, trong `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (handler `on<Event>` phải async) · R19 RULE-65 (không `print` trong `lib/`) · R20 RULE-30 / RULE-33 (không số layout thô) · R21 RULE-34 / RULE-35 (mọi locale có đủ khoá của `en.arb`, `lowerCamelCase`).
+- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (mọi lời tra cứu của shell đều có trong catalog contract) · R17 RULE-82 (một nhánh theo platform — kể cả import có điều kiện `if (dart.library.…)` — cần một mục allow-list kèm lý do, trong `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (handler `on<Event>` phải async) · R19 RULE-65 (không `print` trong `lib/`) · R20 RULE-30 / RULE-33 (không số layout thô) · R21 RULE-34 / RULE-35 (mọi locale có đủ khoá của `en.arb`, `lowerCamelCase`) · R22 RULE-82 (trong package có thể link vào web, `dart:ffi`, `drift/native`, `sqlite3/sqlite3.dart` và `path_provider` chỉ nằm trong URI của một import có điều kiện đã được allow-list mà không bản build web nào nạp, xác định từ các điều kiện `dart.library.*` của nó).
 
 ## `composer`
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
 | `dart tools/composer/composer.dart list [--app <id>] [--strict]` | In phần lắp ráp của từng app | `0` · `1` manifest không hợp lệ · `64` cờ sai | — |
-| `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | In báo cáo của một app — nó khai gì và shell resolve gì từ nó (đúng nội dung vùng `report` trong README của nó) — hoặc, với `--catalog`, mọi key manifest, catalog contract, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V17 và các mã vấn đề | `0` · `1` app lạ hoặc catalog hỏng · `64` cờ sai | — |
-| `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Tạo `apps/<id>/` từ `tools/composer/app_template/`, suy ra `capabilities:` của nó từ những gì các module đăng ký, chạy `sync` và `verify`; **không bao giờ chạy `flutter create`** | `0` · `1` bị từ chối (id đã có, platform bị module chặn, module hoặc platform lạ) và không ghi gì, hoặc `verify` fail · `64` tham số sai | — |
-| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, vùng `imports` và `modules` của `injection.dart` (ngoài hai vùng đó chỉ có comment), vùng `facts` của `lib/app/app_profile.dart` và vùng `report` trong `README.md` của app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
+| `dart tools/composer/composer.dart describe [--app <id>] [--catalog \| --ci-matrix pr\|full]` | In báo cáo của một app — nó khai gì và shell resolve gì từ nó (đúng nội dung vùng `report` trong README của nó) — hoặc, với `--catalog`, mọi key manifest, catalog contract, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V17 và các mã vấn đề; với `--ci-matrix`, một dòng JSON cho CI: `pr` là một hàng `{"app", "web", "linux"}` cho mỗi app khai web hoặc Linux, `full` là một hàng `{"app", "platform", "os", "flavor", "boot"}` cho mỗi Android, iOS, Windows hay macOS đã khai (`flavor` là `--flavor dev` với runner Android hay iOS đã commit, còn lại là `--dart-define=APP_FLAVOR=dev`; `boot` là `firebase` nơi push suy ra đang bật, còn lại là `test`) | `0` · `1` app lạ hoặc catalog hỏng · `64` cờ sai, `--ci-matrix` không kèm `pr` / `full` hoặc kèm lệnh khác | CI (job `platforms`) |
+| `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>] [--org <reverse domain>]` | Tạo `apps/<id>/` từ `tools/composer/app_template/` — mọi platform `runner: scaffold`, `app.org` lấy từ `--org` (mặc định `com.example`), một smoke test, một boot test và web driver của nó — suy ra `capabilities:` của nó từ những gì các module đăng ký, chạy `sync` và `verify`; **không sinh runner nào** (`runners --app <id>` làm việc đó) | `0` · `1` bị từ chối (id đã có, platform bị module chặn, module hoặc platform lạ) và không ghi gì, hoặc `verify` fail · `64` tham số sai | — |
+| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, vùng `imports` và `modules` của `injection.dart` (ngoài hai vùng đó chỉ có comment), vùng `facts` của `lib/app/app_profile.dart`, vùng `report` trong `README.md` của app và vùng `runners` trong `.gitignore` của nó từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
 | `dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]` | Khai `absent` mọi capability tuỳ chọn mà manifest vẫn nói là `provided` dù không còn gì nó ghép đăng ký contract đó (lỗi V3 mà một module bị gỡ để lại), với lý do `<text>: <thứ shell làm khi thiếu nó>`; chạy `sync` sau đó | `0` · `1` một key không sửa được · `64` cờ sai | — |
-| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào cùng smoke test dựng mọi factory (V12), code nằm ngoài hai vùng được sinh của `injection.dart` (V13), các flavor native của runner Android hay iOS đã commit (V15 — [công thức](../guides/13_app_composition.md#flavor-native-cho-runner-mobile-mới)), một `why` cho mỗi DI group và thứ tự nhóm (V16), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
+| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào, một smoke test boot mọi platform đã khai trừ web và dựng mọi factory, một boot test gọi `debugBootStage(`, web driver, và flavor `dev` cùng `env.dev` (V12), các vùng được sinh và code nằm ngoài hai vùng được sinh của `injection.dart` (V13), một thư mục runner của platform mà `platforms:` không khai (V6), các flavor native của runner Android hay iOS đã commit (V15 — [công thức](../guides/13_app_composition.md#flavor-native-cho-runner-mobile-mới)), một `why` cho mỗi DI group và thứ tự nhóm (V16), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
+| `dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force] [--offline]` | Sinh runner của mọi platform `runner: scaffold`: `flutter create --no-pub` trong một thư mục tạm, chỉ `<p>/` được chép vào app; rồi `flutter pub get` trong app (sau một runner mới, và ở mọi lần chạy thấy runner thiếu các file plugin mà pub get ghi), để `flutter build <p> --no-pub` chạy được ngay; rồi bộ patch — entitlement network-client của macOS, và với app chạy web có link `core_database` thì thêm `sqlite3.wasm` (kiểm sha256) và `drift_worker.js` đã biên dịch (RULE-83) | `0` xong (một lượt tải không thực hiện được chỉ là cảnh báo) · `1` một bước thất bại (`flutter create`, `pub get`, một anchor của patch, hash không khớp), `--app` lạ, hoặc nêu tên một platform đã commit · `64` tham số sai | `configure.dart` bước 7 |
 
 - Chỉ các vùng giữa `composer:managed:<region>` và `composer:end:<region>` là được sinh ra; không bao giờ sửa tay chúng (RULE-16).
+- `runners` chạy lần thứ hai không ghi gì: thư mục runner thiếu thì được sinh, thư mục đã có thì chỉ được patch, `drift_worker.js` được biên dịch trong một thư mục tạm và chỉ được chép khi byte của nó khác, `sqlite3.wasm` đang có mà sha256 khớp thì không bao giờ bị tải lại, và một lần chạy không đổi gì sẽ in `apps/<id>: up to date (<platforms>) — nothing written`. `pub get` thất bại là một lỗi với mã thoát `1`, và lần chạy sau thử lại, vì runner vẫn thiếu các file plugin của nó. `--force` xoá và sinh lại các runner được chọn (sau khi nâng Flutter). `--offline` không gọi mạng: `flutter pub get --offline` (từ pub cache — khi nó thất bại, hãy chạy lại khi có mạng) và không tải `sqlite3.wasm` (bản đã cache, dưới `$XDG_CACHE_HOME` hoặc `~/.cache`, rồi `flutter_monorepo/sqlite3/<tag>/`, vẫn được dùng).
 - Một lần `sync` không strict mà bỏ qua module thiếu sẽ in khối `PARTIAL COMPOSITION` kèm dòng `git checkout --` để khôi phục các file.
 - App thứ ba là một lệnh, và hai file bạn sửa sau đó là manifest cùng `lib/app/app_profile.dart` của nó: [`../guides/13_app_composition.md` § 8](../guides/13_app_composition.md#8-app-thứ-ba-bằng-một-lệnh).
 - Kiểm tra manifest, các check V1–V17, cách tìm package và layer `api`: [chi tiết](../../../tools/README.vi.md#composer).
@@ -143,6 +148,7 @@ Nó không import package nào, nên chạy được trước khi pub từng res
 | `dart tools/barrel_generator/generate.dart <package>/lib` | Ghi barrel duy nhất của package, `lib/<package_name>.dart`, export mọi file library dưới `lib/`, rồi `dart format` | `0` · `1` sinh hoặc `dart format` thất bại · `64` đường dẫn không phải `lib/` của một package, một cờ, hoặc đường dẫn thứ hai | Kiểm tra lệch sau `configure.dart` |
 
 - Chạy sau mọi lần thêm, đổi tên hay xoá file trong `lib/` — và **sau** `build_runner` / `gen-l10n`, vì file được sinh đang có trên đĩa cũng được export (RULE-75).
+- File mà một `import` / `export` có điều kiện của chính package nó nêu tên (`if (dart.library.…)`) không được export — file chứa directive mới được export, để compiler chọn một phía cho mỗi platform.
 - Nó thay mọi `export` viết tay và xoá barrel thư mục, nên barrel này là barrel duy nhất của package. Chi tiết: [`barrel_generator`](../../../tools/README.vi.md#barrel_generator).
 
 ## `dependency_sync`
@@ -164,7 +170,7 @@ Version chỉ nằm trong catalog (RULE-74). Chi tiết: [`dependency_sync`](../
 | `dart tools/unused_checker/check_unused_translate.dart` | Key ARB không bao giờ được dùng | `0` · `2` · `1` · `64` | — |
 | `dart tools/unused_checker/check_unused_file.dart` | File Dart mồ côi | `0` · `2` · `1` · `64` | — |
 
-- `check_unused_packages` là mặt đối xứng của `arch_check` R5 (RULE-06): hãy chạy cả hai trước khi mở PR. CI làm fail PR với bất kỳ phát hiện nào.
+- `check_unused_packages` là mặt đối xứng của `arch_check` R5 (RULE-06): hãy chạy cả hai trước khi mở PR. CI làm fail PR với bất kỳ phát hiện nào. Nó đọc `lib/`, `bin/`, `test/` và `tool/` của một package, và `integration_test/` cùng `test_driver/` của một app (boot test là nơi duy nhất import `integration_test`).
 - Kiểm tra asset, file và bản dịch dựa trên khớp chữ, nên thứ gì được truy cập động sẽ là báo động giả. Chi tiết: [`unused_checker`](../../../tools/README.vi.md#unused_checker).
 
 ## `check_outdated`
@@ -179,8 +185,9 @@ Chi tiết: [`check_outdated`](../../../tools/README.vi.md#check_outdated).
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/workspace_setup/configure.dart` | Setup đầy đủ: kích hoạt `flutterfire_cli` (không với `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrel | `0` · mã thoát của lệnh thất bại · `64` tham số sai | CI chạy nó trước Gate 2 |
+| `dart tools/workspace_setup/configure.dart` | Setup đầy đủ: kích hoạt `flutterfire_cli` (không với `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrel, rồi `composer runners` (bước 7) | `0` · mã thoát của lệnh thất bại · `64` tham số sai | CI chạy nó trước Gate 2 |
 | `dart tools/workspace_setup/configure.dart --stub-firebase` | Như trên, kèm stub Firebase chỉ để compile ở nơi chưa có file thật | như trên | CI dùng |
+| `dart tools/workspace_setup/configure.dart --no-runners` | Bỏ qua bước 7: không runner nào được sinh hay patch (build chỉ Android, máy offline) | như trên | Job `build` APK, `flutter_build.yml`, `code_review.yml` |
 | `dart tools/workspace_setup/configure.dart --help` | In các bước, không chạy gì | `0` | — |
 
 Bản clone mới cần `pub get`, `gen-l10n` và `build_runner`; lượt chạy barrel chỉ cần sau khi thêm, đổi tên hoặc xoá file trong `lib/` (`configure.dart` vẫn chạy nó). Không có `configure.sh` hay `.bat`. Chi tiết: [`workspace_setup`](../../../tools/README.vi.md#workspace_setup).
@@ -199,7 +206,7 @@ Chỉ chạy tương tác; cần Firebase CLI đã cài và đã đăng nhập. 
 |:--|:--|:--|:--|
 | `dart tools/theme_generator/theme_setting.dart [--app <id>]` | Sinh splash screen và app icon từ cấu hình theo flavor ở root | `0` · `1` app không nhận được, hoặc một generator thất bại (file được khôi phục) · `64` tham số sai | — |
 
-`--app admin` hiện bị từ chối: admin không có thư mục nền tảng. Chi tiết: [`theme_generator`](../../../tools/README.vi.md#theme_generator).
+`--app admin` hiện bị từ chối: admin không có runner `android/` hay `ios/`. Chi tiết: [`theme_generator`](../../../tools/README.vi.md#theme_generator).
 
 ## `android_compliance`
 

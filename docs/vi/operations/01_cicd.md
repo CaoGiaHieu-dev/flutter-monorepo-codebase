@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/operations/01_cicd.md@d109d3f -->
+<!-- translated-from: docs/en/operations/01_cicd.md@8240431 -->
 # CI/CD
 
 Tài liệu này trả lời: **có những pipeline nào, mỗi cái làm gì, cần secret gì, và hiện đang hỏng chỗ nào.** Đọc xong bạn cấu hình được secret cho repo, chạy được build, và tái hiện được mọi bước CI ở máy local trước khi push.
@@ -10,19 +10,20 @@ Tài liệu này trả lời: **có những pipeline nào, mỗi cái làm gì, 
 
 ## 1. Danh sách pipeline
 
-Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure DevOps.
+Template có **sáu** pipeline — năm trên GitHub Actions, một trên Azure DevOps.
 
 | Pipeline | File | Kích hoạt | Đầu ra |
 |:---|:---|:---|:---|
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Thủ công (`workflow_dispatch`) | APK release đã ký → Firebase App Distribution, kèm symbol obfuscation làm artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR vào `main`/`develop`/`master` + thủ công | Báo cáo Markdown + comment trên PR |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Thủ công (`workflow_dispatch`) | Uỷ quyền cho các lane Fastlane |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — gate merge; sau đó build một APK dev bản debug và hai smoke test module generator |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — gate merge; sau đó build một APK dev bản debug, boot web và Linux của mọi app khai chúng, và hai smoke test module generator |
+| Platforms (full matrix) | `.github/workflows/platforms_full.yml` | Push vào `main` (lọc theo path), merge queue, hằng tuần, PR gắn label `ci:platforms`, thủ công | Boot test trên macOS, Windows, iOS simulator và Android emulator; build web release và Wasm ([§6](#platform-boot-rule-83)) |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (chỉ chạy tay) | Artifact APK prod + symbol obfuscation → Firebase |
 
-Ba workflow GitHub build hoặc kiểm tra repo (`pr_quality_check.yml`, `flutter_build.yml`, `fastlane.yml`) khai báo `permissions: contents: read` ở cấp cao nhất: không workflow nào ghi vào repo.
+Bốn workflow GitHub build hoặc kiểm tra repo (`pr_quality_check.yml`, `platforms_full.yml`, `flutter_build.yml`, `fastlane.yml`) khai báo `permissions: contents: read` ở cấp cao nhất: không workflow nào ghi vào repo. Chỉ job `report` của `platforms_full.yml` thêm `issues: write` và `actions: read`, để mở issue cho một lần chạy theo lịch bị fail.
 
-`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Job đầu của nó chạy sáu gate có số theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cùng bộ test riêng của các tool gate ngay sau Gate 1, một bước kiểm tra barrel lệch sau khi sinh code, một audit dependency thừa có chặn merge, và một bước chỉ tham khảo (báo cáo coverage). Ba job nữa build app (APK `dev` bản debug), điều mà không gate nào chứng minh được, và smoke test module generator hai lần. Xem [§6](#6-quality-gate).
+`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Job đầu của nó chạy sáu gate có số theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cùng bộ test riêng của các tool gate ngay sau Gate 1, một bước kiểm tra barrel lệch sau khi sinh code, một audit dependency thừa có chặn merge, và một bước chỉ tham khảo (báo cáo coverage). Bốn job nữa build app (APK `dev` bản debug), điều mà không gate nào chứng minh được, boot nó trên web và Linux (`platforms`, RULE-83), và smoke test module generator hai lần. Xem [§6](#6-quality-gate).
 
 ---
 
@@ -54,7 +55,7 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 
    Thiếu secret nào thì bước này fail kèm lỗi nêu đúng tên secret đó — trước khi tốn thời gian cho codegen hay Gradle. Nó chạy **trước** bước sinh code vì `build_runner` phải phân giải được các import của `firebase_module.dart`.
 5. **Get dependencies** — `flutter pub get`. File lock được sinh ra và không commit; version đến từ `pubspec_dependencies.yaml` và version Flutter từ `.fvmrc`.
-6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, `build_runner` và lượt sinh barrel cho cả workspace.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart --no-runners`. Script Dart này làm trọn gói: pub get, sinh l10n, `build_runner` và lượt sinh barrel cho cả workspace; `--no-runners` bỏ qua bước cuối của nó, các runner web và desktop được sinh, mà một bản build Android từ `android/` đã commit không bao giờ đọc.
 7. **Build APK** — chú ý dòng `cd apps/mobile` đứng riêng phía trước:
    ```bash
    cd apps/mobile
@@ -77,7 +78,7 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 
 ### Lưu ý chi phí
 
-Job chạy trên `macos-latest` dù chỉ build Android. Runner macOS bị tính phí theo hệ số cao hơn hẳn Linux trên các gói GitHub-hosted. Trừ khi bạn định bật lại phần build iOS (hiện đang comment) trong cùng job này, `ubuntu-latest` build Android tốt tương đương và rẻ hơn nhiều.
+Job chạy trên `ubuntu-latest`: nó chỉ build Android, và runner macOS bị tính phí theo hệ số cao hơn hẳn. Bật lại phần build iOS (đang comment) vào job này sẽ cần `macos-latest` trở lại — hoặc một job riêng, như `platforms_full.yml` làm cho chặng iOS của nó.
 
 ---
 
@@ -97,7 +98,7 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 ### Ghim phiên bản Flutter
 
-Bước cài dependency chạy `dart tools/workspace_setup/configure.dart --stub-firebase`: các file `firebase_options_*.dart` bị git bỏ qua không có trên bản checkout sạch và `build_runner` phải resolve được các import của `firebase_module.dart`, như trong `pr_quality_check.yml`; bản review chỉ đọc Dart nên các stub chỉ-để-biên-dịch là đủ. Flutter lấy từ `.fvmrc` (`flutter-version-file`) ở mọi lần chạy — kể cả pull request — trừ khi lần chạy tay điền tham số tuỳ chọn `flutter_version`.
+Bước cài dependency chạy `dart tools/workspace_setup/configure.dart --stub-firebase --no-runners` (bản review chỉ đọc Dart nên không cần runner được sinh nào): các file `firebase_options_*.dart` bị git bỏ qua không có trên bản checkout sạch và `build_runner` phải resolve được các import của `firebase_module.dart`, như trong `pr_quality_check.yml`; bản review chỉ đọc Dart nên các stub chỉ-để-biên-dịch là đủ. Flutter lấy từ `.fvmrc` (`flutter-version-file`) ở mọi lần chạy — kể cả pull request — trừ khi lần chạy tay điền tham số tuỳ chọn `flutter_version`.
 
 ### Bước "Annotate critical issues (advisory)" không hề fail
 
@@ -172,12 +173,12 @@ Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn 
 
 `pr_quality_check.yml` chạy trên mọi pull request vào `main`, `develop` hoặc `master`. Đây là pipeline duy nhất có thể chặn merge.
 
-Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter pub get`** → Gate 0 → Gate 1 (`arch_check`, rồi test của các tool gate) → `dart tools/workspace_setup/configure.dart --stub-firebase` (các stub Firebase chỉ để biên dịch trước, rồi clean, pub get, gen-l10n, `build_runner`, barrel) → bước kiểm tra barrel lệch → Gate 2 → Gate 3 → báo cáo coverage → Gate 4 → Gate 5 → audit dependency thừa. Không có file lock nào được commit, nên thứ buộc PR tuân theo các version đã khai là Gate 4 (`dependency_sync --check`: mọi pubspec khớp catalog).
+Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter pub get`** → Gate 0 → Gate 1 (`arch_check`, rồi test của các tool gate) → `dart tools/workspace_setup/configure.dart --stub-firebase` (các stub Firebase chỉ để biên dịch trước, rồi clean, pub get, gen-l10n, `build_runner`, barrel) → bước kiểm tra barrel lệch → Gate 2 → Gate 3 → báo cáo coverage → Gate 4 → Gate 5 → audit dependency thừa → `composer describe --ci-matrix pr`, một dòng JSON của nó là output `platform_apps` của job (ma trận của job `platforms`). Bước configure cũng sinh các runner `runner: scaffold` của mọi app (bước 7 của nó, `composer runners`), mà git bỏ qua, nên bước kiểm tra barrel lệch không bao giờ thấy chúng. Không có file lock nào được commit, nên thứ buộc PR tuân theo các version đã khai là Gate 4 (`dependency_sync --check`: mọi pubspec khớp catalog).
 
 | # | Gate | Lệnh | Chặn merge |
 |:--|:---|:---|:---|
 | 0 | Composition và facts sinh ra khớp manifest của mọi app, và khai báo của nó khớp mã nguồn | `dart tools/composer/composer.dart verify` | có |
-| 1 | Luật kiến trúc (R1–R21) | `dart tools/arch_check/check.dart` | có |
+| 1 | Luật kiến trúc (R1–R22) | `dart tools/arch_check/check.dart` | có |
 | 1 | …và test riêng của các tool gate | `cd tools && dart test` | có |
 | — | Barrel khớp generator (RULE-75) | sau `configure.dart`: fail nếu có file `*.dart` đã theo dõi bị đổi hoặc xuất hiện file chưa theo dõi (`git diff --exit-code -- '*.dart'`, `git ls-files --others --exclude-standard -- '*.dart'`) | có |
 | 2 | Phân tích tĩnh — bật strict mode, 0 issue kể cả info ([luật § 16](../reference/01_rules.md)) | `flutter analyze` | có |
@@ -187,7 +188,7 @@ Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter
 | 5 | Độ chính xác của docs và tương đương en ↔ vi | `dart tools/docs_check/check.dart` | có |
 | — | Audit dependency thừa (RULE-06) | `dart tools/unused_checker/check_unused_packages.dart` | có |
 
-Gate 0 làm nhiều hơn là sinh lại: nó đối chiếu khai báo của từng app — `capabilities:` nó tuyên bố, các platform mà package của nó chạy được, `FirebaseOptions` mà push của nó cần, file env, điểm vào và smoke test của nó — với mã nguồn ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), và smoke test mà nó đòi có chính là thứ Gate 3 sau đó chạy cho mọi flavor. Gate 0 và 1 chạy đầu tiên là có chủ đích: chúng chỉ đọc manifest, import, pubspec và mã nguồn và không cần codegen — `pub get` là đủ, vì `tools/` là thành viên của workspace — nên lỗi composition hay phân tầng fail ngay sau bước resolve dependency thay vì sau cả chu kỳ thiết lập, analyze và test. Gate 1 cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
+Gate 0 làm nhiều hơn là sinh lại: nó đối chiếu khai báo của từng app — `capabilities:` nó tuyên bố, các platform mà package của nó chạy được, `FirebaseOptions` mà push của nó cần, file env, điểm vào, smoke test và boot test của nó, các runner của nó — với mã nguồn ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), và smoke test mà nó đòi có chính là thứ Gate 3 sau đó chạy cho mọi platform đã khai trừ web, nhân với mọi flavor. Gate 0 và 1 chạy đầu tiên là có chủ đích: chúng chỉ đọc manifest, import, pubspec và mã nguồn và không cần codegen — `pub get` là đủ, vì `tools/` là thành viên của workspace — nên lỗi composition hay phân tầng fail ngay sau bước resolve dependency thay vì sau cả chu kỳ thiết lập, analyze và test. Gate 1 cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
 
 Mọi gate đều là một script trong `tools/`, và một gate đã âm thầm thôi fail trông y hệt một PR sạch. Vì vậy các gate có test riêng, trong `tools/test/`, chạy như nửa sau của Gate 1: mỗi test dựng một workspace dùng một lần trong thư mục tạm, chạy tool trên đó như một subprocess rồi kiểm tra exit code và output — một fixture sạch và một fixture vi phạm cho mỗi luật của `arch_check`, các kiểm tra của `composer`, `dependency_sync --check`, `docs_check`, barrel generator, `bootstrap`, phần kiểm tra tham số của module generator, `remove_sample`, các stub Firebase và báo cáo coverage. Sửa một gate thì thêm case vào đó ([`../reference/03_tooling.md`](../reference/03_tooling.md#test-cho-các-tool-toolstest)). Giống Gate 0 và 1, chúng không cần codegen, nên chạy trước bước thiết lập chứ không nằm trong Gate 3.
 
@@ -200,7 +201,7 @@ Mỗi package chạy với `--coverage`, để lại `<package>/coverage/lcov.in
 > [!IMPORTANT]
 > `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Chuyển một type sang package khác là đủ để một file `.freezed.dart` tham chiếu tới symbol nó không thấy được: analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
 
-Đó là việc của job thứ tư, **`build`**. Nó không phải một gate có số — nó `needs: quality`, nên chỉ bắt đầu khi mọi gate đã qua và một lỗi phân tầng hay analyze không bao giờ phải trả giá bằng một lần build Gradle — nhưng nó thuộc cùng lần chạy workflow, và build đỏ thì workflow fail. Nó cài **Java 17** (AGP 9 / Gradle 9 cần 17 trở lên, và 17 khớp `jvmTarget` của app), Flutter từ `.fvmrc`, chạy `flutter pub get`, rồi `configure.dart --stub-firebase`, mà các stub Firebase chỉ để biên dịch của nó — ba file options cộng một `apps/mobile/android/app/src/<flavor>/google-services.json` cho mỗi flavor, đúng stub trong [`../getting-started/01_setup.md` §3.2](../getting-started/01_setup.md#32-chưa-có-firebase-project-dùng-stub), với package name đọc từ `build.gradle.kts` — là thứ một lần build Gradle cần, rồi từ `apps/mobile/`:
+Đó là việc của job thứ tư, **`build`**. Nó không phải một gate có số — nó `needs: quality`, nên chỉ bắt đầu khi mọi gate đã qua và một lỗi phân tầng hay analyze không bao giờ phải trả giá bằng một lần build Gradle — nhưng nó thuộc cùng lần chạy workflow, và build đỏ thì workflow fail. Nó cài **Java 17** (AGP 9 / Gradle 9 cần 17 trở lên, và 17 khớp `jvmTarget` của app), Flutter từ `.fvmrc`, chạy `flutter pub get`, rồi `configure.dart --stub-firebase --no-runners` (APK được build từ `android/` đã commit, nên không cần runner được sinh nào), mà các stub Firebase chỉ để biên dịch của nó — ba file options cộng một `apps/mobile/android/app/src/<flavor>/google-services.json` cho mỗi flavor, đúng stub trong [`../getting-started/01_setup.md` §3.2](../getting-started/01_setup.md#32-chưa-có-firebase-project-dùng-stub), với package name đọc từ `build.gradle.kts` — là thứ một lần build Gradle cần, rồi từ `apps/mobile/`:
 
 ```bash
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
@@ -227,12 +228,35 @@ dart tools/module_generator/generate.dart 1 smoke_n "" 3 3    # feature không c
 dart tools/module_generator/generate.dart 3 smoke_nd         # package data mà domain của nó không tồn tại
 dart tools/module_generator/generate.dart 4 smoke_core       # package core
 dart tools/module_generator/generate.dart 5 smoke_custom acme  # package tuỳ biến
-dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+dart tools/composer/composer.dart new smoke_app --platforms android,ios,web,linux --modules smoke_p,smoke_d
 ```
 
-— một template quản lý state và cách đóng góp route khác, việc nối package API, một cặp domain/data, những đường đi không bước nào khác chạy tới (feature không có quản lý state và không có route, package data không có domain, một package core và một package tuỳ biến), và một app mới hoàn chỉnh ghép bốn package đầu. `composer new` không chạy `pub get` lẫn codegen, nên job sau đó chạy `flutter pub get`, `dart run build_runner build --workspace` và barrel generator cho các package mới (RULE-75), rồi bắt kết quả qua `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, test riêng của các package `feature_smoke_p` và `feature_smoke_n` mới sinh, `flutter test` của app mới (DI smoke test và profile test của nó), các DI smoke test của `apps/mobile` và `apps/admin` (nay cũng ghép các module mới), và `check_unused_packages`, chỉ fail khi dependency thừa nằm trong một package vừa sinh. Các package API, domain và data không sinh `test/`, nên không chạy test cho chúng. Không commit gì; bản checkout bị bỏ đi.
+— một template quản lý state và cách đóng góp route khác, việc nối package API, một cặp domain/data, những đường đi không bước nào khác chạy tới (feature không có quản lý state và không có route, package data không có domain, một package core và một package tuỳ biến), và một app mới hoàn chỉnh ghép bốn package đầu. `composer new` không chạy `pub get` lẫn codegen và không sinh runner nào, nên job sau đó chạy `flutter pub get`, `dart run build_runner build --workspace`, barrel generator cho các package mới (RULE-75) và `composer runners --app smoke_app --platform web`, rồi bắt kết quả qua `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, test riêng của các package `feature_smoke_p` và `feature_smoke_n` mới sinh, `flutter test` của app mới (DI smoke test và profile test của nó), các DI smoke test của `apps/mobile` và `apps/admin` (nay cũng ghép các module mới), `check_unused_packages`, chỉ fail khi dependency thừa nằm trong một package vừa sinh, và cuối cùng là boot test của app mới trong Chrome headless — cùng bước với job `platforms`. Các package API, domain và data không sinh `test/`, nên không chạy test cho chúng. Không commit gì; bản checkout bị bỏ đi.
 
-Hãy đặt **cả bốn** job là required status check trong branch protection rule.
+Hãy đặt **cả năm** job là required status check trong branch protection rule (`platforms` chạy một lần cho mỗi app, nên mỗi lần chạy của nó là một check riêng; nó bị bỏ qua khi không app nào khai web hay Linux).
+
+### Platform boot (RULE-83)
+
+Build không phải là boot: bản build web của admin biên dịch được, analyze sạch và qua mọi unit test trong khi nó hiện một trang trắng. Mỗi app giữ `integration_test/boot_test.dart`, chạy `main()` trên thiết bị của một platform và fail trừ khi `debugBootStage()` đạt `BootStage.shown` — màn hình đầu tiên đã được vẽ, không chỉ được build ([`../reference/01_rules.md` § 21](../reference/01_rules.md#21-app-và-composition)). Không workflow nào liệt kê app hay platform: các hàng đến từ manifest qua `dart tools/composer/composer.dart describe --ci-matrix pr|full`, nên một app hay platform mới không cần sửa workflow. Mọi lần boot là flavor `dev` với `env.dev`, đó là lý do composer V12 đòi cả hai.
+
+**Mỗi PR — job `platforms` của `pr_quality_check.yml`.** Một job cho mỗi app khai web hoặc Linux (`--ci-matrix pr`: `{"app", "web", "linux"}`), sau `quality`, trên ubuntu, timeout 40 phút — một prompt keyring Linux không bao giờ tự kết thúc. Nó chạy `flutter pub get`, khôi phục cache `sqlite3.wasm`, chạy `configure.dart --stub-firebase` (sinh các runner, kể cả asset database cho web), khôi phục cache build-hook, rồi:
+
+- **web** — `browser-actions/setup-chrome` cài Chrome và chromedriver cùng bản build; driver lắng nghe ở cổng 4444 và `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart -d web-server --browser-name=chrome --headless --chrome-binary=<that Chrome>` boot app với `--dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev`;
+- **Linux, hai lần**, với toolchain Linux (`clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev`), Xvfb, `dbus-x11` và `gnome-keyring` đã cài, mỗi lần trong các thư mục XDG mới: một lần dưới `xvfb-run -a dbus-run-session` với `gnome-keyring-daemon --unlock --components=secrets`, sau đó bước này hỏi collection mặc định của Secret Service qua D-Bus về một item và fail nếu lần boot không lưu cái nào (lùi về bộ nhớ sẽ qua mà không ai hay); một lần với `DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus`, nơi libsecret fail ngay và `secure_storage: memory_fallback` giữ các giá trị secure trong bộ nhớ — app vẫn phải boot.
+
+**Ma trận đầy đủ — `platforms_full.yml`.** Các platform mà một PR không boot. Job `plan` của nó in `--ci-matrix full` (một hàng cho mỗi app và mỗi Android, iOS, Windows hay macOS đã khai: `{"app", "platform", "os", "flavor", "boot"}`) và các app khai web; rồi:
+
+| Job | Làm gì |
+|:--|:--|
+| `boot` | theo từng hàng, trên `os` của hàng: macOS và Windows chạy boot test; iOS build cho simulator, rồi boot trên một iPhone simulator; Android build APK debug, rồi boot trên một emulator (API 34, x86_64, bật KVM). `flavor` là `--flavor dev` với runner Android hay iOS đã commit, còn lại là `--dart-define=APP_FLAVOR=dev`. Một hàng có `boot: firebase` (push suy ra đang bật) chỉ boot khi `FIREBASE_CONFIG_ARCHIVE` được đặt; không có nó thì chặng này build và đăng một thông báo |
+| `web-release` | mọi app web, `flutter build web --release`, rồi với `--wasm` — chỉ biên dịch: một hồi quy về tree-shaking, minification hay dart2wasm không bao giờ hiện ra trong lần boot debug của PR |
+| `report` | chỉ khi một lần chạy **theo lịch** fail: mở issue "Platforms (full matrix) failing", hoặc comment vào nó khi nó còn mở, kèm các job fail và URL của lần chạy |
+
+Nó chạy khi push vào `main` có đụng `platform/**`, `modules/**`, `tools/composer/**`, `tools/workspace_setup/**`, `tools/shared/**`, `tools/barrel_generator/**`, `apps/**`, `pubspec_dependencies.yaml`, `.fvmrc` hoặc chính file workflow; khi `merge_group`; hằng tuần, thứ Hai 03:17 UTC (không có lockfile nào được commit, nên lượt này bắt được dependency trôi và runner-image trôi); trên pull request khi nó mang label `ci:platforms` (khi label được thêm, rồi ở mỗi lần push); và chạy tay (`workflow_dispatch`). Nhóm concurrency gồm tên event, nên một lần chạy hằng tuần đang chờ không bao giờ bị huỷ bởi một push vào `main`; trên pull request, một push mới huỷ lần chạy cũ hơn. GitHub mặc định không có label `ci:platforms`: hãy tạo nó một lần, và chạy workflow bằng tay một lần trước khi dựa vào nó — macOS, Windows, iOS và emulator không được chạy ở nơi nào khác.
+
+**Cache.** Không có lockfile nào được commit, nên mỗi `subosito/flutter-action` khoá pub cache của nó theo `pubspec_dependencies.yaml` và mọi `pubspec.yaml` (`pub-cache-key`); khoá mặc định băm `**/pubspec.lock` và sẽ không bao giờ đổi. Cache `sqlite3.wasm` (`~/.cache/flutter_monorepo/sqlite3`, khoá `sqlite3-wasm-<os>-<hash of pubspec_dependencies.yaml>`) được khôi phục **trước** `configure.dart`, mà bước cuối của nó đọc nó và điền vào khi trượt; cache build-hook (`.dart_tool/hooks_runner/shared`, khoá `hooks-runner-…`) được khôi phục **sau**, vì `flutter clean` của `configure.dart` xoá `.dart_tool/`. `composer runners` kiểm sha256 của wasm ở mỗi lần chép, nên một cache bị sửa sẽ fail. `platforms_full.yml` cũng cache Gradle (`setup-java` `cache: gradle`), CocoaPods (`apps/<id>/ios/Pods`, theo `Podfile` của app và catalog) và `build/windows/x64/extracted` của Windows. Output codegen không bao giờ được cache: mọi chặng chạy `configure.dart` như một adopter làm.
+
+Các job không cần runner được sinh — `build` ở đây và `flutter_build.yml` (cả hai build Android từ runner đã commit) và `code_review.yml` (nó chỉ đọc Dart) — chạy `configure.dart --no-runners`. Mục lục mọi workflow, và các lệnh chính xác cho một platform ở local, nằm trong `.github/workflows/README.md` và [`../guides/13_app_composition.md` § 7](../guides/13_app_composition.md#chạy-và-boot-một-platform).
 
 **Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 0–5 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
@@ -258,7 +282,8 @@ Mọi file dưới đây đều bị gitignore, nên runner sạch không có fi
 | `APP_STORE_CONNECT_API_KEY_P8_B64` | `paths.app_store_connect_key_filepath` trong `Config.yaml` — phải kết thúc bằng `AuthKey_<api_key_id>.p8`, không thì bước này fail | `fastlane.yml` — `distribute_store` + iOS | `base64 -w0 AuthKey_XXXX.p8` |
 | `FIREBASE_ANDROID_APP_ID` | — | `flutter_build.yml` | Firebase App ID, ví dụ `1:1234567890:android:abcdef` |
 | `GEMINI_API_KEY` | — | `code_review.yml` | Tạo tại <https://aistudio.google.com/app/apikey> |
-| `GITHUB_TOKEN` | — | `code_review.yml` | GitHub tự cấp — không cần tự tạo |
+| `GITHUB_TOKEN` | — | `code_review.yml`, `platforms_full.yml` (`report`) | GitHub tự cấp — không cần tự tạo |
+| `FIREBASE_CONFIG_ARCHIVE` | được giải nén vào `apps/<id>/` trước `configure.dart` (mà khi đó chỉ stub những gì vẫn còn thiếu) | `platforms_full.yml` — tuỳ chọn: không có nó, các chặng nơi push bật (`boot: firebase`) build nhưng không boot | `cd apps/mobile && tar -czf - lib/firebase/firebase_options_*.dart android/app/src/*/google-services.json ios/flavors/*/GoogleService-Info.plist \| base64 -w0` |
 
 Thêm tại **Settings → Secrets and variables → Actions → New repository secret**.
 
@@ -329,7 +354,7 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 3 smoke_nd
 #    dart tools/module_generator/generate.dart 4 smoke_core
 #    dart tools/module_generator/generate.dart 5 smoke_custom acme
-#    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+#    dart tools/composer/composer.dart new smoke_app --platforms android,ios,web,linux --modules smoke_p,smoke_d
 #    flutter pub get && dart run build_runner build --workspace
 #    (với từng modules/smoke_p/{feature,api} modules/smoke_d/{domain,data} modules/smoke_n/feature
 #     modules/smoke_nd/data platform/infra/smoke_core platform/infra/smoke_custom: barrel_generator <dir>/lib)
@@ -338,6 +363,12 @@ dart tools/unused_checker/check_unused_packages.dart
 #    (cd modules/smoke_p/feature && flutter test) && (cd modules/smoke_n/feature && flutter test)
 #    (cd apps/smoke_app && flutter test)
 #    (cd apps/mobile && flutter test) && (cd apps/admin && flutter test)   # các app có sẵn vẫn khởi động được
+#    dart tools/composer/composer.dart runners --app smoke_app --platform web, rồi boot web của nó (bên dưới)
+
+# 4b. Job platforms: boot test của từng app trên web và Linux
+#     (chromedriver cùng bản build với Chrome của bạn ở cổng 4444 cho web; một màn hình
+#     và một Secret Service cho Linux — guide 13 § 7)
+(cd apps/admin && flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev)
 
 # 5. Job build của pr_quality_check.yml (cần stub Firebase hoặc file thật —
 #    xem bên dưới) — chú ý cd
@@ -364,7 +395,7 @@ Các mục còn mở, theo thứ tự ưu tiên tương đối:
 - [ ] `flutter_build.yml` — chạy sáu gate của `pr_quality_check.yml` trước khi build, để một lần dispatch thủ công không thể ship code chưa kiểm
 - [ ] `flutter_build.yml` / `fastlane.yml` — thêm secret keystore cho staging, khôi phục `apps/mobile/android/key-stg.properties` từ chúng và bỏ opt-in `allowDevKeystoreForStaging`, để staging thôi bị ký bằng key dev công khai ([§2](#2-flutter_buildyml--build-and-distribute))
 - [ ] `code_review.yml` — quyết định có bỏ comment `exit 1` hay không (chỉ sau khi tin tưởng tỷ lệ báo nhầm của nó)
-- [ ] `flutter_build.yml` — cân nhắc `ubuntu-latest` thay cho `macos-latest` với build chỉ cho Android
+- [ ] `platforms_full.yml` — tạo label `ci:platforms` và chạy workflow bằng tay một lần: các chặng macOS, Windows, iOS và emulator của nó chưa từng chạy trong repo này
 - [ ] `flutter_build.yml` — tách `FIREBASE_ANDROID_APP_ID` theo flavor ([§2](#2-flutter_buildyml--build-and-distribute))
 - [ ] `fastlane.yml` — thiết lập ký mã iOS (ví dụ `match`) nếu muốn build iOS trên runner GitHub-hosted
 

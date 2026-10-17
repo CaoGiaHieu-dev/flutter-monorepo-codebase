@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/reference/04_review_checklist.md@b455ad2 -->
+<!-- translated-from: docs/en/reference/04_review_checklist.md@8240431 -->
 # Checklist review PR
 
 **File này trả lời:** phải thoả những gì thì PR này mới được merge?
@@ -15,9 +15,9 @@ Mỗi ô ghi tên dòng trong bảng đăng ký mà nó kiểm. Bản thân lu�
 
 ```bash
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R21
+dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R22
 (cd tools && dart test)                              # Gate 1 — test của chính các gate tool
-dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrel
+dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrel, runner sinh ra
 git status --short -- '*.dart'                       # barrel lệch — CI fail nếu có thay đổi hoặc file .dart chưa theo dõi ở đây
 flutter analyze                                      # Gate 2 — phân tích tĩnh, 0 issue
 # Gate 3 — `flutter test` ở mọi package có thư mục test/ (apps/*: smoke test DI)
@@ -30,7 +30,8 @@ dart tools/unused_checker/check_unused_packages.dart # đã khai mà không impo
 - [ ] **RULE-60 · RULE-63** — test pass ở mọi package bị đụng có thư mục `test/`, kể cả smoke test DI của mỗi app (nó dựng mọi factory `@injectable`)
 - [ ] **RULE-76** — không file sinh ra nào (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) bị sửa tay hay bị commit
 - [ ] **RULE-75** — đã chạy lại barrel generator, sau codegen, nếu có file trong `lib/` được thêm, đổi tên hoặc xoá; không có `export` thêm tay
-- [ ] **RULE-80 · RULE-81 · RULE-82** — một giá trị riêng của app được khai trong `apps/<id>/` (manifest, profile, hook), không phải hằng số trong `platform/`; module đăng ký một contract có trong catalog được khai là `provided` ở mỗi app ghép nó; không có nhánh platform mới ngoài allow-list của R17
+- [ ] **RULE-80 · RULE-81 · RULE-82** — một giá trị riêng của app được khai trong `apps/<id>/` (manifest, profile, hook), không phải hằng số trong `platform/`; module đăng ký một contract có trong catalog được khai là `provided` ở mỗi app ghép nó; không có nhánh platform mới ngoài allow-list của R17; không thư viện chỉ-native nào trong `lib/` có thể chạy web (R22)
+- [ ] **RULE-83** — thay đổi chạm platform đã chạy boot test của các platform nó chạm; không runner sinh ra nào bị commit
 - [ ] **RULE-77** — thay đổi DI, dependency hay chuyển chỗ type đã được theo sau bởi một lần build APK debug (job `build` của CI)
 
 ---
@@ -89,7 +90,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 
 - [ ] **RULE-44** — khoá mới nằm trong `utils/` của package sở hữu; chủ sở hữu khai `StorageValue<T>` của riêng mình, chọn `secure` / `pref` có chủ đích, và chỉ chia sẻ qua interface trên `core_di`
 - [ ] **RULE-45** — chủ sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, không bao giờ `@injectable`
-- [ ] **RULE-46** — bảng và DAO mới nằm trong database riêng của package sở hữu
+- [ ] **RULE-46** — bảng và DAO mới nằm trong database riêng của package sở hữu; `lib/` của nó không bao giờ import `drift/native` (`forTesting` nhận executor, R22)
 - [ ] **RULE-47** — thay đổi schema đã tăng `schemaVersion` và đăng ký `IDatabaseMigration<YourDatabase>`; lệnh mở mang `@Order(1)`
 - [ ] **RULE-48** — thay đổi chạm tới networking giữ nguyên quyết định `ssl_pinning` của từng flavor trong `app_manifest.yaml` (pin, hoặc `disabled` kèm lý do) và nói rõ các pin đã được điền hay chưa
 
@@ -104,7 +105,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 - [ ] **RULE-13 · RULE-63** — không `@Singleton` eager nào phụ thuộc nhóm chạy sau; plugin được chạm tới trong lúc DI có test double trong smoke test; factory cần một `@factoryParam` không-nullable được liệt kê kèm lý do
 - [ ] **RULE-14** — interface thứ hai trên cùng một implementation được bind qua `@module`
 
-**Kiểm chứng** — smoke test DI boot đồ thị thật cho mọi flavor:
+**Kiểm chứng** — smoke test DI boot đồ thị thật cho mọi platform đã khai trừ web, nhân với mọi flavor:
 
 ```bash
 cd apps/mobile && flutter test test/di_smoke_test.dart

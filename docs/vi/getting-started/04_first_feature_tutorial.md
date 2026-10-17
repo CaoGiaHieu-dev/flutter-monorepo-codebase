@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/04_first_feature_tutorial.md@d109d3f -->
+<!-- translated-from: docs/en/getting-started/04_first_feature_tutorial.md@8240431 -->
 # 04 · Tutorial: Feature đầu tiên của bạn trong 30 phút
 
 ## Mục tiêu
@@ -703,7 +703,7 @@ dart tools/dependency_sync.dart --check           # ✅ Success: All packages ..
 dart tools/unused_checker/check_unused_packages.dart   # ✅ Success! No unused packages found across all workspace modules.
 ```
 
-Smoke test DI boot đồ thị DI thật của `apps/mobile` cho mọi flavor. Đó là bằng chứng các đăng ký mới của bạn resolve được (RULE-63).
+Smoke test DI boot đồ thị DI thật của `apps/mobile` cho mọi platform đã khai trừ web (Android, iOS và Linux), nhân với mọi flavor. Đó là bằng chứng các đăng ký mới của bạn resolve được (RULE-63).
 
 Kết thúc bằng một lần build thật, vì analyze sạch chưa phải là build được (RULE-77):
 

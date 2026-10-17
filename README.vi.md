@@ -7,6 +7,8 @@ Chào mừng bạn đến với tài liệu kỹ thuật cốt lõi của **Code
 
 Dự án này sử dụng **Pub Workspaces** bản địa của Dart, cho phép tối ưu phụ thuộc, độc lập tính năng và tự động hóa CI/CD ngay tại thư mục gốc của dự án.
 
+**Sáu nền tảng.** Android, iOS, web, macOS, Windows và Linux. `apps/mobile` chạy trên Android và iOS (runner được commit, kèm native flavor) và trên web và Linux; `apps/admin` trên web, macOS, Windows và Linux. Mọi runner web và desktop đều do `dart tools/composer/composer.dart runners` sinh — `configure.dart` chạy nó — và git bỏ qua, và mỗi nền tảng đã khai được chứng minh bằng `integration_test/boot_test.dart` của app, đợi đến khi màn hình đầu tiên được vẽ (RULE-83): web và Linux ở mọi pull request, các nền tảng còn lại trong `platforms_full.yml`. Thêm, eject hay gỡ một nền tảng: [`13_app_composition.md` § 7](docs/vi/guides/13_app_composition.md#7-công-thức).
+
 > **Lưu ý template:** Các package feature / domain / data có sẵn (Auth, Cache, Home, Settings, Onboarding, Splash, Dashboard) là **mã mẫu tham chiếu** minh họa wiring Clean Architecture. Hãy coi chúng là pattern để copy hoặc xóa khi làm sản phẩm thật — không phải business logic production. AI Agent bắt đầu từ [`CLAUDE.md`](CLAUDE.md) (Claude Code) hoặc [`.agents/AGENTS.md`](.agents/AGENTS.md) (công cụ khác).
 
 ---
@@ -106,14 +108,15 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── .claude/                       # skills/ — công thức tác vụ cho agent (Claude Code tự tìm ở đây)
 ├── .github/                       # CODEOWNERS, SETUP_GUIDE.md, dependabot.yml, issue form, mẫu PR, các workflow CI
 │   └── workflows/
-│       ├── pr_quality_check.yml   # Cổng PR 0–5 (composer, arch_check, analyze, test, catalog, docs_check), barrel drift, kiểm tra package thừa, debug APK, hai generator smoke test
+│       ├── pr_quality_check.yml   # Cổng PR 0–5 (composer, arch_check, analyze, test, catalog, docs_check), barrel drift, kiểm tra package thừa, debug APK, boot web và Linux, hai generator smoke test
+│       ├── platforms_full.yml     # Boot macOS, Windows, iOS, Android và build web release: main, merge queue, hằng tuần, label `ci:platforms`
 │       ├── flutter_build.yml      # Build & phân phối thủ công bằng Flutter CLI
 │       ├── fastlane.yml           # Build & phân phối thủ công qua Fastlane
 │       ├── code_review.yml        # Review bằng Gemini AI trên pull request (chỉ tham khảo)
 │       └── README.md              # Mỗi workflow làm gì và cần secret nào
-├── .vscode/                       # launch.json (App Dev/Staging/Prod, Admin Web/Desktop), settings, tasks
+├── .vscode/                       # launch.json (App Dev/Staging/Prod, Admin Web/Desktop, Mobile Web/Linux), settings, tasks
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
-│   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
+│   ├── admin/                     # App thứ hai: auth + settings, trên web và desktop — xem apps/admin/README.md
 │   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
 │       ├── app_manifest.yaml      # App là gì (flavor, env, platform, capability) và nó ghép gì
 │       ├── README.md              # Lộ trình đọc + báo cáo được sinh về những gì app khai báo
@@ -122,8 +125,11 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       │   ├── app/               # app_profile.dart (facts được sinh + tinh chỉnh có kiểu), app_hooks.dart
 │       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
 │       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
-│       ├── android/  ios/         # Project native — chạy và build từ apps/mobile/
-│       ├── test/                  # DI smoke test (checkAppContract cho từng flavor, dựng mọi factory), profile test và boot test
+│       ├── android/  ios/         # Project native đã commit — chạy và build từ apps/mobile/
+│       ├── web/  linux/           # Do `composer runners` sinh, bị git-ignore (RULE-83)
+│       ├── test/                  # DI smoke test (checkAppContract cho từng platform và flavor, dựng mọi factory), profile test và test kiểm tra boot
+│       ├── integration_test/      # boot_test.dart — main() trên thiết bị cho đến khi màn hình đầu tiên được vẽ
+│       ├── test_driver/           # integration_test.dart — driver của boot web (`flutter drive`)
 │       ├── env.dev  env.stg       # File env theo flavor (env.prod: tự tạo)
 │       ├── fastlane/              # Lane phát hành
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
@@ -163,10 +169,10 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
-│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R21 — Cổng PR 1
+│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R22 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel duy nhất của package, lib/<package>.dart
 │   ├── code_review/               # Review mã nguồn bằng Gemini AI
-│   ├── composer/                  # sync/verify/describe/new/list app từ app_manifest.yaml — Cổng PR 0
+│   ├── composer/                  # sync/verify/describe/new/list/runners app từ app_manifest.yaml — Cổng PR 0
 │   ├── coverage_report/           # Tóm tắt coverage (chỉ tham khảo) từ lcov.info
 │   ├── docs_check/                # Đường dẫn trong docs tồn tại, cân bằng en↔vi, trích dẫn RULE-ID — Cổng PR 5
 │   ├── firebase/                  # Cấu hình Firebase theo flavor cho một app
@@ -239,7 +245,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
-    dart tools/workspace_setup/configure.dart                  # đa nền tảng
+    dart tools/workspace_setup/configure.dart                  # đa nền tảng; sinh runner web/desktop ở bước cuối
     dart tools/workspace_setup/configure.dart --stub-firebase  # + stub Firebase chỉ để biên dịch (CI chạy cái này)
     ```
 6.  **Code Review AI (`tools/code_review/`)**:
@@ -265,10 +271,11 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     dart tools/composer/composer.dart verify                    # Cổng PR 0: fail khi lệch
     dart tools/composer/composer.dart describe --app mobile     # app khai báo gì và shell resolve gì
     dart tools/composer/composer.dart new kiosk --platforms android,web   # một app hoàn toàn mới
+    dart tools/composer/composer.dart runners --app admin       # sinh runner web/desktop của nó (git-ignore)
     ```
 11. **Các cổng (`tools/arch_check/`, `tools/docs_check/`, `tools/sample_cleanup/`)**:
     ```bash
-    dart tools/arch_check/check.dart                            # Cổng PR 1 — luật R1–R21
+    dart tools/arch_check/check.dart                            # Cổng PR 1 — luật R1–R22
     dart tools/docs_check/check.dart                            # Cổng PR 5 — đường dẫn, cân bằng en↔vi, RULE-ID
     dart tools/sample_cleanup/remove_sample.dart --list         # các bundle mẫu có thể gỡ
     ```
@@ -493,8 +500,9 @@ Hệ thống CI/CD sử dụng **Fastlane** với kiến trúc **Workspace-Root 
 
 Mỗi pull request chạy `.github/workflows/pr_quality_check.yml`: job quality (`composer verify`,
 `arch_check`, test của chính các tool cổng, setup + codegen, kiểm tra barrel drift, `flutter analyze`,
-test từng package, kiểm tra catalog, `docs_check`, kiểm tra dependency thừa), rồi build debug APK và
-hai generator smoke test. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; mô tả
+test từng package, kiểm tra catalog, `docs_check`, kiểm tra dependency thừa), rồi build debug APK, boot
+web và Linux của mọi app khai chúng, và hai generator smoke test; `platforms_full.yml` boot macOS,
+Windows, iOS và Android trên `main`, trong merge queue, hằng tuần và khi có label `ci:platforms`. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; mô tả
 đầy đủ: [`operations/01_cicd.md`](docs/vi/operations/01_cicd.md).
 
 ### Lệnh Biên Dịch Android APK từ Root:
@@ -530,7 +538,8 @@ dart tools/workspace_setup/configure.dart
 ```
 Đây **chính là** bước setup: nó activate `flutterfire_cli` (không với `--stub-firebase`), rồi chạy `flutter clean` →
 `flutter pub get` → `gen-l10n` trong mọi package có `l10n.yaml` →
-`dart run build_runner build --workspace` → barrel generator cho từng package. Trình tự làm tay là
+`dart run build_runner build --workspace` → barrel generator cho từng package → `composer runners`
+(các runner web và desktop được sinh; `--no-runners` bỏ qua nó). Trình tự làm tay là
 `pub get`, `gen-l10n`, `build_runner` — đúng thứ tự đó, vì barrel được commit của mỗi package
 (`lib/<package>.dart`) export các file sinh tự động bị gitignore, và các export đó treo cho tới khi
 codegen ghi xong file. Lượt barrel chỉ cần khi bạn thêm, đổi tên hoặc xóa một file trong `lib/`.

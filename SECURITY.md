@@ -44,10 +44,10 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
   chain a host presents, `http_security_pinning` opens a separate observation connection that sends
   no request to the host (through a proxy it sends only the `CONNECT`) and trusts nothing it sees
   (Android: a trust manager that records the chain and rejects it; iOS: a challenge it cancels;
-  desktop: `onBadCertificate` returns true and no data is sent). Enforcement is the second, real
-  connection, whose `SecurityContext` holds only the certificates that matched your pins. A scanner
-  finding on the desktop probe is expected; a pin that does not stop a mismatching host is a
-  vulnerability: report it.
+  desktop: `onBadCertificate` returns true, no application data is sent and the socket is closed
+  after the handshake). Enforcement is the second, real connection, whose `SecurityContext` holds
+  only the certificates that matched your pins. A scanner finding on the desktop probe is expected;
+  a pin that does not stop a mismatching host is a vulnerability: report it.
 - **Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`.** A missing or unknown flavor is treated as prod. A bypass reachable any other
   way *is* a vulnerability — please report it.

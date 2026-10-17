@@ -120,7 +120,7 @@ void main() {
         throwsA(
           isA<InvalidPinException>().having((e) => e.pin, 'pin', 'not-a-pin'),
         ),
-        reason: '$decision',
+        reason: '${(decision as PinnedSsl).hashes}',
       );
     }
   });

@@ -40,7 +40,7 @@ import 'src/runners.dart';
 /// dart tools/composer/composer.dart describe [--app <id>] [--catalog | --ci-matrix pr|full]
 /// dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]
 /// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>] [--org <reverse domain>]
-/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force]
+/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force] [--offline]
 /// ```
 ///
 /// The manifest also **declares** the app — its name, flavors (and the pinning
@@ -66,7 +66,10 @@ import 'src/runners.dart';
 ///
 /// `runners` generates the runner of every `scaffold` platform with
 /// `flutter create` in a temporary directory (`src/runners.dart`), copies only
-/// the platform folder into the app and applies a fixed patch set; git
+/// the platform folder into the app, runs `flutter pub get` there (`--offline`
+/// with `--offline`) — after a new runner, and whenever a runner lacks the
+/// plugin files pub get writes — so it builds with `--no-pub`, and applies a
+/// fixed patch set that rewrites no file whose bytes would not change; git
 /// ignores the result. `describe --ci-matrix pr|full` prints, as one line of
 /// JSON, the apps and platforms CI boots.
 ///
@@ -2299,12 +2302,18 @@ COMMANDS
                     `runner: scaffold` (never committed: the app's .gitignore
                     `runners` region ignores it): `flutter create` in a
                     temporary directory with `app.org` and the pubspec name,
-                    then only apps/<id>/<p>/ is copied in. Every run applies
-                    the patch set: the macOS network-client entitlement, and
-                    for an app on the web that links core_database the
+                    then only apps/<id>/<p>/ is copied in, and `flutter pub
+                    get` runs in the app so the new runner has its plugin
+                    files and builds with `--no-pub`. Any later run that
+                    finds a runner without them (a pub get that failed)
+                    runs pub get again. Every run applies the
+                    patch set: the macOS network-client entitlement, and for
+                    an app on the web that links core_database the
                     sqlite3.wasm the resolved sqlite3 names (sha256-checked)
                     and a compiled drift_worker.js. A missing folder is
-                    generated, an existing one only patched; `--force`
+                    generated, an existing one only patched; a file whose
+                    bytes would not change is not rewritten, so a second run
+                    says `up to date` and writes nothing. `--force`
                     regenerates (after a Flutter upgrade). Refuses a committed
                     platform. configure.dart runs it last. Exit 0 done, 1 a
                     failed step, 64 usage.
@@ -2344,6 +2353,9 @@ OPTIONS
   --platform <p,q>  With `runners`: only these scaffold platforms; naming a
                     committed one is refused.
   --force           With `runners`: delete and regenerate the selected runners.
+  --offline         With `runners`: no network — `flutter pub get --offline`
+                    (from the pub cache; when that fails, run again online),
+                    no sqlite3.wasm download (a cached copy is still used).
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.

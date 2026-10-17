@@ -158,8 +158,9 @@ class AppInitializer {
       DynamicLogger.log(
         'FLUTTER_APP_FLAVOR is missing or unknown ("$appFlavor"). Treating '
         'the build as prod for TLS: certificate validation stays ON. Pass '
-        '--flavor dev to allow self-signed certificates in a debug build '
-        '(on the web: --dart-define=APP_FLAVOR=dev).',
+        '--flavor dev to allow self-signed certificates in a debug build, or '
+        '--dart-define=APP_FLAVOR=dev wherever the tool sets no --flavor '
+        '(the web and any generated runner).',
         tag: 'Security',
         level: LogLevel.ERROR,
       );

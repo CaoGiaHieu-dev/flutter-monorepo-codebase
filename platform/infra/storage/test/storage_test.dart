@@ -13,6 +13,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// `DynamicLogger`'s level number for `LogLevel.WARNING`.
 const _warning = 900;
 
+/// The facts of a Linux runner that decides [policy] for a missing secure
+/// store.
+PlatformFacts _linuxFacts(SecureStoragePolicy policy) => PlatformFacts(
+  runner: RunnerKind.scaffold,
+  splash: SplashMode.native,
+  orientation: OrientationPolicy.free,
+  deepLinks: false,
+  push: false,
+  secureStorage: policy,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -212,15 +223,6 @@ void main() {
     // Not the first launch, so init's first-run cleanup stays out of the way.
     const notFirstLaunch = <String, Object>{'firstTimeOpenApp': false};
 
-    PlatformFacts linuxFacts(SecureStoragePolicy policy) => PlatformFacts(
-      runner: RunnerKind.scaffold,
-      splash: SplashMode.native,
-      orientation: OrientationPolicy.free,
-      deepLinks: false,
-      push: false,
-      secureStorage: policy,
-    );
-
     late List<({int level, String message})> logged;
 
     setUp(() {
@@ -249,7 +251,7 @@ void main() {
         final store = _NoSecureStore();
         final secure = SecureStorageImpl.withStorage(
           store,
-          platform: linuxFacts(SecureStoragePolicy.memoryFallback),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
         );
 
         await secure.init();
@@ -283,7 +285,7 @@ void main() {
       final store = _NoSecureStore();
       final secure = SecureStorageImpl.withStorage(
         store,
-        platform: linuxFacts(SecureStoragePolicy.required),
+        platform: _linuxFacts(SecureStoragePolicy.required),
       );
 
       await expectLater(secure.init(), throwsA(isA<PlatformException>()));
@@ -314,7 +316,7 @@ void main() {
       final store = _RefusingWriteStore();
       final secure = SecureStorageImpl.withStorage(
         store,
-        platform: linuxFacts(SecureStoragePolicy.required),
+        platform: _linuxFacts(SecureStoragePolicy.required),
       );
 
       await expectLater(secure.init(), throwsA(isA<PlatformException>()));
@@ -331,7 +333,7 @@ void main() {
         final store = _RefusingWriteStore();
         final secure = SecureStorageImpl.withStorage(
           store,
-          platform: linuxFacts(SecureStoragePolicy.memoryFallback),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
         );
 
         await secure.init();
@@ -495,6 +497,185 @@ void main() {
         final next = prefOver(_FlakyStorage(failuresBeforeSuccess: 0));
         await next.init();
         expect(await next.read<String>('locale'), 'vi');
+      },
+    );
+  });
+
+  group('PrefStorageImpl — no secure store, values sealed with its key', () {
+    const keyId = '_internal_pref_master_key';
+    late SharedPreferences preferences;
+    late List<({int level, String message})> logged;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      preferences = await SharedPreferences.getInstance();
+      FlutterSecureStorage.setMockInitialValues({});
+      logged = [];
+      DynamicLogger.configure(
+        logHandler: (
+          message, {
+          error,
+          level = 0,
+          name = '',
+          sequenceNumber,
+          stackTrace,
+          time,
+          zone,
+        }) => logged.add((level: level, message: message)),
+      );
+      // A healthy earlier session sealed a preference with the key kept in
+      // secure storage; this run's platform has no secure store at all.
+      final healthy = PrefStorageImpl(preferences);
+      await healthy.init();
+      await healthy.write('locale', 'vi');
+      logged.clear();
+    });
+
+    tearDown(DynamicLogger.reset);
+
+    Iterable<({int level, String message})> fallbackWarnings() => logged.where(
+      (l) => l.message.contains('Secure storage is unavailable'),
+    );
+
+    test(
+      'memory_fallback: init completes, the stored values stay on disk '
+      'untouched and this run serves defaults from memory',
+      () async {
+        final onDisk = {
+          for (final k in preferences.getKeys()) k: preferences.get(k),
+        };
+        final store = _NoSecureStore();
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          store,
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), isNull);
+        await pref.write('locale', 'en');
+        expect(await pref.read<String>('locale'), 'en');
+        await pref.write('theme', 'dark');
+        await pref.delete('theme');
+        expect(await pref.read<String>('theme'), isNull);
+        // A key that IS on disk: deleting it, or writing it to null, forgets
+        // this run's value and never reaches the stored one.
+        await pref.delete('locale');
+        expect(await pref.read<String>('locale'), isNull);
+        await pref.write('locale', 'en');
+        await pref.write<String>('locale', null);
+        expect(await pref.read<String>('locale'), isNull);
+
+        // Nothing on disk moved: no fallback key, no value written or deleted.
+        expect({
+          for (final k in preferences.getKeys()) k: preferences.get(k),
+        }, onDisk);
+        expect(preferences.containsKey(keyId), isFalse);
+        expect(store.calls.toSet(), {'read $keyId'});
+
+        expect(fallbackWarnings(), hasLength(1));
+        expect(fallbackWarnings().single.level, _warning);
+        expect(
+          fallbackWarnings().single.message,
+          allOf(
+            contains('PlatformException'),
+            contains('platforms.<p>.secure_storage'),
+          ),
+        );
+
+        // Once the secure store is back, the preference reads as it was.
+        final recovered = PrefStorageImpl(preferences);
+        await recovered.init();
+        expect(await recovered.read<String>('locale'), 'vi');
+      },
+    );
+
+    test('required: init rethrows and nothing is touched', () async {
+      final onDisk = {
+        for (final k in preferences.getKeys()) k: preferences.get(k),
+      };
+      final store = _NoSecureStore();
+      final pref = PrefStorageImpl.withSecureStorage(
+        preferences,
+        store,
+        platform: _linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+      expect({
+        for (final k in preferences.getKeys()) k: preferences.get(k),
+      }, onDisk);
+      expect(store.calls.toSet(), {'read $keyId'});
+      expect(fallbackWarnings(), isEmpty);
+    });
+
+    test(
+      'memory_fallback: a fallback key in SharedPreferences that opens the '
+      'stored values still wins — they are read, and writes reach the disk',
+      () async {
+        // An earlier session without a secure store (on `required` facts, so
+        // the memory_fallback branch plays no part) kept its key in
+        // SharedPreferences and sealed a preference with it.
+        await preferences.clear();
+        final earlier = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.required),
+        );
+        await earlier.init();
+        await earlier.write('locale', 'vi');
+        final fallbackKey = preferences.getString(keyId);
+        expect(fallbackKey, isNotNull);
+        logged.clear();
+
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), 'vi');
+        await pref.write('theme', 'dark');
+        expect(preferences.containsKey('theme'), isTrue);
+        expect(preferences.getString(keyId), fallbackKey);
+        expect(fallbackWarnings(), isEmpty);
+      },
+    );
+
+    test(
+      'memory_fallback: with nothing stored, a fallback key is created and '
+      'persisted, so what this run writes survives the next launch',
+      () async {
+        await preferences.clear();
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await pref.init();
+        await pref.write('locale', 'en');
+
+        final fallbackKey = preferences.getString(keyId);
+        expect(fallbackKey, isNotNull);
+        expect(preferences.containsKey('locale'), isTrue);
+        expect(fallbackWarnings(), hasLength(1));
+        expect(
+          fallbackWarnings().single.message,
+          contains('keeping the pref master key in SharedPreferences'),
+        );
+
+        final next = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+        await next.init();
+        expect(await next.read<String>('locale'), 'en');
+        expect(preferences.getString(keyId), fallbackKey);
       },
     );
   });

@@ -13,7 +13,7 @@ import 'manifest_v2.dart';
 /// and never committed (RULE-83).
 ///
 /// ```text
-/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force]
+/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force] [--offline]
 /// ```
 ///
 /// 1. A runner folder that is missing (or every selected one, with `--force`,
@@ -23,6 +23,14 @@ import 'manifest_v2.dart';
 ///    `<tmp>/<name>/<p>/` is copied into `apps/<id>/<p>/`. Nothing outside the
 ///    platform folder is written: no sample `test/widget_test.dart` for the
 ///    barrel gate, no `analysis_options.yaml` replacing the root's (RULE-70).
+///    Then `flutter pub get` runs in the app (`flutter pub get --offline`
+///    with `--offline`): it writes what a runner needs beside Flutter's
+///    template — [kPubGetRunnerFiles], the plugin registrants and
+///    `linux/flutter/generated_plugins.cmake` (Windows alike) — so the runner
+///    builds with `--no-pub` straight away. It runs again on any later run
+///    that finds one of those files missing (a pub get that failed, or a
+///    runner an older composer wrote), so a broken runner is repaired, never
+///    reported up to date.
 /// 2. A fixed patch set, applied on every run and idempotent:
 ///    - **macos**: `com.apple.security.network.client` in both entitlements
 ///      files, after the sandbox key (every app talks HTTP);
@@ -30,7 +38,14 @@ import 'manifest_v2.dart';
 ///      binary the *resolved* `sqlite3` package names, checked against the
 ///      sha256 it ships in `lib/src/hook/asset_hashes.dart` — and
 ///      `web/drift_worker.js`, compiled from
-///      `platform/infra/database/web/drift_worker.dart`.
+///      `platform/infra/database/web/drift_worker.dart` in a temporary
+///      directory and copied in only when its bytes differ.
+///
+/// A file whose bytes would not change is never rewritten, so a second run
+/// with nothing changed writes nothing and says the app's runners are up to
+/// date. `--offline` makes no network call: `flutter pub get --offline`
+/// (from the pub cache), and no `sqlite3.wasm` download (a cached copy is
+/// still used).
 ///
 /// An anchor that is not found is an error naming the file, so a change in
 /// Flutter's templates is loud, never a silent skip. A `committed` runner is
@@ -71,6 +86,21 @@ const List<String> kMacosEntitlements = [
   'macos/Runner/Release.entitlements',
 ];
 
+/// What `flutter pub get` writes into a runner of each platform beside
+/// Flutter's template, relative to the app: the file a `--no-pub` build of
+/// that runner includes. Web has none (its registrant lives under
+/// `.dart_tool/`). One missing means pub get has not run since the runner
+/// was written.
+const Map<String, String> kPubGetRunnerFiles = {
+  'android':
+      'android/app/src/main/java/io/flutter/plugins/'
+      'GeneratedPluginRegistrant.java',
+  'ios': 'ios/Runner/GeneratedPluginRegistrant.m',
+  'linux': 'linux/flutter/generated_plugins.cmake',
+  'macos': 'macos/Flutter/GeneratedPluginRegistrant.swift',
+  'windows': 'windows/flutter/generated_plugins.cmake',
+};
+
 /// One app, as `composer runners` needs it.
 class RunnerApp {
   const RunnerApp({
@@ -98,7 +128,12 @@ class RunnerApp {
 
 /// What `runners` was asked for.
 class RunnersRequest {
-  const RunnersRequest({this.app, this.platforms, this.force = false});
+  const RunnersRequest({
+    this.app,
+    this.platforms,
+    this.force = false,
+    this.offline = false,
+  });
 
   /// `--app <id>`, or null for every app.
   final String? app;
@@ -108,6 +143,25 @@ class RunnersRequest {
 
   /// `--force`: delete and regenerate the selected runners.
   final bool force;
+
+  /// `--offline`: no network — `flutter pub get --offline`, no
+  /// `sqlite3.wasm` download.
+  final bool offline;
+}
+
+/// What one step of a run did.
+enum _Step {
+  /// It wrote (or deleted) a file.
+  wrote,
+
+  /// Everything it owns was already in place: nothing written.
+  unchanged,
+
+  /// Something it owns is still missing, and a warning said so.
+  missing,
+
+  /// It failed, and an error said so.
+  failed,
 }
 
 /// Reads the arguments after `runners`. Throws a [FormatException] saying
@@ -116,6 +170,7 @@ RunnersRequest parseRunnersArgs(List<String> args) {
   String? app;
   List<String>? platforms;
   var force = false;
+  var offline = false;
   String value(int i, String flag) {
     if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
       throw FormatException('`$flag` needs a value.');
@@ -145,11 +200,18 @@ RunnersRequest parseRunnersArgs(List<String> args) {
         i++;
       case '--force':
         force = true;
+      case '--offline':
+        offline = true;
       default:
         throw FormatException('Unknown argument `${args[i]}` for `runners`.');
     }
   }
-  return RunnersRequest(app: app, platforms: platforms, force: force);
+  return RunnersRequest(
+    app: app,
+    platforms: platforms,
+    force: force,
+    offline: offline,
+  );
 }
 
 /// Where the sqlite3 binaries are cached between runs:
@@ -262,6 +324,8 @@ Future<int> generateRunners({
       }
     }
 
+    final steps = <_Step>[];
+
     // 1. flutter create, once per app, for every missing runner.
     final missing = [
       for (final platform in targets)
@@ -274,31 +338,115 @@ Future<int> generateRunners({
         failed = true;
         continue;
       }
+      steps.add(_Step.wrote);
     }
 
-    // 2. The patch set, every run.
+    // 2. pub get, after a new runner and whenever a runner lacks a file it
+    //    writes: what a `--no-pub` build includes. The runner's state
+    //    decides, not this run's create — a pub get that failed, or ran
+    //    `--offline` without the packages, is repaired by the next run.
+    final lacking = [
+      for (final platform in targets)
+        if (kPubGetRunnerFiles[platform.name] case final file?)
+          if (!File(p.join(app.dir, file)).existsSync()) file,
+    ];
+    if (missing.isNotEmpty || lacking.isNotEmpty) {
+      steps.add(
+        await _pubGet(
+          app: app,
+          rel: rel,
+          lacking: lacking,
+          offline: request.offline,
+          run: run,
+          info: info,
+          error: error,
+        ),
+      );
+    }
+
+    // 3. The patch set, every run.
     for (final platform in targets) {
       switch (platform.name) {
         case 'macos':
-          if (!_patchEntitlements(app, rel, info, error)) failed = true;
+          steps.add(_patchEntitlements(app, rel, info, error));
         case 'web':
           if (!app.linksDatabase) continue;
-          final ok = await _webDatabaseAssets(
-            root: root,
-            app: app,
-            rel: rel,
-            run: run,
-            fetch: fetch,
-            env: env,
-            info: info,
-            warning: warning,
-            error: error,
+          steps.addAll(
+            await _webDatabaseAssets(
+              root: root,
+              app: app,
+              rel: rel,
+              run: run,
+              fetch: fetch,
+              env: env,
+              offline: request.offline,
+              info: info,
+              warning: warning,
+              error: error,
+            ),
           );
-          if (!ok) failed = true;
       }
+    }
+    if (steps.contains(_Step.failed)) failed = true;
+    if (steps.every((step) => step == _Step.unchanged)) {
+      info(
+        '  $rel: up to date (${targets.map((t) => t.name).join(', ')}) — '
+        'nothing written',
+      );
     }
   }
   return failed ? 1 : 0;
+}
+
+/// `flutter pub get` in the app (`--offline`: from the pub cache only): it
+/// adds what Flutter generates beside a runner's template — [lacking], the
+/// [kPubGetRunnerFiles] still missing — without which a `--no-pub` build of
+/// the runner fails. A failure, or a pass that leaves one of [lacking]
+/// missing, is an error naming what to do ([_Step.failed]); the next run
+/// tries again, because the files are still missing.
+Future<_Step> _pubGet({
+  required RunnerApp app,
+  required String rel,
+  required List<String> lacking,
+  required bool offline,
+  required ProcessRunner run,
+  required void Function(String) info,
+  required void Function(String) error,
+}) async {
+  final args = [...flutterArgs, 'pub', 'get', if (offline) '--offline'];
+  final shown = 'flutter ${args.skip(flutterArgs.length).join(' ')}';
+  info(
+    '  $rel: $shown (the plugin files of the runner'
+    '${lacking.isEmpty ? '' : ': ${lacking.join(', ')}'})',
+  );
+  final result = await run(flutterExecutable, args, workingDirectory: app.dir);
+  if (result.exitCode != 0) {
+    error(
+      '$rel: `$shown` failed (exit ${result.exitCode}) — the runner has no '
+      'plugin registrants until it passes, so a `--no-pub` build of it '
+      'fails; run `dart tools/composer/composer.dart runners --app ${app.id}` '
+      'again${offline ? ' online (the pub cache lacks a package)' : ''}, or '
+      'build without `--no-pub`:\n${result.stdout}${result.stderr}',
+    );
+    return _Step.failed;
+  }
+  final still = [
+    for (final file in lacking)
+      if (!File(p.join(app.dir, file)).existsSync()) file,
+  ];
+  if (still.isNotEmpty) {
+    error(
+      '$rel: `$shown` passed but wrote no ${still.join(', ')} — Flutter moved '
+      'what it generates for a runner; a `--no-pub` build of it may fail. '
+      'Update kPubGetRunnerFiles in tools/composer/src/runners.dart to where '
+      'this Flutter writes it',
+    );
+    return _Step.failed;
+  }
+  for (final file in lacking) {
+    info('    wrote $rel/$file');
+  }
+  return _Step.wrote;
 }
 
 /// `flutter create` in a temporary directory; copies `<p>/` of each of
@@ -370,13 +518,14 @@ void _copyTree(Directory from, Directory to) {
 }
 
 /// The network-client entitlement in both macOS entitlements files.
-bool _patchEntitlements(
+_Step _patchEntitlements(
   RunnerApp app,
   String rel,
   void Function(String) info,
   void Function(String) error,
 ) {
   var ok = true;
+  var wrote = false;
   for (final file in kMacosEntitlements) {
     final f = File(p.join(app.dir, file));
     final where = '$rel/$file';
@@ -402,9 +551,11 @@ bool _patchEntitlements(
       continue;
     }
     f.writeAsStringSync(patched);
+    wrote = true;
     info('    patched $where ($kNetworkClientKey)');
   }
-  return ok;
+  if (!ok) return _Step.failed;
+  return wrote ? _Step.wrote : _Step.unchanged;
 }
 
 /// [plist] with `<key>com.apple.security.network.client</key><true/>` after
@@ -427,42 +578,45 @@ String? addNetworkClientEntitlement(String plist) {
 }
 
 /// `web/sqlite3.wasm` and `web/drift_worker.js` for an app that links
-/// `core_database`. False (after naming the step) on a failure; a download
-/// that cannot be made is a warning, and true.
-Future<bool> _webDatabaseAssets({
+/// `core_database`: what each of the two steps did. A failure is named on
+/// [error]; a download that cannot be made is a warning ([_Step.missing]).
+Future<List<_Step>> _webDatabaseAssets({
   required String root,
   required RunnerApp app,
   required String rel,
   required ProcessRunner run,
   required Fetcher fetch,
   required Map<String, String> env,
+  required bool offline,
   required void Function(String) info,
   required void Function(String) warning,
   required void Function(String) error,
 }) async {
   final web = p.join(app.dir, 'web');
-  final ok = await _sqliteWasm(
+  final wasm = await _sqliteWasm(
     root: root,
     app: app,
     rel: rel,
     web: web,
     fetch: fetch,
     env: env,
+    offline: offline,
     info: info,
     warning: warning,
     error: error,
   );
   final worker = await _driftWorker(root, rel, web, run, info, error);
-  return ok && worker;
+  return [wasm, worker];
 }
 
-Future<bool> _sqliteWasm({
+Future<_Step> _sqliteWasm({
   required String root,
   required RunnerApp app,
   required String rel,
   required String web,
   required Fetcher fetch,
   required Map<String, String> env,
+  required bool offline,
   required void Function(String) info,
   required void Function(String) warning,
   required void Function(String) error,
@@ -473,7 +627,7 @@ Future<bool> _sqliteWasm({
       '$rel/web: no resolved `sqlite3` package in .dart_tool/package_config.json '
       '— run flutter pub get first',
     );
-    return false;
+    return _Step.failed;
   }
   final hashesFile = File(p.join(sqlite, kSqliteAssetHashes));
   final hashes = hashesFile.existsSync()
@@ -491,18 +645,27 @@ Future<bool> _sqliteWasm({
         '$kSqliteAssetHashes, so the file in place is used as it is; make '
         'sure it is the release of that version',
       );
-      return true;
+      return _Step.unchanged;
     }
     error(
       'sqlite3 ${_packageVersion(sqlite)} ships no asset hash table at '
       '$kSqliteAssetHashes — place a matching sqlite3.wasm in $rel/web/ by '
       'hand (docs/en/guides/07_database.md)',
     );
-    return false;
+    return _Step.failed;
   }
 
   final cache = File(p.join(sqliteCacheDir(hashes.tag, env), 'sqlite3.wasm'));
+  final target = File(p.join(web, 'sqlite3.wasm'));
   if (!cache.existsSync()) {
+    if (target.existsSync() && _sha256Of(target) == hashes.sha256) {
+      // In place and verified: nothing to download, even with no cache.
+      return _Step.unchanged;
+    }
+    if (offline) {
+      _offline(app, rel, '--offline, and no cached copy', warning);
+      return _Step.missing;
+    }
     final url = Uri.parse(
       'https://github.com/simolus3/sqlite3.dart/releases/download/'
       '${hashes.tag}/sqlite3.wasm',
@@ -513,13 +676,13 @@ Future<bool> _sqliteWasm({
       bytes = await fetch(url);
     } on SocketException catch (e) {
       _offline(app, rel, e, warning);
-      return true;
+      return _Step.missing;
     } on HandshakeException catch (e) {
       _offline(app, rel, e, warning);
-      return true;
+      return _Step.missing;
     } on HttpException catch (e) {
       _offline(app, rel, e, warning);
-      return true;
+      return _Step.missing;
     }
     final got = sha256.convert(bytes).toString();
     if (got != hashes.sha256) {
@@ -528,7 +691,7 @@ Future<bool> _sqliteWasm({
         'sqlite3 ${hashes.tag} names ${hashes.sha256} — refused, nothing '
         'written',
       );
-      return false;
+      return _Step.failed;
     }
     cache.parent.createSync(recursive: true);
     cache.writeAsBytesSync(bytes);
@@ -544,18 +707,19 @@ Future<bool> _sqliteWasm({
       '${cache.path}: sha256 $cachedSha, but sqlite3 ${hashes.tag} names '
       '${hashes.sha256} — deleted; run again to download it afresh',
     );
-    return false;
+    return _Step.failed;
   }
-  final target = File(p.join(web, 'sqlite3.wasm'));
-  if (target.existsSync() &&
-      sha256.convert(target.readAsBytesSync()).toString() == hashes.sha256) {
-    return true;
+  if (target.existsSync() && _sha256Of(target) == hashes.sha256) {
+    return _Step.unchanged;
   }
   target.parent.createSync(recursive: true);
   target.writeAsBytesSync(cached);
   info('    wrote $rel/web/sqlite3.wasm (${hashes.tag})');
-  return true;
+  return _Step.wrote;
 }
+
+String _sha256Of(File file) =>
+    sha256.convert(file.readAsBytesSync()).toString();
 
 void _offline(
   RunnerApp app,
@@ -568,7 +732,11 @@ void _offline(
   'online',
 );
 
-Future<bool> _driftWorker(
+/// `web/drift_worker.js`, compiled from [kDriftWorkerSource] (from the
+/// repository root, so its packages resolve) into a temporary directory and
+/// copied in only when its bytes differ from the file in place. The `.deps`
+/// and `.map` files the compiler writes beside it never reach the app.
+Future<_Step> _driftWorker(
   String root,
   String rel,
   String web,
@@ -581,37 +749,57 @@ Future<bool> _driftWorker(
       '$rel/web/drift_worker.js: its source $kDriftWorkerSource is missing — '
       'core_database ships it; restore it from git',
     );
-    return false;
+    return _Step.failed;
   }
-  final out = p.posix.join(
-    p.posix.relative(
-      web.replaceAll(r'\', '/'),
-      from: root.replaceAll(r'\', '/'),
-    ),
-    'drift_worker.js',
-  );
-  final args = [
-    ...dartArgs,
-    'compile',
-    'js',
-    '-O4',
-    '-o',
-    out,
-    kDriftWorkerSource,
-  ];
-  final result = await run(dartExecutable, args, workingDirectory: root);
-  if (result.exitCode != 0) {
-    error(
-      '$rel/web/drift_worker.js: `dart ${args.skip(dartArgs.length).join(' ')}` '
-      'failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}',
-    );
-    return false;
+  final tmp = Directory.systemTemp.createTempSync('composer_worker_');
+  try {
+    final compiled = File(p.join(tmp.path, 'drift_worker.js'));
+    final args = [
+      ...dartArgs,
+      'compile',
+      'js',
+      '-O4',
+      '-o',
+      compiled.path,
+      kDriftWorkerSource,
+    ];
+    final result = await run(dartExecutable, args, workingDirectory: root);
+    if (result.exitCode != 0 || !compiled.existsSync()) {
+      error(
+        '$rel/web/drift_worker.js: `dart ${args.skip(dartArgs.length).join(' ')}` '
+        'failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}',
+      );
+      return _Step.failed;
+    }
+
+    var wrote = false;
+    // What a run before this one compiled straight into web/.
+    for (final extra in ['drift_worker.js.deps', 'drift_worker.js.map']) {
+      final f = File(p.join(web, extra));
+      if (f.existsSync()) {
+        f.deleteSync();
+        wrote = true;
+      }
+    }
+    final bytes = compiled.readAsBytesSync();
+    final target = File(p.join(web, 'drift_worker.js'));
+    if (!target.existsSync() || !_sameBytes(target.readAsBytesSync(), bytes)) {
+      target.parent.createSync(recursive: true);
+      target.writeAsBytesSync(bytes);
+      info('    wrote $rel/web/drift_worker.js');
+      wrote = true;
+    }
+    return wrote ? _Step.wrote : _Step.unchanged;
+  } finally {
+    tmp.deleteSync(recursive: true);
   }
-  for (final extra in ['drift_worker.js.deps', 'drift_worker.js.map']) {
-    final f = File(p.join(web, extra));
-    if (f.existsSync()) f.deleteSync();
+}
+
+bool _sameBytes(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
   }
-  info('    wrote $rel/web/drift_worker.js');
   return true;
 }
 

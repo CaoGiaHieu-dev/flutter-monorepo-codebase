@@ -4,6 +4,7 @@ import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../contracts/storage_interface.dart';
@@ -27,20 +28,26 @@ const String _TAG = 'PrefStorageImpl';
 @Injectable(as: StorageInterface)
 @Named('Pref')
 class PrefStorageImpl extends EncryptedStorage {
-  /// Constructor – no singleton pattern, fully managed by DI.
-  PrefStorageImpl(this._preferences)
-    : _secureStorage = EncryptedStorage.secureStorage,
-      _retryDelay = StorageConstants.MASTER_KEY_RETRY_DELAY;
+  /// Constructor – no singleton pattern, fully managed by DI. [platform] is
+  /// the running platform's facts (`registerAppProfile` registers them
+  /// before DI starts).
+  PrefStorageImpl(
+    this._preferences, [
+    PlatformFacts platform = const PlatformFacts.today(),
+  ]) : _platform = platform,
+       _secureStorage = EncryptedStorage.secureStorage,
+       _retryDelay = StorageConstants.MASTER_KEY_RETRY_DELAY;
 
-  /// Over a given secure-storage backend, retrying after [retryDelay] — for
-  /// tests that need a platform failure the real plugin cannot produce on
-  /// demand.
+  /// Over a given secure-storage backend, retrying after `retryDelay`, on
+  /// the `platform` given — for tests that need a platform failure the real
+  /// plugin cannot produce on demand.
   @visibleForTesting
   PrefStorageImpl.withSecureStorage(
     this._preferences,
-    this._secureStorage, [
+    this._secureStorage, {
     this._retryDelay = Duration.zero,
-  ]);
+    this._platform = const PlatformFacts.today(),
+  });
 
   /// SharedPreferences instance for storing data
   final SharedPreferences _preferences;
@@ -50,6 +57,17 @@ class PrefStorageImpl extends EncryptedStorage {
 
   /// Base delay between master-key read attempts (grows linearly).
   final Duration _retryDelay;
+
+  /// The running platform's facts: [PlatformFacts.secureStorage] decides
+  /// what [init] does when the master key cannot be read and the stored
+  /// preferences depend on it.
+  final PlatformFacts _platform;
+
+  /// This run's preferences, sealed as on disk, when the master key the
+  /// stored ones depend on cannot be read and the policy is
+  /// [SecureStoragePolicy.memoryFallback]. `null` while SharedPreferences is
+  /// in use.
+  Map<String, String>? _volatile;
 
   /// Establishes the master key the stored preferences are sealed with.
   ///
@@ -62,8 +80,13 @@ class PrefStorageImpl extends EncryptedStorage {
   ///
   /// * A failing read is retried. If it keeps failing, init uses the
   ///   SharedPreferences fallback key only when that key opens the stored
-  ///   values, and creates one only when there are no stored values to lose;
-  ///   otherwise it rethrows with nothing written or deleted.
+  ///   values, and creates one only when there are no stored values to lose.
+  ///   Otherwise nothing is written or deleted, and
+  ///   [PlatformFacts.secureStorage] decides: [SecureStoragePolicy.required]
+  ///   rethrows and the boot stops (B01); [SecureStoragePolicy.memoryFallback]
+  ///   leaves the stored values on disk untouched, serves defaults for this
+  ///   run from memory under a fresh key that is never persisted, and logs
+  ///   one WARNING naming the cause.
   /// * A fallback key from a session without secure storage is moved into
   ///   secure storage once it is readable again — when it is the key that
   ///   opens the stored values.
@@ -80,7 +103,7 @@ class PrefStorageImpl extends EncryptedStorage {
     final String? secureKey;
     try {
       secureKey = await _readSecureKey();
-    } catch (_) {
+    } catch (e) {
       if (fallbackKey != null &&
           (sealed.isEmpty || _opens(fallbackKey, sealed))) {
         setMasterKey(fallbackKey);
@@ -99,6 +122,21 @@ class PrefStorageImpl extends EncryptedStorage {
           newKey,
         );
         setMasterKey(newKey);
+        return;
+      }
+      if (_platform.secureStorage == SecureStoragePolicy.memoryFallback) {
+        _volatile = <String, String>{};
+        setMasterKey(_generateKey());
+        DynamicLogger.log(
+          'Secure storage is unavailable (${e.runtimeType}) and the stored '
+          'preferences are sealed with the pref master key kept there: they '
+          'are left on disk untouched, and this run uses defaults kept in '
+          'memory only. On Linux, start and unlock a Secret Service '
+          '(gnome-keyring, KWallet) — or decide `platforms.<p>.secure_storage` '
+          'in apps/<id>/app_manifest.yaml.',
+          tag: _TAG,
+          level: LogLevel.WARNING,
+        );
         return;
       }
       DynamicLogger.log(
@@ -251,9 +289,14 @@ class PrefStorageImpl extends EncryptedStorage {
       await delete(key); // Delete the value if it's null
       return;
     }
-    final dataStorage = StorageCodec.encode(value);
+    final sealed = encryptData(StorageCodec.encode(value));
 
-    await _preferences.setString(key, encryptData(dataStorage)); // Store data
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile[key] = sealed;
+      return;
+    }
+    await _preferences.setString(key, sealed); // Store data
   }
 
   /// Read a value from shared preferences.
@@ -274,8 +317,11 @@ class PrefStorageImpl extends EncryptedStorage {
   }) async {
     checkKey(key);
 
+    final volatile = _volatile;
     try {
-      final data = _preferences.get(key)?.toString(); // Read data from storage
+      final data = volatile != null
+          ? volatile[key]
+          : _preferences.get(key)?.toString(); // Read data from storage
       if (data == null) return null; // Return null if data is not found
 
       final decrypted = decryptData(data);
@@ -298,6 +344,11 @@ class PrefStorageImpl extends EncryptedStorage {
   @override
   Future<void> delete(String key) async {
     checkKey(key);
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile.remove(key);
+      return;
+    }
     await _preferences.remove(key); // Delete the value from storage
   }
 }

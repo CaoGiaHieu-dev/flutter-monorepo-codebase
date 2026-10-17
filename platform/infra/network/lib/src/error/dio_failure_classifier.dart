@@ -98,8 +98,11 @@ final class DioFailureClassifier implements ErrorClassifier {
   ///   session", and an intercepted connection is the opposite of offline;
   /// - anything else stays [ErrorCodes.NETWORK_UNKNOWN] — the pinning
   ///   client's other refusals included (a chain that could not be read, a
-  ///   non-HTTPS URL on a pinned host): they say nothing about the
-  ///   certificate the server presented.
+  ///   non-HTTPS URL on a pinned host, requested or reached by a redirect
+  ///   from HTTPS) and a redirect that cannot be followed (dart:io's
+  ///   [RedirectException]: a loop, too many hops, a bad `Location`): they
+  ///   say nothing about the certificate the server presented, and a
+  ///   [NetworkFailure] never ends a session.
   static AppFailure<dynamic> _failureFromCause(DioException error) {
     final cause = error.error;
     if (cause is FormatException) {
@@ -133,7 +136,9 @@ final class DioFailureClassifier implements ErrorClassifier {
   /// Whether [cause] is the pinning client's "no valid SPKI pins found" — the
   /// exception of `http_security_pinning`, which this package does not
   /// depend on. Recognised by its message, which a release build keeps even
-  /// when it obfuscates class names.
+  /// when it obfuscates class names (on Windows, macOS and Linux it ends with
+  /// a hint that only the leaf certificate can match; the prefix is the
+  /// same).
   static bool _isPinMismatch(Object? cause) =>
       cause != null &&
       cause.toString().startsWith(

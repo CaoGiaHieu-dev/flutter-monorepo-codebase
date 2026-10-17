@@ -18,9 +18,11 @@ dependencies:
 
   # Networking & HTTP client
   dio: "^5.11.0"
-  # >= 1.2.2: below 1.1.0 the pinning client recurses when it is the global HttpOverrides, and core_common no
-  # longer guards against that. Desktop pinning arrived in 1.1.0, the web-safe conditional exports in 1.2.1.
-  http_security_pinning: "^1.2.2"
+  # >= 2.0.0, the security release: every redirect hop is pin-checked (an HTTPS -> HTTP redirect is refused, not
+  # sent in cleartext) and an empty pin list throws instead of pinning nothing. Below 1.1.0 the client recurses as
+  # the global HttpOverrides, and core_common no longer guards against that. Needs Flutter 3.41, Android minSdk 24
+  # (Java 17) and iOS 13, which this template already meets.
+  http_security_pinning: "^2.0.0"
   retrofit: "^4.10.0"
 
   # Navigation & Routing

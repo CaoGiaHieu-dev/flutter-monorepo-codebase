@@ -13,13 +13,15 @@ enum AppPlatform {
   linux;
 
   /// Whether `http_security_pinning` can pin TLS here: every platform but the
-  /// web. Android and iOS read the whole certificate chain through the
-  /// plugin's native side; Windows, macOS and Linux read the leaf certificate
+  /// web. Android and iOS read the certificate chain through the plugin's
+  /// native side (Android the chain the server sends, iOS the one its trust
+  /// evaluation builds); Windows, macOS and Linux read the leaf certificate
   /// with a pure-Dart probe (`dart:io` exposes no chain), so a desktop pin set
   /// must contain the leaf's key. On the web the browser owns TLS, and the
   /// package's web client verifies signed responses instead, which is not
-  /// pinning. (The package's own `isSupported` is true everywhere, so it
-  /// cannot answer this.)
+  /// pinning. (The package's own `isSupported` answers for the platform the
+  /// code runs on, not for one an app declares, and the kernel names no
+  /// package.)
   bool get canPinTls =>
       this == android ||
       this == ios ||

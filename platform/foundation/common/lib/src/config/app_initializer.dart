@@ -312,24 +312,13 @@ class _MyHttpOverrides extends HttpOverrides {
 class _MyHttpSecurityPinningHttpOverrides extends HttpOverrides {
   final List<String> pins;
   _MyHttpSecurityPinningHttpOverrides(this.pins) {
-    // The package reads an empty pin list as "this host is not pinned" (system
-    // trust, no probe), so an empty list would install a client that pins
-    // nothing. A pinned decision always carries a leaf and a backup; refuse
-    // anything else here, where a release build (asserts off) still checks.
-    if (pins.isEmpty) {
-      throw ArgumentError.value(
-        pins,
-        'pins',
-        'a pinned decision needs at least one pin',
-      );
-    }
-    // The client parses its pins when it is built, i.e. at the first
+    // The client checks its pins when it is built, i.e. at the first
     // `HttpClient()` of the process, where a bad pin would surface as a
-    // failed request. Parse them here, at boot, so the pin is named and the
-    // app never starts on a pin it cannot enforce.
-    for (final pin in pins) {
-      SpkiPin.parse(pin);
-    }
+    // failed request. Run the client's own check here, at boot, so the boot
+    // stops with the cause named and the app never starts on pins it cannot
+    // enforce: a malformed pin throws `InvalidPinException`, an empty list
+    // `ArgumentError`.
+    PinPolicy.uniform(pins.map(SpkiPin.parse));
   }
 
   @override

@@ -78,7 +78,12 @@ void main() {
       platform: platform,
       flavor: Flavor.prod,
     );
-    final client = HttpClient();
+    // Direct, whatever the environment says: the pinning client follows
+    // `http(s)_proxy` like `dart:io`, and a proxy between it and the closed
+    // loopback port would answer instead — a reset, or an `HttpException` —
+    // where the test needs the refused connection that proves the pin check
+    // passed.
+    final client = HttpClient()..findProxy = (_) => 'DIRECT';
     addTearDown(() => client.close(force: true));
     return client;
   }

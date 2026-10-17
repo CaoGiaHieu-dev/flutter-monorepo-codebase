@@ -151,8 +151,8 @@ void main() {
         expect(failure.message, contains('server presented: AAAA=, BBBB='));
       });
 
-      test('a refusal to use a non-HTTPS URL on a pinned host is not a pin '
-          'mismatch', () {
+      test('a refusal to use a non-HTTPS URL on a pinned host, requested or '
+          'reached by a redirect, is not a pin mismatch', () {
         final failure = classify(
           _PinException(
             'Refusing to open a non-HTTPS connection to api.example.com '
@@ -162,6 +162,36 @@ void main() {
 
         expect(failure, isA<NetworkFailure<dynamic>>());
         expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+      });
+
+      test('a desktop pin mismatch keeps its leaf-only hint in the '
+          'diagnostic', () {
+        final failure = classify(
+          _PinException(
+            'No valid SPKI pins found for host: api.example.com '
+            '(server presented: AAAA=). Only the leaf certificate is visible '
+            'on this platform, so intermediate or root CA pins cannot match '
+            'here; pin the leaf key (and a backup key).',
+          ),
+        );
+
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        expect(failure.message, contains('Only the leaf certificate'));
+      });
+
+      test('a redirect that cannot be followed is not the certificate, and '
+          'stays NETWORK_UNKNOWN', () {
+        for (final cause in [
+          const RedirectException('Redirect loop detected', []),
+          const RedirectException('Redirect limit exceeded', []),
+          const RedirectException('Invalid Location header: bad', []),
+        ]) {
+          final failure = classify(cause);
+
+          expect(failure, isA<NetworkFailure<dynamic>>(), reason: '$cause');
+          expect(failure.code, ErrorCodes.NETWORK_UNKNOWN, reason: '$cause');
+        }
       });
 
       test('failing to read the certificate chain at all is not a pin '

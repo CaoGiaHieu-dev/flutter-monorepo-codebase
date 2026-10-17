@@ -102,8 +102,8 @@ void main() {
     expect(HttpOverrides.current, same(sentinel));
   });
 
-  test('an empty pin list is refused: the package would read it as '
-      '"not pinned"', () {
+  test('an empty pin list stops the boot, before any HttpClient is '
+      'built', () {
     expect(
       () => AppInitializer.debugPinningOverrides(const <String>[]),
       throwsArgumentError,

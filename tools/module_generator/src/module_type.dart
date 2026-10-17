@@ -1,4 +1,7 @@
-enum ModuleType { feature, domain, data, core, custom }
+/// What `generate.dart` creates. [api] is a module's contracts package
+/// (`<name>_api` at `modules/<name>/api`) — the navigator other features
+/// reach this module through.
+enum ModuleType { feature, domain, data, core, custom, api }
 
 enum StateManagementType { provider, bloc, none }
 
@@ -7,7 +10,7 @@ enum FeatureRouteContribution {
   /// Standalone / stack routes via [IFeatureRouteModule] (auth, onboarding, …).
   featureRoute,
 
-  /// Bottom-nav tab via [IDashboardTabModule] (home, settings, …).
+  /// Primary destination via [INavDestinationModule] (home, settings, …).
   dashboardTab,
 
   /// No route DI stub (rare).
@@ -24,6 +27,10 @@ class ModuleConfig {
   final String moduleName;
   final String modulePath;
 
+  /// The `app.id`s whose manifests compose the module (`--apps`); `null`
+  /// means every app.
+  final List<String>? apps;
+
   ModuleConfig({
     required this.type,
     required this.typeDir,
@@ -33,5 +40,6 @@ class ModuleConfig {
     this.routeContribution = FeatureRouteContribution.featureRoute,
     required this.moduleName,
     required this.modulePath,
+    this.apps,
   });
 }

@@ -1,11 +1,14 @@
+<!-- translated-from: docs/en/guides/02_new_domain_data.md@37796af -->
 # Hướng dẫn: Tạo package Domain + Data
 
-File này trả lời câu hỏi **"logic nghiệp vụ và code gọi API/database của tôi nằm ở đâu?"**. Ví dụ
-xuyên suốt: thêm nghiệp vụ `payment` gồm `domain_payment` (quy tắc nghiệp vụ thuần) và
-`data_payment` (phần cài đặt nói chuyện với thế giới bên ngoài).
+## Mục tiêu
 
-Đọc xong bạn sẽ có một use case mà feature gọi được, đứng sau là repository biến mọi lỗi thành
-`Result` — không có `throw` nào lọt lên UI.
+Bạn thêm một năng lực nghiệp vụ — ví dụ xuyên suốt là `payment`. Bạn có `domain_payment` (luật nghiệp vụ thuần) và `data_payment` (phần hiện thực nói chuyện với thế giới bên ngoài). Cuối cùng, một feature gọi được use case, đứng sau là một repository biến mọi lỗi thành `Result`. Không có `throw` nào lọt lên tới UI.
+
+## Điều kiện cần
+
+- Môi trường đã cài đặt xong — [`../getting-started/01_setup.md`](../getting-started/01_setup.md). Tutorial dựng một lát cắt nhỏ như thế này, từ đầu tới cuối: [`../getting-started/04_first_feature_tutorial.md`](../getting-started/04_first_feature_tutorial.md).
+- Hai tầng này dùng để làm gì, và được import những gì — [`../architecture/03_domain.md`](../architecture/03_domain.md), [`../architecture/04_data.md`](../architecture/04_data.md).
 
 ---
 
@@ -17,115 +20,99 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 ```
 
 > [!NOTE]
-> Với loại `2` và `3`, generator **chỉ tạo thư mục rỗng** cùng `pubspec.yaml` và
-> `lib/di/module.dart`. Khác với feature, ở đây không có template khởi tạo — mọi class dưới đây
-> bạn viết tay. Xem
-> [`tools/module_generator/generate.dart:90-101`](../../../tools/module_generator/generate.dart).
+> Với loại `2` và `3`, generator tạo thư mục, `pubspec.yaml`, `lib/di/module.dart` và **mỗi
+> package một stub**: `IPaymentRepository` trong `domain/lib/src/repositories/` và
+> `PaymentRepositoryImpl extends BaseRepository` trong `data/lib/src/repositories_impl/`, cả hai
+> có một method giữ chỗ `ping()`. Hãy sinh domain **trước**: package data khi đó phụ thuộc
+> `domain_payment` và đăng ký `@LazySingleton(as: IPaymentRepository)`. Thay `ping()` bằng các
+> thao tác thật ở §5 (interface repository) và §9 (RepositoryImpl) bên dưới — mọi class khác bạn
+> viết tay. Mỗi lần chạy còn ghép package vào app (`composer sync`), phân giải dependency, chạy
+> `build_runner` và ghi barrel của package, như với feature
+> ([`01_new_feature.md`](01_new_feature.md) § 2). Xem nhánh `ModuleType.domain` / `ModuleType.data` trong
+> [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 
 Nó tạo ra:
 
 ```
-packages/domain/payment/lib/src/     entities/  usecases/  repositories/
-packages/data/payment/lib/src/       models/    data_sources/  repositories_impl/
+modules/payment/domain/lib/src/     repositories/
+modules/payment/data/lib/src/       repositories_impl/
 ```
 
-Bạn tự thêm `utils/` cho mỗi package — mọi package tự giữ hằng số của mình ở đó
-([`../reference/01_rules.md`](../reference/01_rules.md)).
+Hai thư mục này mỗi bên chứa một stub. Mọi thư mục còn lại bạn tạo cùng với file đầu tiên của nó khi các bước dưới đây đi tới: `entities/`, `params/` và `usecases/` trong package domain; `models/` và `data_sources/{remote,local}/` trong package data; còn `utils/` ở cả hai, cho các hằng số mà package đó sở hữu (RULE-09). Git không theo dõi thư mục rỗng và bước barrel xoá thư mục rỗng, nên một thư mục bạn chưa đặt gì vào đơn giản là không có mặt — kể cả trong bản clone mới.
 
----
-
-## 2. Xây theo đúng thứ tự này
+## 2. Lên thứ tự xây dựng
 
 Mỗi bước chỉ phụ thuộc các bước phía trên, nên không phải làm lại:
 
-| # | Tầng | Thành phần | Đặt ở đâu |
+| # | Tầng | Cái gì | Ở đâu, dưới `modules/` |
 | :-- | :-- | :-- | :-- |
-| 1 | Domain | Entity | `domain/payment/lib/src/entities/` |
-| 2 | Domain | Params | `domain/payment/lib/src/params/` |
-| 3 | Domain | **Interface** Repository | `domain/payment/lib/src/repositories/` |
-| 4 | Domain | UseCase | `domain/payment/lib/src/usecases/` |
-| 5 | Data | Model | `data/payment/lib/src/models/` |
-| 6 | Data | DataSource | `data/payment/lib/src/data_sources/{remote,local}/` |
-| 7 | Data | RepositoryImpl | `data/payment/lib/src/repositories_impl/` |
+| 1 | Domain | Entity | `payment/domain/lib/src/entities/` |
+| 2 | Domain | Params | `payment/domain/lib/src/params/` |
+| 3 | Domain | **Interface** repository | `payment/domain/lib/src/repositories/` |
+| 4 | Domain | UseCase | `payment/domain/lib/src/usecases/` |
+| 5 | Data | Model | `payment/data/lib/src/models/` |
+| 6 | Data | DataSource | `payment/data/lib/src/data_sources/{remote,local}/` |
+| 7 | Data | RepositoryImpl | `payment/data/lib/src/repositories_impl/` |
 
 > [!CAUTION]
-> Tầng domain là **Dart thuần**. Cấm import `package:flutter/...`, `package:dio/...` hay
-> `package:retrofit/...` ở bất kỳ đâu dưới `packages/domain/` — và cấm luôn mọi package `core_*`.
-> Được phép: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`,
-> `get_it`.
+> Tầng domain là **Dart thuần** (RULE-03). Cấm import `package:flutter/...`, `package:dio/...` hay `package:retrofit/...` ở bất cứ đâu dưới `modules/*/domain/` — và cấm cả mọi package workspace khác ngoài `domain_core` và domain của chính module, tức là loại trừ mọi package `core_*`; `arch_check` R2 đọc import, `dependencies:` và `dev_dependencies:`. Được phép: `dart:*` (trừ các thư viện chỉ có ở engine), `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`.
 
----
-
-## 3. Entity
+## 3. Viết entity
 
 Freezed, bất biến, kèm constructor riêng `const Class._()` để sau này thêm method được. Code thật
 từ
-[`packages/domain/auth/lib/src/entities/user/user_entity.dart`](../../../packages/domain/auth/lib/src/entities/user/user_entity.dart):
+[`modules/auth/domain/lib/src/entities/user_entity.dart`](../../../modules/auth/domain/lib/src/entities/user_entity.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'user_role.dart';
-
 part 'user_entity.freezed.dart';
-part 'user_entity.g.dart';
 
-/// Entity representing a user in the domain layer.
+/// SAMPLE — the user as the auth module models it. No `fromJson`: parsing a
+/// payload is the data layer's job (`UserModel`).
 @freezed
 abstract class UserEntity with _$UserEntity {
   const UserEntity._();
 
-  const factory UserEntity({
-    required String id,
-    String? email,
-    String? name,
-    UserRole? role,
-    String? bankName,
-    String? bankAccount,
-    String? fcmToken,
-  }) = _UserEntity;
-
-  factory UserEntity.fromJson(Map<String, dynamic> json) =>
-      _$UserEntityFromJson(json);
+  const factory UserEntity({required String id, String? email, String? name}) =
+      _UserEntity;
 }
 ```
 
 Entity chỉ mang trường **nghiệp vụ** — không `statusCode`, không `message`, không dính gì tới
-tầng truyền tải.
+tầng truyền tải. Mọi trường bạn thêm vào đều lộ ra cho mọi thứ nhìn thấy entity, nên hợp đồng phiên
+xuyên module mang một `SessionPrincipal` hẹp hơn (`AuthStatusStreamImpl` làm việc thu hẹp đó) thay
+vì chính kiểu này.
 
-## 4. Params
+## 4. Viết params
 
 Cũng dùng Freezed. Code thật từ
-[`login_params.dart`](../../../packages/domain/auth/lib/src/params/auth_params/login_params.dart):
+[`login_params.dart`](../../../modules/auth/domain/lib/src/params/login_params.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'login_params.freezed.dart';
-part 'login_params.g.dart';
 
 @freezed
 abstract class LoginParams with _$LoginParams {
   const factory LoginParams({required String email, required String password}) =
       _LoginParams;
-
-  factory LoginParams.fromJson(Map<String, dynamic> json) =>
-      _$LoginParamsFromJson(json);
 }
 ```
 
 Dùng `NoParams` từ `domain_core` khi use case không cần đầu vào.
 
-## 5. Interface Repository
+## 5. Khai interface repository
 
-Đặt tên file `i_<name>_repository.dart`, class có tiền tố `I`. Mọi method trả `Result<T>`:
+Đặt tên file `i_<name>_repository.dart`, class có tiền tố `I` (RULE-78). Mọi method trả `Result<T>`:
 
 ```dart
-// packages/domain/payment/lib/src/repositories/i_payment_repository.dart
+// modules/payment/domain/lib/src/repositories/i_payment_repository.dart
 import 'package:domain_core/domain_core.dart';
 
-import '../entities/payment/payment_entity.dart';
-import '../params/payment_params/charge_params.dart';
+import '../entities/payment_entity.dart';
+import '../params/charge_params.dart';
 
 abstract class IPaymentRepository {
   Future<Result<PaymentEntity>> charge(ChargeParams params);
@@ -137,45 +124,42 @@ abstract class IPaymentRepository {
 Interface nằm ở **domain**; implementation nằm ở **data**. Chính phép đảo ngược này giữ cho domain
 sạch khỏi Dio, Firebase và Drift.
 
-## 6. UseCase
+## 6. Viết use case
 
 `@injectable`, kế thừa `BaseUseCase<KiểuTrảVề, Params>`, trả `Result<T>`. Code thật từ
-[`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`](../../../packages/domain/auth/lib/src/usecases/auth/login_usecase.dart):
+[`modules/auth/domain/lib/src/usecases/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/login_usecase.dart):
 
 ```dart
 import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../entities/user/user.dart';
-import '../../params/auth_params/login_params.dart';
-import '../../repositories/i_auth_repository.dart';
+import '../entities/user_entity.dart';
+import '../params/login_params.dart';
+import '../repositories/i_auth_repository.dart';
 
-/// Login use case - authenticates user with credentials
+/// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }
 ```
 
 `BaseUseCase` là hợp đồng chỉ một method
-([`base_use_case.dart`](../../../packages/domain/core/lib/src/usecases/base_use_case.dart)) —
+([`base_use_case.dart`](../../../platform/layers/domain/lib/src/usecases/base_use_case.dart)) —
 một use case, một thao tác. Phụ thuộc truyền qua constructor; không bao giờ gọi `getIt<T>()` bên
 trong use case.
 
----
-
-## 7. Model
+## 7. Viết model
 
 Freezed + `json_serializable`, `implements BaseModel<Entity>`, kèm mapper `toEntity()`. Code thật
 từ
-[`packages/data/auth/lib/src/models/user/user_model.dart`](../../../packages/data/auth/lib/src/models/user/user_model.dart):
+[`modules/auth/data/lib/src/models/user_model.dart`](../../../modules/auth/data/lib/src/models/user_model.dart):
 
 ```dart
 import 'package:data_core/data_core.dart';
@@ -185,54 +169,30 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'user_model.freezed.dart';
 part 'user_model.g.dart';
 
+/// The login / refresh payload. `token` is the session credential: it is read
+/// here, handed to the local data source and never reaches [UserEntity].
 @freezed
 abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
   const UserModel._();
 
   const factory UserModel({
-    @JsonKey(name: 'id') required String id,
-    @JsonKey(name: 'email') String? email,
-    @JsonKey(name: 'name') String? name,
-    @JsonKey(name: 'role', unknownEnumValue: UserRole.unknown) UserRole? role,
-    @JsonKey(name: 'bankName') String? bankName,
-    @JsonKey(name: 'bankAccount') String? bankAccount,
-    @JsonKey(name: 'fcmToken') String? fcmToken,
+    required String id,
+    String? email,
+    String? name,
+    String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
 
   @override
-  UserEntity toEntity() {
-    return UserEntity(
-      id: id,
-      email: email,
-      name: name,
-      role: role,
-      bankName: bankName,
-      bankAccount: bankAccount,
-      fcmToken: fcmToken,
-    );
-  }
-
-  factory UserModel.fromEntity(UserEntity entity) {
-    return UserModel(
-      id: entity.id,
-      email: entity.email,
-      name: entity.name,
-      role: entity.role,
-      bankName: entity.bankName,
-      bankAccount: entity.bankAccount,
-      fcmToken: entity.fcmToken,
-    );
-  }
+  UserEntity toEntity() => UserEntity(id: id, email: email, name: name);
 }
 ```
 
-`@JsonKey` hứng cách đặt tên của server để entity không phải gánh. `unknownEnumValue` giúp enum lạ
-từ server không làm ném lỗi.
+Model có hình dạng của payload; `toEntity()` là biên nơi nó được thu hẹp — ở đây `token` bị bỏ, vì credential là thứ tầng truyền tải trả về, không phải một phần của việc user là ai. Tên các trường ở trên khớp với backend nên không có gì để annotate; khi server đánh vần một trường khác đi, thêm `@JsonKey(name: '…')` vào trường đó trong model và entity sẽ không bao giờ thấy tên wire.
 
-## 8. DataSource
+## 8. Viết data source
 
 Thư mục là `data_sources/remote/` (Retrofit) và `data_sources/local/` (storage / DB) —
 **snake_case, số nhiều, tuyệt đối không phải `datasources/`**.
@@ -241,41 +201,39 @@ Thư mục là `data_sources/remote/` (Retrofit) và `data_sources/local/` (stor
 > DataSource trả về **Model**, không trả Entity — việc map sang entity là của repository. Nó cũng
 > không được để lộ kiểu *sinh tự động* trong chữ ký hàm: một class row của Drift hay một envelope
 > của Retrofit lọt qua interface sẽ trói mọi bên tiêu thụ vào thư viện đó. Mẫu cache trong
-> `data_core` cho thấy pattern này — interface chỉ nói bằng `CacheEntryModel` của chính nó, và
+> `data_cache` cho thấy pattern này — interface chỉ nói bằng `CacheEntryModel` của chính nó, và
 > chuyển đổi row Drift ngay tại biên:
 >
 > ```dart
 > abstract class ICacheEntryLocalDataSource {
 >   Future<void> save(String key, String value);
->   Future<String?> get(String key);
+>
 >   Future<CacheEntryModel?> getEntry(String key);
->   Future<void> delete(String key);
->   Future<List<CacheEntryModel>> getAll();
 > }
 > ```
 
 DataSource để exception nổi lên — repository là nơi duy nhất bắt lỗi.
 
-### Sở hữu key lưu trữ riêng
+### Tự sở hữu storage key
 
 Nếu package của bạn lưu dữ liệu key-value, nó tự khai `StorageValue` **của riêng mình** từ
 `StorageManager` được inject. `core_storage` chỉ cấp cơ chế; nó không định nghĩa key nào cả.
 
 Key đặt trong `utils/` — code thật từ
-[`packages/data/auth/lib/src/utils/auth_storage_keys.dart`](../../../packages/data/auth/lib/src/utils/auth_storage_keys.dart):
+[`modules/auth/data/lib/src/utils/auth_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_constants.dart),
+file chứa endpoint của package (`AuthApiConstants`) và key của nó trong cùng một file (RULE-09):
 
 ```dart
-/// Physical storage keys owned exclusively by `feature_auth`'s data layer.
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
-Bên sở hữu dựng giá trị và nạp sẵn lúc khởi động
-([`auth_local_data_source.dart`](../../../packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart)):
+Bên sở hữu dựng giá trị của mình và nạp sẵn lúc khởi động
+([`auth_local_data_source.dart`](../../../modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart)):
 
 ```dart
 @lazySingleton
@@ -289,18 +247,15 @@ class AuthLocalDataSource {
     AuthStorageKeys.TOKEN,
   );
 
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
-
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
   // …
 }
 ```
+
+Key thứ hai thêm một field `StorageValue` thứ hai, và `initialize()` nạp cả hai bằng `Future.wait`.
 
 > [!CAUTION]
 > Lớp sở hữu storage bắt buộc là **singleton** (`@lazySingleton` / `@singleton`) kèm
@@ -308,100 +263,125 @@ class AuthLocalDataSource {
 > mới với **cache trong RAM rỗng** — getter đồng bộ trả `null` dù dữ liệu vẫn nằm trên đĩa. Chi
 > tiết ở [`06_storage.md`](06_storage.md).
 
-## 9. RepositoryImpl
+## 9. Hiện thực repository
 
-Kế thừa `IBaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
+Kế thừa `BaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
 `executeSync()` (đồng bộ). Code thật từ
-[`packages/data/language/lib/src/repositories_impl/language_repository_impl.dart`](../../../packages/data/language/lib/src/repositories_impl/language_repository_impl.dart):
+[`modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
-@LazySingleton(as: ILanguageRepository)
-class LanguageRepositoryImpl extends IBaseRepository
-    implements ILanguageRepository {
-  LanguageRepositoryImpl(this._storageManager);
+@LazySingleton(as: ICacheEntryRepository)
+class CacheEntryRepositoryImpl extends BaseRepository
+    implements ICacheEntryRepository {
+  CacheEntryRepositoryImpl(this._local);
 
-  final StorageManager _storageManager;
+  final ICacheEntryLocalDataSource _local;
 
-  late final _locale = StorageValue<String>(
-    _storageManager.getStorage(StorageType.pref),
-    LanguageStorageKeys.LOCALE,
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await _locale.readFromStorage();
+  @override
+  Future<Result<CacheEntryEntity?>> getByKey(String key) {
+    return execute<CacheEntryModel?, CacheEntryEntity?>(
+      () => _local.getEntry(key),
+      mapper: (model) => model?.toEntity(),
+    );
   }
 
   @override
-  Result<String> getLanguage() {
-    return executeSync<String, String>(() {
-      final language = _locale.value;
-      if (language != null) return language;
-      return AppConfig.defaultLanguage.languageCode;
-    });
-  }
-
-  @override
-  Result<void> setLanguage(String languageCode) {
-    return executeSync<void, void>(() {
-      _locale.value = languageCode;
-    });
+  Future<Result<void>> save(String key, String value) {
+    return execute<void, void>(() => _local.save(key, value));
   }
 }
 ```
 
+Chú ý hình dạng: data source trả về **model**, và `mapper` chuyển chúng thành entity ngay tại
+biên này. Không tầng nào phía trên nhìn thấy `CacheEntryModel`.
+
 `execute<R, T>` nhận thao tác thô và một `mapper` tuỳ chọn để chuyển Model → Entity:
 
 ```dart
-return execute<UserModel, UserEntity>(
-  () async => _remote.login(request),
-  mapper: (model) => model.toEntity(),
+// modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart — _authenticate
+return execute<BaseEntity<UserModel>, UserEntity>(
+  request,
+  successCondition: (response) {
+    final user = response.data;
+    return response.isSuccess &&
+        user != null &&
+        (!requiresToken || _hasToken(user));
+  },
+  onSuccess: (response) async {
+    final user = response.data!;
+    if (_hasToken(user)) await _local.saveUserToken(user.token!);
+  },
+  mapper: (response) => response.data!.toEntity(),
 );
 ```
 
+Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là envelope và `mapper` gỡ nó ra. `successCondition` biến một response 200 có body báo lỗi (hoặc không có `data`) thành `Failure` trước khi `mapper` chạy — đó là lý do dấu `!` an toàn — và `onSuccess` chỉ chạy sau khi nó qua. Một câu trả lời đăng nhập không có token thì không phải một phiên, nên `login` truyền `requiresToken: true` và `successCondition` cho nó thất bại; một lần gia hạn bỏ qua token thì giữ token đã lưu. Một response bị từ chối thất bại với `ErrorCodes.RESPONSE_REJECTED`, mang `message` của envelope; kết quả `null` cho một `T` không nullable thất bại với `ErrorCodes.EMPTY_RESPONSE`.
+
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
-[`i_base_repository.dart:57-59`](../../../packages/data/core/lib/src/base/i_base_repository.dart).
+khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
+[`base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt
 > đối không để `throw` nào thoát khỏi tầng data — UI chỉ được nhận `Result`.
 
 > [!WARNING]
-> **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc
-> [`error_handler.dart:50-88`](../../../packages/core/common/lib/src/error/error_handler.dart):
-> nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
+> **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc `ErrorHandler._classify` (nằm sau
+> `handleError`) trong [`error_handler.dart`](../../../platform/foundation/kernel/lib/src/error/error_handler.dart):
+> nó xử lý `AppException`, mọi thứ mà một `ErrorClassifier` đã đăng ký nhận (`DioFailureClassifier`
+> của `core_network` ánh xạ `DioException`), `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:
 >
 > ```dart
 > return ServerFailure(
->   message: kDebugMode ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+>   message: _isDebug ? error.toString() : _unknownMessage, // 'Unknown error occurred'
+>   code: ErrorCodes.UNKNOWN, // 9999
 > );
 > ```
 >
 > Ở bản release, sai mật khẩu và mất mạng là không phân biệt được — cả hai đều hiện
-> *"Unknown error occurred"*. Nếu package của bạn dùng Firebase, hãy bổ sung nhánh xử lý trước khi
-> dựa vào mã lỗi ở UI.
+> *"Unknown error occurred"*. Nếu package của bạn dùng Firebase, hãy đăng ký một `ErrorClassifier` cho
+> exception của nó (`ErrorHandler.registerClassifier`, từ DI module của package — như cách
+> `DioFailureClassifier` làm) trước khi dựa vào mã lỗi ở UI.
 
----
+## 10. Khai dependency và sinh lại code
 
-## 10. Nối dây
-
-Khai báo dependency tường minh ở cả hai `pubspec.yaml`:
+Khai báo dependency tường minh ở cả hai `pubspec.yaml`. Generator đã ghi sẵn bộ khởi đầu —
+`domain_core` và `injectable` cho package domain; `data_core`, `domain_core`, `domain_payment` và
+`injectable` cho package data. Thêm phần còn lại **khi code của bạn bắt đầu import chúng**, không sớm hơn:
+`check_unused_packages` fail khi một dependency được khai mà không import, còn `arch_check` R5
+fail khi một package được import mà không khai. Entity đầu tiên kéo theo `freezed_annotation` (và
+`freezed` dưới `dev_dependencies:`); model đầu tiên kéo thêm `json_annotation` (và
+`json_serializable`). Test của domain chạy trên `package:test` (RULE-03, RULE-60): thêm `test:` dưới
+`dev_dependencies:` của domain cùng với test đầu tiên.
 
 ```yaml
-# packages/data/payment/pubspec.yaml
+# modules/payment/data/pubspec.yaml
 dependencies:
-  core_common:
-    path: ../../core/common
   data_core:
-    path: ../core
+    path: ../../../platform/layers/data
   domain_core:
-    path: ../../domain/core
+    path: ../../../platform/layers/domain
   domain_payment:
-    path: ../../domain/payment
+    path: ../domain
+
+  # Add when you write the §8 storage owner (StorageManager, StorageValue):
+  # core_storage:
+  #   path: ../../../platform/infra/storage
+  # Add when you write a Retrofit data source (ApiClient, Dio) — plus `dio:`
+  # and `retrofit:` with an empty value, then run dependency_sync:
+  # core_network:
+  #   path: ../../../platform/infra/network
 ```
+
+Danh sách không có `platform_kernel`: `execute()` / `executeSync()` đã đưa mọi lỗi qua
+`ErrorHandler`, nên một repository chỉ dùng chúng thì không bao giờ import kernel. Chỉ khai báo nó khi
+chính code của bạn gọi trực tiếp `ErrorHandler`, `getIt` hay một symbol khác của kernel.
+
+Package workspace là dependency `path:` và không có version. Package bên ngoài (`dio`,
+`retrofit`, `freezed_annotation`, `test`) được ghi với giá trị rỗng — version của nó nằm trong `pubspec_dependencies.yaml`, và
+`dart tools/dependency_sync.dart` sẽ ghi vào.
 
 > [!WARNING]
 > Pub Workspaces dùng chung một `package_config.json`, nên dependency **không khai** vẫn compile
@@ -415,30 +395,174 @@ dependencies:
 Rồi sinh lại:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
-dart tools/barrel_generator/generate.dart packages/data/payment/lib
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
+dart tools/barrel_generator/generate.dart modules/payment/data/lib
 flutter analyze
 ```
 
-### Checklist
+## 11. Dùng nó từ một feature
+
+Feature chạm tới nghiệp vụ này qua **use case**, không bao giờ qua `data_payment` — `arch_check`
+R3 cấm feature import package `data_*`. Package data vẫn được đóng gói vào app: mỗi lần chạy
+`generate.dart` đã thêm tầng của nó vào mục của module trong mọi `app_manifest.yaml`
+(`- { id: payment, layers: [feature, data, domain] }` khi đủ cả ba tầng; thứ tự trong
+`layers:` không quan trọng), và DI đăng ký `PaymentRepositoryImpl` dưới dạng `IPaymentRepository`
+từ đó.
+
+**1. Sinh feature** cho cùng module. [`01_new_feature.md`](01_new_feature.md) đi qua một feature
+với tên `profile`; mọi thứ ở đó áp dụng y nguyên khi thay bằng `payment`:
+
+```bash
+dart tools/module_generator/generate.dart 1 payment "" 1 1   # Provider + stack route; "" 2 1 for BLoC
+```
+
+**2. Khai domain** trong `pubspec.yaml` của feature, cạnh những gì generator đã ghi, rồi chạy
+`flutter pub get`. Controller được sinh import `domain_core` cho `Result` giữ chỗ của nó; khi code
+của bạn không còn import nó nữa, hãy bỏ luôn dòng đó, nếu không `check_unused_packages` sẽ fail:
+
+```yaml
+# modules/payment/feature/pubspec.yaml
+dependencies:
+  domain_payment:
+    path: ../domain
+```
+
+**3. Inject use case** qua constructor của controller. Injectable phân giải được vì DI module của
+`domain_payment` đăng ký mọi use case `@injectable` — controller không gọi `getIt`:
+
+```dart
+// modules/payment/feature/lib/src/provider/payment_provider.dart
+import 'package:domain_payment/domain_payment.dart';
+import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+@injectable
+class PaymentProvider extends BaseProvider<PaymentEntity> {
+  PaymentProvider(this._chargeUseCase);
+
+  final ChargeUseCase _chargeUseCase;
+
+  Future<void> charge(ChargeParams params) => executeOperation(
+    OperationConfig(operation: () => _chargeUseCase(params)),
+  );
+}
+```
+
+`executeOperation` bóc `Result` và điều khiển các trạng thái loading / error / success. BLoC nhận
+use case theo đúng cách đó (`PaymentBloc(this._chargeUseCase) : super(...)`) và chốt kết quả bằng
+`emitResult` (`BlocResultMixin`); chỉ bloc có state Freezed riêng mới phải tự bóc `Result` — xem
+[`03_state_management.md`](03_state_management.md) § 7.
+
+**4. Cập nhật các test được sinh.** Chúng dựng `PaymentProvider()` (hay `PaymentBloc()`) không
+kèm tham số, nên `flutter analyze` giờ báo lỗi ở cả hai, và test provider được sinh khẳng định
+`initialize()` giữ chỗ mà bước 3 đã thay. Hãy dựng controller từ use case trên một bản giả viết tay
+của `IPaymentRepository` (RULE-61) — như `modules/auth/feature/test/auth_provider_test.dart` — và
+đưa cho test page một controller đã có dữ liệu, vì page chỉ vẽ phần body khi đó:
+
+```dart
+// modules/payment/feature/test/fake_payment_repository.dart
+import 'package:domain_core/domain_core.dart';
+import 'package:domain_payment/domain_payment.dart';
+
+class FakePaymentRepository implements IPaymentRepository {
+  Result<PaymentEntity> chargeResult = const Result.success(
+    PaymentEntity(id: 'p1', amountCents: 500),
+  );
+
+  @override
+  Future<Result<PaymentEntity>> charge(ChargeParams params) async =>
+      chargeResult;
+
+  @override
+  Result<void> clearPendingCharge() => const Result.success();
+}
+```
+
+```dart
+// modules/payment/feature/test/payment_provider_test.dart
+import 'package:domain_payment/domain_payment.dart';
+import 'package:feature_payment/feature_payment.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'fake_payment_repository.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('charge settles into success with the payment', () async {
+    final provider = PaymentProvider(ChargeUseCase(FakePaymentRepository()));
+    addTearDown(provider.dispose);
+
+    await provider.charge(const ChargeParams(amountCents: 500));
+
+    expect(provider.isSuccess, isTrue);
+    expect(provider.data?.amountCents, 500);
+  });
+}
+```
+
+Trong `payment_page_test.dart`, tạo provider bằng `PaymentProvider(ChargeUseCase(FakePaymentRepository()))`,
+`await provider.charge(...)` trước khi pump, rồi truyền instance đó cho `ChangeNotifierProvider`. Test page được sinh còn khai báo `_FailingProvider extends PaymentProvider` cho ca load thất bại; giờ nó cũng cần tham số constructor đó, nên cho nó một constructor truyền `ChargeUseCase(FakePaymentRepository())` cho `super` (`initialize()` của chính nó vẫn ép ra lỗi). Hãy giữ ca đó: nó chứng minh một lần load thất bại hiện `somethingWentWrong` chứ không phải diagnostic.
+
+**5. Sinh lại** — constructor của controller đổi thì phần đăng ký DI của nó cũng đổi:
+
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/payment/feature/lib
+flutter analyze
+dart tools/arch_check/check.dart
+dart tools/unused_checker/check_unused_packages.dart
+```
+
+Route vẫn tạo controller đúng như [`01_new_feature.md`](01_new_feature.md) §5 —
+`getIt<PaymentProvider>()` ở tầng route, giờ dựng cả chuỗi: provider ← use case ←
+`IPaymentRepository` ← data source.
+
+---
+
+## Kiểm tra
+
+```bash
+flutter analyze                                       # No issues found!
+grep -rn "package:flutter" modules/payment/domain/lib # không in gì: domain là Dart thuần
+dart tools/arch_check/check.dart                      # ✅ All architecture rules hold … (R2 domain thuần, R3 không import feature → data, R5 khai đủ dependency)
+dart tools/unused_checker/check_unused_packages.dart  # ✅ Success! No unused packages found …
+cd apps/mobile && flutter test test/di_smoke_test.dart   # build mọi lazy singleton và mọi factory @injectable, nêu tên cái bị lỗi
+```
+
+Smoke test là bằng chứng rằng chuỗi này phân giải được: nó build `PaymentRepositoryImpl` (một lazy singleton) cùng mọi use case và controller `@injectable` từ đồ thị được sinh thật của app, nên một dependency mà không module nào được ghép cung cấp sẽ fail ở đó, kèm tên type. Một factory có `@factoryParam` không nullable thì không build được nếu thiếu màn hình của nó, và được liệt kê trong `_factoriesNeedingArguments` của test kèm lý do.
+
+Test repository bằng một data source giả viết tay (RULE-61), như `notes_repository_impl_test.dart` của tutorial: một test kiểm việc map model thành entity, một test cho data source ném lỗi và repository trả `Failure`.
+
+Checklist review:
 
 - [ ] Domain không import Flutter / Dio / Retrofit
 - [ ] Entity dùng Freezed kèm `const Class._()`
 - [ ] Interface repository ở domain, implementation ở data
-- [ ] UseCase là `@injectable`, trả `Result<T>`, phụ thuộc qua constructor
+- [ ] UseCase là `@injectable`, trả `Result<T>`, nhận dependency qua constructor
 - [ ] Model có `.toEntity()` và `implements BaseModel<E>`
-- [ ] DataSource trả Model, không lộ kiểu sinh tự động, thư mục là `data_sources/`
-- [ ] RepositoryImpl kế thừa `IBaseRepository`, dùng `execute()` / `executeSync()`
-- [ ] Lỗi đi qua `ErrorHandler.handleError` — không `AppFailure.fromException()`, không `throw` lọt ra
-- [ ] Lớp sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, key ở `utils/`
-- [ ] Mọi dependency khai tường minh và đúng mục
+- [ ] DataSource trả Model, không lộ kiểu được sinh, thư mục là `data_sources/`
+- [ ] RepositoryImpl kế thừa `BaseRepository`, dùng `execute()` / `executeSync()`
+- [ ] Lỗi đi qua `ErrorHandler.handleError` — không `AppFailure.fromException()`, không để `throw` lọt ra
+- [ ] Lớp sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, key nằm trong `utils/`
+- [ ] Mọi dependency được khai tường minh và đúng mục
 
----
+## Xử lý sự cố
+
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|:--|:--|:--|
+| `Undefined name 'PaymentEntity'` ở package data hoặc feature | Barrel của domain chưa export file mới | Chạy barrel generator cho `modules/payment/domain/lib` sau `build_runner` (bước 10) |
+| `arch_check` R2 fail | Một file domain hay pubspec của nó nêu Flutter, Dio, Retrofit, một package `core_*` hoặc package workspace nào ngoài `domain_core` và domain của chính nó | Chuyển đoạn code đó sang tầng data hoặc feature (bước 2) |
+| `arch_check` R5 fail, hoặc `check_unused_packages` báo một mục | Một dependency được import mà chưa khai, hoặc khai mà không dùng | Khai nó dưới `dependencies:`, hoặc bỏ nó đi (bước 10) |
+| Một lỗi `401` hay lỗi mạng làm sập màn hình | Có thứ ném lỗi vượt qua repository | Bọc lời gọi trong `execute()` (bước 9) |
+| Bản release hiện *"Unknown error occurred"* cho mọi lỗi Firebase | `ErrorHandler` chưa có nhánh cho Firebase | Đăng ký một `ErrorClassifier` (bước 9) |
+| `IPaymentRepository is not registered` lúc boot | `data_payment` chưa được ghép vào app, hoặc code sinh ra đã cũ | Kiểm tra `layers:` của module trong `app_manifest.yaml`, `composer sync`, rồi `build_runner` |
 
 ## Liên quan
 
-- [`01_new_feature.md`](01_new_feature.md) — gọi use case này từ một feature
+- Luật: RULE-03 (domain thuần), RULE-06 (khai dependency), RULE-40 (`data_sources/`), RULE-41 (model, không phải entity), RULE-42 (`execute()`), RULE-43 (`ErrorHandler`), RULE-44 / RULE-45 (sở hữu storage), RULE-49 (entity và use case), RULE-61 (fake viết tay), RULE-78 (tiền tố `I`) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`01_new_feature.md`](01_new_feature.md) — toàn bộ phía feature (route, đa ngôn ngữ, navigator)
 - [`06_storage.md`](06_storage.md) — lưu trữ key-value chi tiết
 - [`07_database.md`](07_database.md) — dữ liệu quan hệ với Drift
 - [`08_networking.md`](08_networking.md) — Dio, Retrofit, interceptor

@@ -1,0 +1,1297 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:core_storage/core_storage.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
+import 'package:encrypt/encrypt.dart' as encrypter;
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_kernel/platform_kernel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// `DynamicLogger`'s level number for `LogLevel.WARNING`.
+const _warning = 900;
+
+/// The facts of a Linux runner that decides [policy] for a missing secure
+/// store.
+PlatformFacts _linuxFacts(SecureStoragePolicy policy) => PlatformFacts(
+  runner: RunnerKind.scaffold,
+  splash: SplashMode.native,
+  orientation: OrientationPolicy.free,
+  deepLinks: false,
+  push: false,
+  secureStorage: policy,
+);
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late String testMasterKey;
+
+  setUpAll(() {
+    testMasterKey = encrypter.Key.fromSecureRandom(32).base64;
+  });
+
+  group('PrefStorageImpl', () {
+    late PrefStorageImpl prefStorage;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      prefStorage = PrefStorageImpl(preferences);
+      await prefStorage.init();
+      prefStorage.setMasterKey(testMasterKey);
+    });
+
+    test('should write and read plain values successfully', () async {
+      await prefStorage.write('test_key', 'hello_world');
+      final value = await prefStorage.read<String>('test_key');
+      expect(value, equals('hello_world'));
+    });
+
+    test('should delete value successfully', () async {
+      await prefStorage.write('test_key', 'hello_world');
+      await prefStorage.delete('test_key');
+      final value = await prefStorage.read<String>('test_key');
+      expect(value, isNull);
+    });
+
+    test('should return null when reading non-existing key', () async {
+      final value = await prefStorage.read<String>('non_existing');
+      expect(value, isNull);
+    });
+
+    test('should handle write/read for complex types with reviver', () async {
+      final dataMap = {'name': 'Antigravity', 'role': 'AI Developer'};
+      await prefStorage.write('profile', dataMap);
+
+      final result = await prefStorage.read<Map<String, dynamic>>(
+        'profile',
+        reviver: (key, value) {
+          if (value is Map<String, dynamic>) {
+            return value;
+          }
+          return <String, dynamic>{};
+        },
+      );
+
+      expect(result, isNotNull);
+      expect(result?['name'], equals('Antigravity'));
+    });
+
+    test('reads a typed list back without a reviver', () async {
+      await prefStorage.write('tags', <String>['a', 'b']);
+
+      final tags = await prefStorage.read<List<String>>('tags');
+
+      expect(tags, equals(<String>['a', 'b']));
+    });
+
+    test('stores an object through toJson and revives it once', () async {
+      await prefStorage.write('point', const _Point(1, 2));
+
+      final point = await prefStorage.read<_Point>(
+        'point',
+        reviver: (key, value) =>
+            _Point.fromJson(value! as Map<String, dynamic>),
+      );
+
+      expect(point, equals(const _Point(1, 2)));
+    });
+  });
+
+  group('SecureStorageImpl', () {
+    late SecureStorageImpl secureStorage;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+      secureStorage = SecureStorageImpl();
+      await secureStorage.init();
+    });
+
+    test('should write and read values securely', () async {
+      await secureStorage.write('secure_key', 'highly_confidential');
+      final value = await secureStorage.read<String>('secure_key');
+      expect(value, equals('highly_confidential'));
+    });
+
+    test('should delete secure value successfully', () async {
+      await secureStorage.write('secure_key', 'highly_confidential');
+      await secureStorage.delete('secure_key');
+      final value = await secureStorage.read<String>('secure_key');
+      expect(value, isNull);
+    });
+  });
+
+  group('SecureStorageImpl — platform errors never wipe the store', () {
+    // Not the first launch, so init's first-run cleanup stays out of the way.
+    const notFirstLaunch = <String, Object>{'firstTimeOpenApp': false};
+    late Map<String, String> store;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues(notFirstLaunch);
+      store = {
+        '_internal_master_key': testMasterKey,
+        // PrefStorageImpl's key lives in the same store.
+        '_internal_pref_master_key': 'pref-key',
+      };
+      FlutterSecureStorage.setMockInitialValues(store);
+    });
+
+    test('a transient master-key read failure is retried', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 2);
+      final secure = SecureStorageImpl.withStorage(storage);
+
+      await secure.init();
+
+      expect(storage.readCalls, 3);
+      expect(storage.deleteAllCalls, 0);
+      expect(store['_internal_master_key'], testMasterKey);
+      expect(store['_internal_pref_master_key'], 'pref-key');
+    });
+
+    test('a persistent failure rethrows and deletes nothing', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 100);
+      final secure = SecureStorageImpl.withStorage(storage);
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(storage.deleteAllCalls, 0);
+      expect(store['_internal_master_key'], testMasterKey);
+      expect(store['_internal_pref_master_key'], 'pref-key');
+    });
+
+    test('keeps values written before the transient failure', () async {
+      final first = SecureStorageImpl.withStorage(const FlutterSecureStorage());
+      await first.init();
+      await first.write('token', 'abc');
+
+      final flaky = _FlakyStorage(failuresBeforeSuccess: 1);
+      final second = SecureStorageImpl.withStorage(flaky);
+      await second.init();
+
+      expect(await second.read<String>('token'), 'abc');
+    });
+
+    test(
+      'a corrupt master key is replaced without touching other keys',
+      () async {
+        store['_internal_master_key'] = 'not-a-key';
+        final storage = _FlakyStorage(failuresBeforeSuccess: 0);
+        final secure = SecureStorageImpl.withStorage(storage);
+
+        await secure.init();
+
+        expect(storage.deleteAllCalls, 0);
+        expect(store['_internal_master_key'], isNot('not-a-key'));
+        expect(store['_internal_pref_master_key'], 'pref-key');
+        await secure.write('k', 'v');
+        expect(await secure.read<String>('k'), 'v');
+      },
+    );
+
+    test('a platform error on read keeps the stored value', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 0);
+      final secure = SecureStorageImpl.withStorage(storage);
+      await secure.init();
+      await secure.write('token', 'abc');
+
+      storage.failuresBeforeSuccess = 1;
+      expect(await secure.read<String>('token'), isNull);
+      expect(store.containsKey('token'), isTrue);
+
+      // The next read, once the platform recovers, still finds it.
+      expect(await secure.read<String>('token'), 'abc');
+    });
+
+    test('an undecryptable value is dropped', () async {
+      final secure = SecureStorageImpl.withStorage(
+        const FlutterSecureStorage(),
+      );
+      await secure.init();
+      store['token'] = 'garbage-without-iv';
+
+      expect(await secure.read<String>('token'), isNull);
+      expect(store.containsKey('token'), isFalse);
+    });
+  });
+
+  group('SecureStorageImpl — memory fallback', () {
+    // Not the first launch, so init's first-run cleanup stays out of the way.
+    const notFirstLaunch = <String, Object>{'firstTimeOpenApp': false};
+
+    late List<({int level, String message})> logged;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues(notFirstLaunch);
+      logged = [];
+      DynamicLogger.configure(
+        logHandler: (
+          message, {
+          error,
+          level = 0,
+          name = '',
+          sequenceNumber,
+          stackTrace,
+          time,
+          zone,
+        }) => logged.add((level: level, message: message)),
+      );
+    });
+
+    tearDown(DynamicLogger.reset);
+
+    test(
+      'memory_fallback: init completes, values round-trip in memory and '
+      'nothing reaches the store',
+      () async {
+        final store = _NoSecureStore();
+        final secure = SecureStorageImpl.withStorage(
+          store,
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await secure.init();
+
+        await secure.write('token', 'abc');
+        expect(await secure.read<String>('token'), 'abc');
+        await secure.delete('token');
+        expect(await secure.read<String>('token'), isNull);
+
+        // Only the master-key reads reached the platform: no write, no
+        // delete, and never a read of a value.
+        expect(store.calls.toSet(), {
+          'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        });
+        final fallbackWarnings = logged.where(
+          (l) => l.message.contains('Secure storage is unavailable'),
+        );
+        expect(fallbackWarnings, hasLength(1));
+        expect(fallbackWarnings.single.level, _warning);
+        expect(
+          fallbackWarnings.single.message,
+          allOf(
+            contains('PlatformException'),
+            contains('platforms.<p>.secure_storage'),
+          ),
+        );
+      },
+    );
+
+    test('required: init rethrows and nothing is deleted', () async {
+      final store = _NoSecureStore();
+      final secure = SecureStorageImpl.withStorage(
+        store,
+        platform: _linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(
+        store.calls.where((c) => c.startsWith('delete')),
+        isEmpty,
+      );
+      expect(
+        logged.where(
+          (l) => l.message.contains('Secure storage is unavailable'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('the default facts are required, as before', () async {
+      final store = _NoSecureStore();
+      final secure = SecureStorageImpl.withStorage(store);
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+    });
+
+    // A store that answers the master-key read (no key yet: a first launch)
+    // but refuses the write of the new one. A key that was never persisted
+    // must not seal values that would be lost on the next launch.
+    test('required: a refused master-key write stops init', () async {
+      final store = _RefusingWriteStore();
+      final secure = SecureStorageImpl.withStorage(
+        store,
+        platform: _linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(store.calls, [
+        'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        'write ${StorageConstants.SECURE_MASTER_KEY_ID}',
+      ]);
+    });
+
+    test(
+      'memory_fallback: a refused master-key write keeps values in memory',
+      () async {
+        final store = _RefusingWriteStore();
+        final secure = SecureStorageImpl.withStorage(
+          store,
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await secure.init();
+
+        await secure.write('token', 'abc');
+        expect(await secure.read<String>('token'), 'abc');
+
+        // The refused key write is the only write the store saw: the value
+        // stayed in memory.
+        expect(store.calls, [
+          'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+          'write ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        ]);
+        expect(
+          logged.where(
+            (l) => l.message.contains('Secure storage is unavailable'),
+          ),
+          hasLength(1),
+        );
+      },
+    );
+  });
+
+  group('PrefStorageImpl — secure-storage errors never cost preferences', () {
+    const keyId = '_internal_pref_master_key';
+    late Map<String, String> secureStore;
+    late SharedPreferences preferences;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      preferences = await SharedPreferences.getInstance();
+      secureStore = {};
+      FlutterSecureStorage.setMockInitialValues(secureStore);
+    });
+
+    PrefStorageImpl prefOver(FlutterSecureStorage storage) =>
+        PrefStorageImpl.withSecureStorage(preferences, storage);
+
+    /// A healthy first session that stores a preference.
+    Future<void> storeLocale() async {
+      final first = prefOver(const FlutterSecureStorage());
+      await first.init();
+      await first.write('locale', 'vi');
+    }
+
+    test('a transient master-key read failure is retried', () async {
+      await storeLocale();
+      final storage = _FlakyStorage(failuresBeforeSuccess: 2);
+      final pref = prefOver(storage);
+
+      await pref.init();
+
+      expect(storage.readCalls, 3);
+      expect(await pref.read<String>('locale'), 'vi');
+      expect(preferences.containsKey(keyId), isFalse);
+    });
+
+    test(
+      'a persistent failure with stored preferences rethrows and changes '
+      'nothing',
+      () async {
+        await storeLocale();
+        final key = secureStore[keyId];
+        final sealed = preferences.getString('locale');
+
+        final pref = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+        expect(secureStore[keyId], key);
+        expect(preferences.getString('locale'), sealed);
+        expect(preferences.containsKey(keyId), isFalse);
+
+        // Once the platform recovers, the preference is still readable.
+        final recovered = prefOver(const FlutterSecureStorage());
+        await recovered.init();
+        expect(await recovered.read<String>('locale'), 'vi');
+      },
+    );
+
+    test(
+      'with nothing stored, an unavailable secure storage falls back to a '
+      'key in SharedPreferences, adopted once it is readable',
+      () async {
+        final offline = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await offline.init();
+        await offline.write('locale', 'vi');
+        final fallback = preferences.getString(keyId);
+        expect(fallback, isNotNull);
+
+        // Still offline next launch: the same fallback key opens the value.
+        final stillOffline = prefOver(
+          _FlakyStorage(failuresBeforeSuccess: 100),
+        );
+        await stillOffline.init();
+        expect(await stillOffline.read<String>('locale'), 'vi');
+
+        // Back online: the key moves into secure storage, the value survives.
+        final online = prefOver(const FlutterSecureStorage());
+        await online.init();
+        expect(await online.read<String>('locale'), 'vi');
+        expect(secureStore[keyId], fallback);
+        expect(preferences.containsKey(keyId), isFalse);
+      },
+    );
+
+    test(
+      'a stale fallback key that opens nothing gives way to the secure key',
+      () async {
+        await storeLocale();
+        // As an earlier version left it after a transient error.
+        await preferences.setString(
+          keyId,
+          encrypter.Key.fromSecureRandom(32).base64,
+        );
+
+        final pref = prefOver(const FlutterSecureStorage());
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), 'vi');
+        expect(preferences.containsKey(keyId), isFalse);
+      },
+    );
+
+    test(
+      'a stale fallback key is not used while secure storage fails',
+      () async {
+        await storeLocale();
+        final stale = encrypter.Key.fromSecureRandom(32).base64;
+        await preferences.setString(keyId, stale);
+
+        final pref = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+        expect(preferences.getString(keyId), stale);
+        expect(preferences.containsKey('locale'), isTrue);
+      },
+    );
+
+    test('a corrupt master key is replaced', () async {
+      secureStore[keyId] = 'not-a-key';
+      final pref = prefOver(const FlutterSecureStorage());
+
+      await pref.init();
+
+      expect(secureStore[keyId], isNot('not-a-key'));
+      await pref.write('locale', 'vi');
+      expect(await pref.read<String>('locale'), 'vi');
+    });
+
+    test(
+      'a new key secure storage refuses to store is kept in SharedPreferences',
+      () async {
+        final storage = _FlakyStorage(failuresBeforeSuccess: 0)
+          ..failWrites = true;
+        final pref = prefOver(storage);
+
+        await pref.init();
+        await pref.write('locale', 'vi');
+
+        expect(preferences.containsKey(keyId), isTrue);
+        final next = prefOver(_FlakyStorage(failuresBeforeSuccess: 0));
+        await next.init();
+        expect(await next.read<String>('locale'), 'vi');
+      },
+    );
+  });
+
+  group('PrefStorageImpl — no secure store, values sealed with its key', () {
+    const keyId = '_internal_pref_master_key';
+    late SharedPreferences preferences;
+    late List<({int level, String message})> logged;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      preferences = await SharedPreferences.getInstance();
+      FlutterSecureStorage.setMockInitialValues({});
+      logged = [];
+      DynamicLogger.configure(
+        logHandler: (
+          message, {
+          error,
+          level = 0,
+          name = '',
+          sequenceNumber,
+          stackTrace,
+          time,
+          zone,
+        }) => logged.add((level: level, message: message)),
+      );
+      // A healthy earlier session sealed a preference with the key kept in
+      // secure storage; this run's platform has no secure store at all.
+      final healthy = PrefStorageImpl(preferences);
+      await healthy.init();
+      await healthy.write('locale', 'vi');
+      logged.clear();
+    });
+
+    tearDown(DynamicLogger.reset);
+
+    Iterable<({int level, String message})> fallbackWarnings() => logged.where(
+      (l) => l.message.contains('Secure storage is unavailable'),
+    );
+
+    test(
+      'memory_fallback: init completes, the stored values stay on disk '
+      'untouched and this run serves defaults from memory',
+      () async {
+        final onDisk = {
+          for (final k in preferences.getKeys()) k: preferences.get(k),
+        };
+        final store = _NoSecureStore();
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          store,
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), isNull);
+        await pref.write('locale', 'en');
+        expect(await pref.read<String>('locale'), 'en');
+        await pref.write('theme', 'dark');
+        await pref.delete('theme');
+        expect(await pref.read<String>('theme'), isNull);
+        // A key that IS on disk: deleting it, or writing it to null, forgets
+        // this run's value and never reaches the stored one.
+        await pref.delete('locale');
+        expect(await pref.read<String>('locale'), isNull);
+        await pref.write('locale', 'en');
+        await pref.write<String>('locale', null);
+        expect(await pref.read<String>('locale'), isNull);
+
+        // Nothing on disk moved: no fallback key, no value written or deleted.
+        expect({
+          for (final k in preferences.getKeys()) k: preferences.get(k),
+        }, onDisk);
+        expect(preferences.containsKey(keyId), isFalse);
+        expect(store.calls.toSet(), {'read $keyId'});
+
+        expect(fallbackWarnings(), hasLength(1));
+        expect(fallbackWarnings().single.level, _warning);
+        expect(
+          fallbackWarnings().single.message,
+          allOf(
+            contains('PlatformException'),
+            contains('platforms.<p>.secure_storage'),
+          ),
+        );
+
+        // Once the secure store is back, the preference reads as it was.
+        final recovered = PrefStorageImpl(preferences);
+        await recovered.init();
+        expect(await recovered.read<String>('locale'), 'vi');
+      },
+    );
+
+    test('required: init rethrows and nothing is touched', () async {
+      final onDisk = {
+        for (final k in preferences.getKeys()) k: preferences.get(k),
+      };
+      final store = _NoSecureStore();
+      final pref = PrefStorageImpl.withSecureStorage(
+        preferences,
+        store,
+        platform: _linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+      expect({
+        for (final k in preferences.getKeys()) k: preferences.get(k),
+      }, onDisk);
+      expect(store.calls.toSet(), {'read $keyId'});
+      expect(fallbackWarnings(), isEmpty);
+    });
+
+    test(
+      'memory_fallback: a fallback key in SharedPreferences that opens the '
+      'stored values still wins — they are read, and writes reach the disk',
+      () async {
+        // An earlier session without a secure store (on `required` facts, so
+        // the memory_fallback branch plays no part) kept its key in
+        // SharedPreferences and sealed a preference with it.
+        await preferences.clear();
+        final earlier = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.required),
+        );
+        await earlier.init();
+        await earlier.write('locale', 'vi');
+        final fallbackKey = preferences.getString(keyId);
+        expect(fallbackKey, isNotNull);
+        logged.clear();
+
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), 'vi');
+        await pref.write('theme', 'dark');
+        expect(preferences.containsKey('theme'), isTrue);
+        expect(preferences.getString(keyId), fallbackKey);
+        expect(fallbackWarnings(), isEmpty);
+      },
+    );
+
+    test(
+      'memory_fallback: with nothing stored, a fallback key is created and '
+      'persisted, so what this run writes survives the next launch',
+      () async {
+        await preferences.clear();
+        final pref = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await pref.init();
+        await pref.write('locale', 'en');
+
+        final fallbackKey = preferences.getString(keyId);
+        expect(fallbackKey, isNotNull);
+        expect(preferences.containsKey('locale'), isTrue);
+        expect(fallbackWarnings(), hasLength(1));
+        expect(
+          fallbackWarnings().single.message,
+          contains('keeping the pref master key in SharedPreferences'),
+        );
+
+        final next = PrefStorageImpl.withSecureStorage(
+          preferences,
+          _NoSecureStore(),
+          platform: _linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+        await next.init();
+        expect(await next.read<String>('locale'), 'en');
+        expect(preferences.getString(keyId), fallbackKey);
+      },
+    );
+  });
+
+  group('StorageValue', () {
+    late PrefStorageImpl prefStorage;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      prefStorage = PrefStorageImpl(preferences);
+      await prefStorage.init();
+      prefStorage.setMasterKey(testMasterKey);
+    });
+
+    test('should update value and notify listeners', () async {
+      final storageValue = StorageValue<String>(prefStorage, 'user_token');
+      var notifyCount = 0;
+      storageValue.addListener(() {
+        notifyCount++;
+      });
+
+      storageValue.value = 'token123';
+      await Future<void>.delayed(Duration.zero);
+
+      expect(storageValue.value, equals('token123'));
+      expect(notifyCount, equals(1));
+
+      final persistedValue = await prefStorage.read<String>('user_token');
+      expect(persistedValue, equals('token123'));
+    });
+
+    test('should delete and reset value in memory', () async {
+      final storageValue = StorageValue<String>(prefStorage, 'user_token');
+      storageValue.value = 'token123';
+      await Future<void>.delayed(Duration.zero);
+
+      await storageValue.remove();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(storageValue.value, isNull);
+      final persistedValue = await prefStorage.read<String>('user_token');
+      expect(persistedValue, isNull);
+    });
+  });
+
+  group('StorageValue writes', () {
+    test('save completes once the value is persisted', () async {
+      final backend = _RecordingStorage();
+      final value = StorageValue<String>(backend, 'k');
+
+      await value.save('a');
+
+      expect(backend.values['k'], 'a');
+      expect(value.value, 'a');
+    });
+
+    test('writes land in the order they were made', () async {
+      // The first write is the slow one: without serialization the second
+      // would finish first and the stale value would be left on disk.
+      final backend = _RecordingStorage(
+        delays: [const Duration(milliseconds: 20), Duration.zero],
+      );
+      final value = StorageValue<String>(backend, 'k');
+
+      value.value = 'first';
+      await value.save('second');
+
+      expect(backend.log, ['write k=first', 'write k=second']);
+      expect(backend.values['k'], 'second');
+    });
+
+    test(
+      'a failed write is logged, not thrown, and later writes run',
+      () async {
+        final backend = _RecordingStorage(failFirst: true);
+        final value = StorageValue<String>(backend, 'k');
+
+        await expectLater(value.save('lost'), completes);
+        await value.save('kept');
+
+        expect(value.value, 'kept');
+        expect(backend.values['k'], 'kept');
+      },
+    );
+
+    test('the setter never surfaces a failure as a zone error', () async {
+      final backend = _RecordingStorage(failFirst: true);
+      final value = StorageValue<String>(backend, 'k');
+      final errors = <Object>[];
+
+      await runZonedGuarded(() async {
+        value.value = 'x';
+        await value.remove();
+      }, (error, _) => errors.add(error));
+
+      expect(errors, isEmpty);
+      expect(backend.log.last, 'delete k');
+    });
+  });
+
+  group('StorageManager — independently-owned StorageValues', () {
+    // core_storage exposes only the mechanism (StorageManager/StorageValue).
+    // Each consumer package declares and owns its own StorageValue instances
+    // with its own keys — there is no shared cross-domain presets object.
+    late StorageManager manager;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+
+      final preferences = await SharedPreferences.getInstance();
+      final prefStorage = PrefStorageImpl(preferences);
+      await prefStorage.init();
+      prefStorage.setMasterKey(testMasterKey);
+
+      final secureStorage = SecureStorageImpl();
+      await secureStorage.init();
+
+      manager = StorageManager(prefStorage, secureStorage);
+    });
+
+    /// Mirrors how each owner package declares its own value:
+    /// `AuthLocalDataSource` (secure/'token'), `LanguageStorageImpl`
+    /// (pref/'locale'), `ThemeStorageImpl` (pref/'themeMode'),
+    /// `AppBootStorage` (pref/'viewed_onboard').
+    StorageValue<String> buildToken() =>
+        StorageValue<String>(manager.getStorage(StorageType.secure), 'token');
+
+    StorageValue<String> buildLocale() =>
+        StorageValue<String>(manager.getStorage(StorageType.pref), 'locale');
+
+    StorageValue<_TestThemeMode> buildThemeMode() =>
+        StorageValue<_TestThemeMode>(
+          manager.getStorage(StorageType.pref),
+          'themeMode',
+          reviver: (key, value) => value == null
+              ? _TestThemeMode.system
+              : _TestThemeMode.values.byName(value.toString()),
+        );
+
+    test(
+      'each owner round-trips its own value through its own backend',
+      () async {
+        final token = buildToken();
+        final locale = buildLocale();
+        final themeMode = buildThemeMode();
+
+        token.value = 'preset_token_abc';
+        locale.value = 'vi';
+        themeMode.value = _TestThemeMode.dark;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(token.value, equals('preset_token_abc'));
+        expect(locale.value, equals('vi'));
+        expect(themeMode.value, equals(_TestThemeMode.dark));
+      },
+    );
+
+    test('writing one owner value never disturbs another owner key', () async {
+      final token = buildToken();
+      final locale = buildLocale();
+      final themeMode = buildThemeMode();
+
+      locale.value = 'vi';
+      themeMode.value = _TestThemeMode.dark;
+      await Future<void>.delayed(Duration.zero);
+
+      // Auth writes and then clears its own key…
+      token.value = 'preset_token_abc';
+      token.value = null;
+      await Future<void>.delayed(Duration.zero);
+
+      // …the other owners' keys survive untouched, on disk too.
+      expect(token.value, isNull);
+      expect(locale.value, equals('vi'));
+      expect(themeMode.value, equals(_TestThemeMode.dark));
+      expect(
+        await manager.getStorage(StorageType.pref).read<String>('locale'),
+        equals('vi'),
+      );
+    });
+
+    test(
+      'a separately constructed StorageValue sees the same persisted key',
+      () async {
+        buildLocale().value = 'vi';
+        await Future<void>.delayed(Duration.zero);
+
+        // A second owner instance (e.g. app-shell vs data layer) hydrating
+        // the same physical key must read back what was persisted.
+        final reopened = buildLocale();
+        await reopened.readFromStorage();
+
+        expect(reopened.value, equals('vi'));
+      },
+    );
+  });
+
+  group('In-memory obfuscation (hygiene, not RAM protection)', () {
+    late PrefStorageImpl prefStorage;
+    late SecureStorageImpl secureStorage;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+
+      final preferences = await SharedPreferences.getInstance();
+      prefStorage = PrefStorageImpl(preferences);
+      await prefStorage.init();
+      prefStorage.setMasterKey(testMasterKey);
+
+      secureStorage = SecureStorageImpl();
+      await secureStorage.init();
+    });
+
+    test(
+      'ObfuscatedBytes should hide data and reveal it correctly, then zero it',
+      () {
+        final original = Uri.encodeComponent(
+          'my_ultra_secret_key_123',
+        ).codeUnits;
+        final originalBytes = Uint8List.fromList(original);
+        final ob = ObfuscatedBytes(originalBytes);
+
+        // Verify that internal representation is masked (obfuscated)
+        // (it shouldn't be equal to original bytes)
+        // Since it's dynamic XOR, let's reveal and compare
+        final revealed = ob.reveal();
+        expect(revealed, equals(originalBytes));
+
+        // Test zeroing/filling range after reveal
+        revealed.fillRange(0, revealed.length, 0);
+        expect(revealed.every((b) => b == 0), isTrue);
+
+        ob.dispose();
+      },
+    );
+
+    test(
+      'ObfuscatedBytes.fromString should obfuscate and reveal a string',
+      () {
+        const secret = 'my_secret_token_abc';
+        final obStr = ObfuscatedBytes.fromString(secret);
+
+        expect(obStr.revealString(), equals(secret));
+        obStr.dispose();
+      },
+    );
+
+    group('ObfuscatedBytes.fromString UTF-8 multi-byte round-trips', () {
+      void expectRoundTrip(String label, String input) {
+        final utf8Len = utf8.encode(input).length;
+        final obStr = ObfuscatedBytes.fromString(input);
+        final revealed = obStr.revealString();
+        expect(revealed, equals(input), reason: label);
+        expect(utf8.encode(revealed).length, utf8Len, reason: '$label bytes');
+        obStr.dispose();
+      }
+
+      test('ASCII (1-byte UTF-8)', () {
+        expectRoundTrip('ascii', 'Hello World 123');
+      });
+
+      test('empty string', () {
+        expectRoundTrip('empty', '');
+      });
+
+      test('2-byte UTF-8 — Latin extended / Vietnamese', () {
+        expectRoundTrip('vietnamese', 'Nguyễn Văn Hiếu Cao');
+        expectRoundTrip('latin-ext', 'café naïve façade');
+        expectRoundTrip('german', 'Größe — über Äpfel');
+      });
+
+      test('2-byte UTF-8 — Cyrillic / Greek / Arabic / Hebrew', () {
+        expectRoundTrip('cyrillic', 'Привет мир');
+        expectRoundTrip('greek', 'Γειά σου Κόσμε');
+        expectRoundTrip('arabic', 'مرحبا بالعالم');
+        expectRoundTrip('hebrew', 'שלום עולם');
+      });
+
+      test('3-byte UTF-8 — CJK ideographs', () {
+        expectRoundTrip('chinese', '你好世界 — 中文汉字');
+        expectRoundTrip('japanese', 'こんにちは世界 — 日本語の漢字と仮名');
+        expectRoundTrip('korean', '안녕하세요 세계 — 한글');
+        expectRoundTrip('mixed-cjk', '漢字かな한글 ABC');
+      });
+
+      test('4-byte UTF-8 — emoji / icons (surrogate pairs)', () {
+        expectRoundTrip('emoji-basic', '😀🎉🚀🔥');
+        expectRoundTrip('emoji-zwj', '👨‍👩‍👧‍👦'); // family ZWJ sequence
+        expectRoundTrip('emoji-flags', '🇻🇳🇯🇵🇰🇷🇺🇸');
+        expectRoundTrip('emoji-skin', '👍🏻👍🏼👍🏽👍🏾👍🏿');
+        expectRoundTrip('misc-symbols', '⚙️✅❌⭐️❤️');
+      });
+
+      test('mixed scripts + emoji in one string', () {
+        expectRoundTrip(
+          'mixed',
+          'User: Nguyễn 你好 こんにちは 안녕 😀 — café',
+        );
+      });
+
+      test('JSON payload with ideographs, emoji, and 2-byte chars', () {
+        final json = jsonEncode({
+          'id': 'user_001',
+          'name': 'Nguyễn Văn Hiếu Cao',
+          'displayName': '你好 こんにちは 안녕 😀',
+          'bio': 'café · Привет · مرحبا · 漢字',
+          'icon': '🚀',
+          'role': 'none',
+          'bankName': null,
+          'bankAccount': null,
+          'fcmToken': null,
+        });
+        expect(
+          utf8.encode(json).length,
+          greaterThan(json.length),
+          reason: 'payload must exercise multi-byte UTF-8',
+        );
+
+        final obStr = ObfuscatedBytes.fromString(json);
+        final revealed = obStr.revealString();
+        expect(revealed, equals(json));
+        final decoded = jsonDecode(revealed);
+        expect(decoded, isA<Map<String, dynamic>>());
+        expect(
+          (decoded as Map<String, dynamic>)['displayName'],
+          '你好 こんにちは 안녕 😀',
+        );
+        obStr.dispose();
+      });
+
+      test('UTF-8 byte length exceeds Dart String.length for multi-byte', () {
+        const samples = {
+          'vi': 'Hiếu',
+          'zh': '汉字',
+          'emoji': '😀',
+          'family': '👨‍👩‍👧‍👦',
+        };
+        for (final entry in samples.entries) {
+          final dartLen = entry.value.length;
+          final utf8Len = utf8.encode(entry.value).length;
+          expect(
+            utf8Len,
+            greaterThan(dartLen),
+            reason: '${entry.key}: utf8($utf8Len) > dart($dartLen)',
+          );
+          expectRoundTrip(entry.key, entry.value);
+        }
+      });
+    });
+
+    test('Should throw ArgumentError when accessing reserved keys', () async {
+      final reserved = [
+        '_internal_master_key',
+        '_internal_pref_master_key',
+        'firstTimeOpenApp',
+        '_internal_custom_key',
+      ];
+
+      for (final key in reserved) {
+        expect(() => prefStorage.read<String>(key), throwsArgumentError);
+        expect(
+          () => prefStorage.write<String>(key, 'val'),
+          throwsArgumentError,
+        );
+        expect(() => prefStorage.delete(key), throwsArgumentError);
+
+        expect(() => secureStorage.read<String>(key), throwsArgumentError);
+        expect(
+          () => secureStorage.write<String>(key, 'val'),
+          throwsArgumentError,
+        );
+        expect(() => secureStorage.delete(key), throwsArgumentError);
+
+        expect(
+          () => StorageValue<String>(prefStorage, key),
+          throwsArgumentError,
+        );
+      }
+    });
+
+    test('Should allow accessing standard keys', () async {
+      await prefStorage.write('normal_key', 'normal_val');
+      final val = await prefStorage.read<String>('normal_key');
+      expect(val, equals('normal_val'));
+
+      await secureStorage.write('normal_key', 'normal_val');
+      final val2 = await secureStorage.read<String>('normal_key');
+      expect(val2, equals('normal_val'));
+    });
+  });
+}
+
+enum _TestThemeMode { system, light, dark }
+
+class _Point {
+  const _Point(this.x, this.y);
+
+  factory _Point.fromJson(Map<String, dynamic> json) =>
+      _Point(json['x'] as int, json['y'] as int);
+
+  final int x;
+  final int y;
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y};
+
+  @override
+  bool operator ==(Object other) =>
+      other is _Point && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}
+
+/// A platform with no secure store at all — a Linux session that runs no
+/// Secret Service: every call fails as a platform error, and each attempt is
+/// recorded as `'<call> <key>'`.
+class _NoSecureStore extends FlutterSecureStorage {
+  final calls = <String>[];
+
+  Never _fail(String call) {
+    calls.add(call);
+    throw PlatformException(
+      code: 'Libsecret error',
+      message: 'Failed to unlock the keyring',
+    );
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('read $key');
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('write $key');
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('delete $key');
+
+  @override
+  Future<void> deleteAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _fail('deleteAll');
+}
+
+/// A store that reads (nothing is stored) but refuses every write as a
+/// platform error; each call is recorded as `'<call> <key>'`.
+class _RefusingWriteStore extends FlutterSecureStorage {
+  final calls = <String>[];
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('read $key');
+    return null;
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('write $key');
+    throw PlatformException(
+      code: 'Libsecret error',
+      message: 'Failed to create the default collection',
+    );
+  }
+}
+
+/// Delegates to the mock platform, but throws a [PlatformException] — what a
+/// locked Keychain produces — for the next [failuresBeforeSuccess] reads.
+class _FlakyStorage extends FlutterSecureStorage {
+  _FlakyStorage({required this.failuresBeforeSuccess});
+
+  int failuresBeforeSuccess;
+  int readCalls = 0;
+  int deleteAllCalls = 0;
+
+  /// When set, every write fails as a platform error.
+  bool failWrites = false;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    if (failWrites) {
+      throw PlatformException(code: 'write failed');
+    }
+    return super.write(key: key, value: value);
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    readCalls++;
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess--;
+      throw PlatformException(
+        code: 'Unexpected security result code',
+        message: 'errSecInteractionNotAllowed',
+      );
+    }
+    return super.read(key: key);
+  }
+
+  @override
+  Future<void> deleteAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    deleteAllCalls++;
+    return super.deleteAll();
+  }
+}
+
+/// An in-memory backend that records every call, optionally delaying each
+/// write in turn or failing the first one.
+class _RecordingStorage implements StorageInterface {
+  _RecordingStorage({this.delays = const [], this.failFirst = false});
+
+  final List<Duration> delays;
+  bool failFirst;
+  final values = <String, Object?>{};
+  final log = <String>[];
+  var _writes = 0;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  bool isValidKey(String key) => true;
+
+  @override
+  Future<T?> read<T>(
+    String key, {
+    T Function(Object? key, Object? value)? reviver,
+  }) async => values[key] as T?;
+
+  @override
+  Future<void> write<T>(String key, T? value) async {
+    final index = _writes++;
+    if (index < delays.length) await Future<void>.delayed(delays[index]);
+    if (failFirst) {
+      failFirst = false;
+      throw StateError('disk full');
+    }
+    log.add('write $key=$value');
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    log.add('delete $key');
+    values.remove(key);
+  }
+}

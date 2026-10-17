@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "tabLabel": "Home",
+  "userLoggedIn": "User is Logged In",
+  "userLoggedOut": "User is Logged Out",
+  "refreshProfile": "Refresh profile"
+}

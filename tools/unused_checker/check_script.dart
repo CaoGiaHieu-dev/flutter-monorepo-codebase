@@ -1,6 +1,8 @@
 import 'dart:convert'; // For utf8 decoding
 import 'dart:io'; // For Process, exit, stdout, stderr
 
+import '../shared/toolchain.dart';
+import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
 // --- Configuration ---
@@ -36,15 +38,20 @@ Future<int> _runCheckScript(Map<String, String> scriptInfo) async {
   final icon = scriptInfo['icon']!;
   final scriptPath = 'tools/unused_checker/$scriptName';
 
+  // The repo's toolchain (`fvm dart` when FVM is set up), not whichever SDK
+  // happens to run this script.
+  final args = [...dartArgs, 'run', scriptPath];
   OutputFormatter.printSection(description, icon: icon);
-  OutputFormatter.printCommand(Platform.executable, ['run', scriptPath]);
+  OutputFormatter.printCommand(dartExecutable, args);
 
   final stopwatch = Stopwatch()..start();
 
-  final process = await Process.start(Platform.executable, [
-    'run',
-    scriptPath,
-  ], mode: ProcessStartMode.normal);
+  final process = await Process.start(
+    dartExecutable,
+    args,
+    mode: ProcessStartMode.normal,
+    runInShell: true,
+  );
 
   // Collect output for better formatting
   final outputLines = <String>[];
@@ -92,11 +99,28 @@ Future<int> _runCheckScript(Map<String, String> scriptInfo) async {
   return exitCode;
 }
 
-void main() async {
+void main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(
+      'Usage: dart tools/unused_checker/check_script.dart\n\n'
+      'Runs every unused-resource check (assets, translations, files, '
+      'packages)\nand exits 1 if any of them fails.',
+    );
+    return;
+  }
+  if (args.isNotEmpty) {
+    stderr.writeln('Unknown argument(s): ${args.join(' ')}. See --help.');
+    exit(64);
+  }
+
+  // Every check resolves the root itself; running from it here keeps the
+  // relative script paths below, and FVM detection (`.fvmrc`), valid from any
+  // working directory.
+  Directory.current = MonorepoHelper.repoRoot();
+
   OutputFormatter.printHeader(
     'Flutter Project Unused Resources Checker',
-    subtitle:
-        'Comprehensive analysis of unused assets, files, packages, and translations',
+    subtitle: 'Comprehensive analysis of unused assets, files, packages, and translations',
   );
 
   final overallStopwatch = Stopwatch()..start();

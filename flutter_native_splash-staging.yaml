@@ -1,6 +1,9 @@
 flutter_native_splash:
+  # no web splash: the shell holds the first frame and nothing would remove an HTML splash
+  web: false
   color: "#FFFFFF"
-  image: ../packages/core/base_ui/assets/images/ic_launcher_foreground.png
+  image: ../../assets/branding/ic_launcher_foreground.png
   android_12:
-    image: ../packages/core/base_ui/assets/images/ic_launcher_foreground.png
+    color: "#FFFFFF"
+    image: ../../assets/branding/ic_launcher_foreground.png
     android_gravity: center

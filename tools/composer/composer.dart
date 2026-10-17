@@ -1,0 +1,2418 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
+
+import '../shared/workspace.dart';
+import '../unused_checker/output_formatter.dart';
+import 'src/catalog.dart';
+import 'src/checks.dart';
+import 'src/facts_emit.dart';
+import 'src/manifest_v2.dart';
+import 'src/native_flavors.dart';
+import 'src/new_app.dart';
+import 'src/package_facts.dart';
+import 'src/profile_summary.dart';
+import 'src/provisions.dart';
+import 'src/report.dart';
+import 'src/runners.dart';
+
+/// Composes an app from its `app_manifest.yaml`.
+///
+/// Three artifacts in this repository were hand-maintained and had to agree
+/// with each other: the root `workspace:` list, an app's path dependencies, and
+/// its `injection.dart`. Adding or removing a module meant editing all three in
+/// step, and the failure mode for getting it wrong is a boot-time crash that
+/// `flutter analyze` cannot see.
+///
+/// This generates all three from one declaration, between marker comments, so
+/// everything outside the markers stays hand-written.
+///
+/// Packages are resolved by **name**, discovered by scanning for
+/// `pubspec.yaml`. No directory layout is encoded here, so moving packages
+/// around needs no change to this tool or to any manifest.
+///
+/// ```
+/// dart tools/composer/composer.dart sync [--app <id>] [--strict]
+/// dart tools/composer/composer.dart verify
+/// dart tools/composer/composer.dart list
+/// dart tools/composer/composer.dart describe [--app <id>] [--catalog | --ci-matrix pr|full]
+/// dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]
+/// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>] [--org <reverse domain>]
+/// dart tools/composer/composer.dart runners [--app <id>] [--platform <p>[,<p>…]] [--force] [--offline]
+/// ```
+///
+/// The manifest also **declares** the app — its name, flavors (and the pinning
+/// decision each carries), environment keys, platforms and capabilities — and
+/// `sync` turns that into the `facts` region of `lib/app/app_profile.dart`, the
+/// `report` region of the app's `README.md`, the `runners` region of its
+/// `.gitignore` (every generated runner, never committed) and, in
+/// `injection.dart`, the `configureDependencies` entry point. `src/manifest_v2.dart` holds the
+/// schema, `src/checks.dart` the checks `verify` adds.
+///
+/// `verify` also holds the declaration to the source (`checkComposition`,
+/// `checkPackagePlatforms`): `capabilities:` against what the composed packages
+/// register (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10),
+/// env files (V11), the entry point and smoke test (V12), the native flavors
+/// of a committed runner (V15) and the DI group order (V16). The registration
+/// scan is `tools/shared/contract_scan.dart`, the one `arch_check` shares.
+///
+/// `new` creates a whole app from `app_template/`: the manifest (with
+/// `capabilities:` derived from the modules asked for), the generated-file
+/// shells, a profile, hooks, an entry point, a smoke test — then `sync` and
+/// `verify`. It refuses an id that exists or a platform a requested module
+/// blocks before it writes anything, and generates no runner.
+///
+/// `runners` generates the runner of every `scaffold` platform with
+/// `flutter create` in a temporary directory (`src/runners.dart`), copies only
+/// the platform folder into the app, runs `flutter pub get` there (`--offline`
+/// with `--offline`) — after a new runner, and whenever a runner lacks the
+/// plugin files pub get writes — so it builds with `--no-pub`, and applies a
+/// fixed patch set that rewrites no file whose bytes would not change; git
+/// ignores the result. `describe --ci-matrix pr|full` prints, as one line of
+/// JSON, the apps and platforms CI boots.
+///
+/// `sync` skips a module that is not on disk and says so loudly; `--strict`
+/// makes that an error. CI runs `--strict`, which is what stops a release
+/// silently shipping without a module someone forgot to check out.
+
+/// Marker pair delimiting a generated region. Regions are **named** because
+/// `injection.dart` needs two of them: Dart requires every import before any
+/// declaration, so the generated imports and the generated `const` lists
+/// cannot sit in one contiguous block.
+String _beginMarker(String region) =>
+    'composer:managed:$region — generated from app_manifest.yaml';
+String _endMarker(String region) => 'composer:end:$region';
+
+Future<void> main(List<String> args) async {
+  if (args.isEmpty || args.contains('--help') || args.contains('-h')) {
+    _printHelp(args.isEmpty ? stderr : stdout);
+    // No command is a usage error, like an unknown one (64) — never 1, which
+    // `verify` uses for drift.
+    exit(args.isEmpty ? 64 : 0);
+  }
+
+  final command = args.first;
+  if (!const {
+    'list',
+    'sync',
+    'verify',
+    'describe',
+    'reconcile',
+    'new',
+    'runners',
+  }.contains(command)) {
+    OutputFormatter.printError('Unknown command `$command`.');
+    _printHelp(stderr);
+    exit(64);
+  }
+
+  final root = p.posix.normalize(
+    Directory.current.path.replaceAll(r'\', '/'),
+  );
+
+  // `new` has its own arguments: an id and three flags.
+  if (command == 'new') {
+    final NewAppRequest request;
+    try {
+      request = parseNewArgs(args.sublist(1));
+    } on FormatException catch (e) {
+      OutputFormatter.printError(e.message);
+      exit(64);
+    }
+    _guardYaml(root, () => _newApp(root, request));
+    return;
+  }
+
+  // `runners` too: an app, platforms and `--force`.
+  if (command == 'runners') {
+    final RunnersRequest request;
+    try {
+      request = parseRunnersArgs(args.sublist(1));
+    } on FormatException catch (e) {
+      OutputFormatter.printError(e.message);
+      exit(64);
+    }
+    var apps = const <RunnerApp>[];
+    _guardYaml(root, () => apps = _runnerApps(root));
+    OutputFormatter.printHeader(
+      'Composer — runners',
+      subtitle: 'flutter create + patch set; git ignores the result (RULE-83)',
+    );
+    final code = await generateRunners(
+      root: root,
+      apps: apps,
+      request: request,
+      run: runProcess,
+      fetch: fetchUrl,
+      out: stdout.writeln,
+      warn: OutputFormatter.printWarning,
+      err: OutputFormatter.printError,
+    );
+    if (code == 0) {
+      OutputFormatter.printSuccess('Every generated runner is in place.');
+    }
+    exit(code);
+  }
+
+  // Every argument after the command must be one this tool knows. An
+  // unknown flag used to be ignored, so `sync --stritc` ran a lenient sync.
+  var strict = false;
+  var catalogOnly = false;
+  String? ciMatrix;
+  String? appFilter;
+  String? reason;
+  for (var i = 1; i < args.length; i++) {
+    switch (args[i]) {
+      case '--strict':
+        strict = true;
+      case '--catalog':
+        catalogOnly = true;
+      case '--ci-matrix':
+        if (i + 1 >= args.length ||
+            !const {'pr', 'full'}.contains(args[i + 1])) {
+          OutputFormatter.printError('`--ci-matrix` needs `pr` or `full`.');
+          exit(64);
+        }
+        ciMatrix = args[++i];
+      case '--app':
+        if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+          OutputFormatter.printError('`--app` needs an app id.');
+          exit(64);
+        }
+        appFilter = args[++i];
+      case '--reason':
+        if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+          OutputFormatter.printError('`--reason` needs a text.');
+          exit(64);
+        }
+        reason = args[++i];
+      default:
+        OutputFormatter.printError('Unknown argument `${args[i]}`.');
+        _printHelp(stderr);
+        exit(64);
+    }
+  }
+
+  _guardYaml(
+    root,
+    () => _run(
+      command,
+      root,
+      appFilter,
+      strict,
+      catalogOnly: catalogOnly,
+      ciMatrix: ciMatrix,
+      reason: reason,
+    ),
+  );
+}
+
+/// Runs [body], turning a YAML parse error into the one-line refusal every
+/// command prints.
+void _guardYaml(String root, void Function() body) {
+  try {
+    body();
+  } on YamlException catch (e) {
+    // A pubspec or manifest that is not valid YAML — a duplicate key is the
+    // usual one. A pubspec, pub rejects too, so nothing resolves until it is
+    // fixed; a manifest only composer reads, so that claim is left off.
+    final source = e.span == null
+        ? null
+        : _relativeSource(e.span!.sourceUrl, root);
+    final where = source == null ? '' : '$source:${e.span!.start.line + 1}: ';
+    final isPubspec =
+        source == null || p.posix.basename(source) == 'pubspec.yaml';
+    OutputFormatter.printError(
+      'Refusing to compose: ${where}not valid YAML — ${_trimDot(e.message)}.'
+      '${isPubspec ? ' Pub rejects this file as well, so nothing in the '
+                'workspace resolves until it is fixed.' : ' Nothing was written.'}',
+    );
+    exit(1);
+  }
+}
+
+void _run(
+  String command,
+  String root,
+  String? appFilter,
+  bool strict, {
+  required bool catalogOnly,
+  String? ciMatrix,
+  String? reason,
+}) {
+  if (ciMatrix != null && (command != 'describe' || catalogOnly)) {
+    OutputFormatter.printError(
+      '`--ci-matrix` belongs to `describe`, without `--catalog`.',
+    );
+    exit(64);
+  }
+  if (reason != null && command != 'reconcile') {
+    OutputFormatter.printError('`--reason` belongs to `reconcile`.');
+    exit(64);
+  }
+  final packages = _discoverPackages(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+
+  if (catalogOnly && command != 'describe') {
+    OutputFormatter.printError('`--catalog` belongs to `describe`.');
+    exit(64);
+  }
+  if (command == 'describe' && catalogOnly) {
+    if (catalog == null) {
+      for (final problem in catalogProblems) {
+        OutputFormatter.printError(problem);
+      }
+      exit(1);
+    }
+    stdout.write(renderCatalog(catalog));
+    return;
+  }
+
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
+
+  if (apps.isEmpty) {
+    OutputFormatter.printError(
+      'No app_manifest.yaml found. Run this from the repository root.',
+    );
+    exit(1);
+  }
+
+  // Before anything else reports on the tree: a pubspec that pub will not
+  // parse makes every other result moot. An app pubspec that lists a managed
+  // package by hand as well gets the specific refusal from `_sync`.
+  if (_invalidYaml.isNotEmpty && command == 'list') {
+    _reportInvalidYaml(root);
+    exit(1);
+  }
+
+  // One line of JSON on stdout and nothing else, for `>> $GITHUB_OUTPUT`.
+  if (ciMatrix != null) {
+    _ciMatrix(
+      root,
+      apps,
+      packages,
+      catalog!,
+      appFilter,
+      full: ciMatrix == 'full',
+    );
+    return;
+  }
+
+  // What the source registers: read once, by the same scanner arch_check's R8
+  // uses, for V3, V10 and the report's "implemented by" column.
+  final provisions = command == 'list'
+      ? const ProvisionIndex.empty()
+      : ProvisionIndex.scan(root, packages);
+
+  switch (command) {
+    case 'list':
+      _list(apps, packages, appFilter);
+    case 'describe':
+      _describeApps(root, apps, packages, catalog!, provisions, appFilter);
+    case 'reconcile':
+      _reconcile(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        reason,
+      );
+    case 'sync':
+      _sync(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        strict,
+        dryRun: false,
+      );
+    case 'verify':
+      _sync(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        true,
+        dryRun: true,
+      );
+  }
+}
+
+/// Pubspecs that failed to parse during discovery, path -> error.
+///
+/// Discovery keeps going past them — reading the `name:` line alone — so the
+/// check that explains the usual cause (a package declared both by hand and
+/// inside the managed region: a duplicate key) still gets to run.
+final Map<String, YamlException> _invalidYaml = {};
+
+void _reportInvalidYaml(String root) {
+  for (final entry in _invalidYaml.entries) {
+    final e = entry.value;
+    final line = e.span == null ? '' : ':${e.span!.start.line + 1}';
+    OutputFormatter.printError(
+      'Refusing to compose: ${p.posix.relative(entry.key, from: root)}$line '
+      'is not valid YAML — ${_trimDot(e.message)}. Pub rejects it as well, so nothing '
+      'in the workspace resolves until it is fixed.',
+    );
+  }
+}
+
+/// `Duplicate mapping key.` -> `Duplicate mapping key`, so the sentence it
+/// is dropped into does not end in `..`.
+String _trimDot(String message) => message.replaceFirst(RegExp(r'\.+$'), '');
+
+String _relativeSource(Uri? source, String root) {
+  if (source == null) return '<unknown>';
+  final path = source.scheme == 'file'
+      ? source.toFilePath().replaceAll(r'\', '/')
+      : source.toString();
+  return p.posix.isAbsolute(path) ? p.posix.relative(path, from: root) : path;
+}
+
+/// `loadYaml` with the file's path attached, so a parse error can name it.
+dynamic _loadYamlFile(String path) => loadYaml(
+  File(path).readAsStringSync(),
+  sourceUrl: Uri.file(p.absolute(path)),
+);
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+/// Package name -> directory, for every `pubspec.yaml` in the tree.
+Map<String, String> _discoverPackages(String root) {
+  final out = <String, String>{};
+  for (final file in findPubspecs(root)) {
+    final path = p.posix.normalize(file.path.replaceAll(r'\', '/'));
+    Object? pkg;
+    try {
+      final doc = _loadYamlFile(path);
+      if (doc is! YamlMap) continue;
+      pkg = doc['name'];
+    } on YamlException catch (error) {
+      _invalidYaml[path] = error;
+      pkg = RegExp(
+        r'^name:\s*([A-Za-z_]\w*)\s*$',
+        multiLine: true,
+      ).firstMatch(file.readAsStringSync())?.group(1);
+    }
+    if (pkg is! String) continue;
+    out[pkg] = p.posix.dirname(path);
+  }
+  return out;
+}
+
+/// Every workspace member [seeds] reaches through `dependencies` and
+/// `dev_dependencies`, seeds included.
+///
+/// A workspace member must be listed in the root `workspace:` list, and a
+/// feature package pulls in core packages (`core_responsive`, `core_ui_kit`,
+/// `platform_kernel`, ...) that register no DI module, so no manifest group
+/// names them. Walking the pubspecs finds them instead: a manifest names only
+/// what the app composes, and the workspace still gets everything that needs
+/// to resolve. Dev dependencies count because pub resolves them for every
+/// member too.
+Set<String> _closure(Iterable<String> seeds, Map<String, String> packages) {
+  final out = <String>{};
+  final pending = [...seeds];
+  while (pending.isNotEmpty) {
+    final pkg = pending.removeLast();
+    if (!out.add(pkg)) continue;
+    final dir = packages[pkg];
+    if (dir == null) continue;
+    final path = p.posix.join(dir, 'pubspec.yaml');
+    if (_invalidYaml.containsKey(path)) continue; // reported by the caller
+    final doc = _loadYamlFile(path);
+    if (doc is! YamlMap) continue;
+    for (final section in const ['dependencies', 'dev_dependencies']) {
+      final deps = doc[section];
+      if (deps is! YamlMap) continue;
+      for (final name in deps.keys.cast<String>()) {
+        if (packages.containsKey(name) && !out.contains(name)) {
+          pending.add(name);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/// One `di_groups` entry of a manifest, validated.
+class DiGroup {
+  const DiGroup(
+    this.name,
+    this.phase,
+    this.packages,
+    this.fromModules, {
+    this.why,
+  });
+
+  final String name;
+
+  /// `before` or `after` — nothing else ([_parseManifest] refuses it).
+  final String phase;
+  final List<String> packages;
+
+  /// The module layer this group collects, if any.
+  final String? fromModules;
+
+  /// Why the group sits where it does — shown in the app report.
+  final String? why;
+}
+
+/// One `modules` entry of a manifest, validated.
+class ModuleRef {
+  const ModuleRef(this.id, this.layers);
+
+  final String id;
+  final List<String> layers;
+}
+
+/// An `app_manifest.yaml`, read into typed fields by [_parseManifest].
+///
+/// Nothing downstream reads the raw YAML: every shape the generators rely on
+/// is checked once, up front, so a malformed manifest is a named refusal
+/// rather than a cast error — or, worse, a clean exit with modules dropped.
+class AppManifest {
+  AppManifest({
+    required this.id,
+    required this.declaration,
+    required this.dir,
+    required this.groups,
+    required this.modules,
+    required this.extraDependencies,
+  });
+
+  final String id;
+
+  /// What the app is and where it runs: name, flavors, env, platforms,
+  /// capabilities.
+  final AppDeclaration declaration;
+  final String dir;
+  final List<DiGroup> groups;
+  final List<ModuleRef> modules;
+  final List<String> extraDependencies;
+}
+
+/// Every `app_manifest.yaml` under [root], validated, sorted by id.
+///
+/// Refuses — exit 1, every problem named as `<file>: <key>: <problem>` — when
+/// any manifest is malformed or two share an app id. Runs before any command,
+/// so nothing is listed or written from a manifest that does not say what it
+/// was meant to.
+List<AppManifest> _discoverApps(
+  String root,
+  Map<String, String> packages,
+  ShellCatalog? catalog,
+  List<String> catalogProblems,
+) {
+  final out = <AppManifest>[];
+  final problems = <String>[];
+  final idOwner = <String, String>{};
+  final paths = [
+    for (final file in findAppManifests(root))
+      p.posix.normalize(file.path.replaceAll(r'\', '/')),
+  ];
+  // Directory listing order is filesystem-dependent; sorting the paths makes
+  // "which manifest is the duplicate" the same answer on every machine.
+  paths.sort();
+  for (final path in paths) {
+    final rel = p.posix.relative(path, from: root);
+    final app = _parseManifest(
+      _loadYamlFile(path),
+      rel,
+      p.posix.dirname(path),
+      problems,
+    );
+    if (app == null) continue;
+    if (catalog == null) {
+      for (final problem in catalogProblems) {
+        if (!problems.contains(problem)) problems.add(problem);
+      }
+    } else {
+      problems.addAll(
+        checkDeclaration(
+          rel: rel,
+          decl: app.declaration,
+          catalog: catalog,
+          appDir: app.dir,
+          appRel: p.posix.relative(app.dir, from: root),
+          appId: app.id,
+        ),
+      );
+    }
+    final other = idOwner[app.id];
+    if (other != null) {
+      problems.add(
+        '$rel: app.id: `${app.id}` is already the id of $other — `--app` '
+        'and every generated file are keyed by it, so each app needs its own',
+      );
+      continue;
+    }
+    idOwner[app.id] = rel;
+    out.add(app);
+  }
+
+  if (problems.isNotEmpty) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${problems.length} problem(s) in '
+      'app_manifest.yaml. Nothing was written.',
+    );
+    exit(1);
+  }
+
+  out.sort((a, b) => a.id.compareTo(b.id));
+  return out;
+}
+
+const _topLevelKeys = {
+  'app',
+  'flavors',
+  'env',
+  'platforms',
+  'capabilities',
+  'di_groups',
+  'modules',
+  'extra_dependencies',
+};
+
+/// `kind` is listed so the generic unknown-key message does not fire for it:
+/// the declaration parser refuses it with its own, more useful one.
+const _appKeys = {'id', 'name', 'org', 'kind', 'entrypoint'};
+const _groupKeys = {'name', 'phase', 'packages', 'from_modules', 'why'};
+const _moduleKeys = {'id', 'layers'};
+const _phases = ['before', 'after'];
+const _layers = ['api', 'domain', 'data', 'feature'];
+
+/// Layers a module may list without any `di_groups` entry collecting them.
+///
+/// A module's API package (`<id>_api`, `modules/<id>/api`) holds contracts
+/// only — interfaces other features implement against, no DI module — so it
+/// is not composed into `injection.dart` and the app does not depend on it.
+/// Listing it makes it a workspace member (and, under `--strict`, a package
+/// that must be on disk). A group may still collect it with
+/// `from_modules: api`, should an API package ever register something.
+const _workspaceOnlyLayers = {'api'};
+
+/// A Dart package name — what a module id and a package entry must be.
+final _packageName = RegExp(r'^[a-z_][a-z0-9_]*$');
+
+/// A group name becomes `_<name>Modules` in `injection.dart`.
+final _identifier = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+/// Reads [doc] (manifest [rel], in [dir]) into an [AppManifest], adding one
+/// `<rel>: <key>: <problem>` line to [problems] per defect. Returns null when
+/// the manifest has any.
+///
+/// Each check here closes a way a manifest used to be accepted and then
+/// mis-generated: a `phase: befor` dropped every core module from
+/// `injection.dart`, `layers: [features]` dropped the module, a duplicate id
+/// composed a package twice (a duplicate pubspec key, which pub rejects), and
+/// the shapes below crashed the tool with a stack trace.
+AppManifest? _parseManifest(
+  Object? doc,
+  String rel,
+  String dir,
+  List<String> problems,
+) {
+  final before = problems.length;
+  void bad(String key, String problem) => problems.add('$rel: $key: $problem');
+
+  if (doc is! YamlMap) {
+    bad(
+      '(root)',
+      'expected a map with `app`, `di_groups` and `modules`, got '
+          '${doc == null ? 'an empty file' : describeValue(doc)}',
+    );
+    return null;
+  }
+
+  // An unknown key is refused, not ignored: `module:` for `modules:` would
+  // otherwise compose an app with no modules and exit 0.
+  for (final key in doc.keys) {
+    if (!_topLevelKeys.contains(key)) {
+      bad('$key', 'unknown key — expected one of ${_topLevelKeys.join(', ')}');
+    }
+  }
+
+  /// A required, non-empty string at [map]`[key]`, reported as [path].
+  String? requiredString(YamlMap map, String key, String path) {
+    final value = map[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+    bad(path, 'expected a non-empty string, got ${describeValue(value)}');
+    return null;
+  }
+
+  /// An optional list of package names; null (absent or `key:` with nothing
+  /// under it) reads as empty.
+  List<String> packageList(Object? value, String path) {
+    if (value == null) return const [];
+    if (value is! YamlList) {
+      bad(
+        path,
+        'expected a list of package names, got ${describeValue(value)}',
+      );
+      return const [];
+    }
+    final out = <String>[];
+    for (var i = 0; i < value.length; i++) {
+      final pkg = value[i];
+      if (pkg is String && _packageName.hasMatch(pkg)) {
+        out.add(pkg);
+      } else {
+        bad('$path[$i]', 'expected a package name, got ${describeValue(pkg)}');
+      }
+    }
+    return out;
+  }
+
+  // -- app ------------------------------------------------------------------
+  String? id;
+  final app = doc['app'];
+  if (app is! YamlMap) {
+    bad(
+      'app',
+      'expected a map with `id` and `name`, got ${describeValue(app)}',
+    );
+  } else {
+    for (final key in app.keys) {
+      if (!_appKeys.contains(key)) {
+        bad('app.$key', 'unknown key — expected one of ${_appKeys.join(', ')}');
+      }
+    }
+    id = requiredString(app, 'id', 'app.id');
+  }
+
+  // -- the declaration: app.name / entrypoint, flavors, env, platforms,
+  // capabilities. `app.kind` is refused here; the checks that need the
+  // catalog or the disk run in `checks.dart`.
+  final declaration = parseDeclaration(doc, bad);
+
+  // Which group already holds each package: a package composed twice is a
+  // duplicate key in the app's generated `dependencies:`.
+  final packageOwner = <String, String>{};
+  void claim(String pkg, String owner, String path) {
+    final other = packageOwner[pkg];
+    if (other == null) {
+      packageOwner[pkg] = owner;
+    } else {
+      bad(path, '`$pkg` is already composed by $other');
+    }
+  }
+
+  // -- di_groups -------------------------------------------------------------
+  final groups = <DiGroup>[];
+  final collected = <String, String>{}; // layer -> group that collects it
+  final rawGroups = doc['di_groups'];
+  final problemsBeforeGroups = problems.length;
+  if (rawGroups is! YamlList || rawGroups.isEmpty) {
+    bad(
+      'di_groups',
+      'expected a non-empty list of groups (`- name: <n>`, `phase: before|'
+          'after`), got ${rawGroups is YamlList ? 'an empty list' : describeValue(rawGroups)}',
+    );
+  } else {
+    final names = <String>{};
+    var sawAfter = false;
+    for (var i = 0; i < rawGroups.length; i++) {
+      final path = 'di_groups[$i]';
+      final g = rawGroups[i];
+      if (g is! YamlMap) {
+        bad(
+          path,
+          'expected a map with `name` and `phase`, got ${describeValue(g)}',
+        );
+        continue;
+      }
+      for (final key in g.keys) {
+        if (!_groupKeys.contains(key)) {
+          bad(
+            '$path.$key',
+            'unknown key — expected one of ${_groupKeys.join(', ')}',
+          );
+        }
+      }
+
+      final name = requiredString(g, 'name', '$path.name');
+      if (name != null) {
+        if (!_identifier.hasMatch(name)) {
+          bad(
+            '$path.name',
+            '`$name` is not a Dart identifier — it becomes `_${name}Modules` '
+                'in injection.dart',
+          );
+        } else if (!names.add(name)) {
+          bad('$path.name', '`$name` names another group already');
+        }
+      }
+
+      // Validated because the generator filters on it: any other value put
+      // the group in neither `externalPackageModulesBefore` nor `...After`.
+      final phase = g['phase'];
+      if (phase is! String || !_phases.contains(phase)) {
+        bad(
+          '$path.phase',
+          'expected `before` or `after`, got ${describeValue(phase)}',
+        );
+      } else if (phase == 'after') {
+        sawAfter = true;
+      } else if (sawAfter) {
+        bad(
+          '$path.phase',
+          '`before` group listed after an `after` group — injectable runs '
+              'every `before` group first, so this order is not the boot order',
+        );
+      }
+
+      final label = '`${name ?? path}`';
+      final pkgs = packageList(g['packages'], '$path.packages');
+      for (var j = 0; j < pkgs.length; j++) {
+        claim(pkgs[j], 'group $label', '$path.packages[$j]');
+      }
+
+      String? from;
+      final rawFrom = g['from_modules'];
+      if (rawFrom != null) {
+        if (rawFrom is! String || !_layers.contains(rawFrom)) {
+          bad(
+            '$path.from_modules',
+            'expected one of ${_layers.join(', ')}, got ${describeValue(rawFrom)}',
+          );
+        } else if (collected.containsKey(rawFrom)) {
+          bad(
+            '$path.from_modules',
+            '`$rawFrom` is already collected by group ${collected[rawFrom]}',
+          );
+        } else {
+          from = rawFrom;
+          collected[rawFrom] = label;
+        }
+      }
+
+      final rawPkgs = g['packages'];
+      if (rawFrom == null &&
+          (rawPkgs == null || (rawPkgs is YamlList && rawPkgs.isEmpty))) {
+        bad(
+          path,
+          'names no `packages` and no `from_modules`, so it composes nothing',
+        );
+      }
+
+      final rawWhy = g['why'];
+      if (rawWhy != null && (rawWhy is! String || rawWhy.trim().isEmpty)) {
+        bad(
+          '$path.why',
+          'expected a non-empty string, got ${describeValue(rawWhy)}',
+        );
+      }
+
+      if (name != null && phase is String) {
+        groups.add(
+          DiGroup(
+            name,
+            phase,
+            pkgs,
+            from,
+            why: rawWhy is String ? rawWhy : null,
+          ),
+        );
+      }
+    }
+  }
+
+  // A layer no group collects is checked only when `di_groups` read cleanly;
+  // otherwise every module would repeat the group's own problem.
+  final groupsOk = problems.length == problemsBeforeGroups;
+
+  // -- modules ---------------------------------------------------------------
+  final modules = <ModuleRef>[];
+  final rawModules = doc['modules'];
+  if (rawModules != null && rawModules is! YamlList) {
+    bad(
+      'modules',
+      'expected a list of `{ id: <name>, layers: [...] }`, got '
+          '${describeValue(rawModules)}',
+    );
+  } else if (rawModules is YamlList) {
+    final ids = <String>{};
+    for (var i = 0; i < rawModules.length; i++) {
+      final path = 'modules[$i]';
+      final m = rawModules[i];
+      if (m is! YamlMap) {
+        bad(
+          path,
+          'expected `{ id: <name>, layers: [${_layers.join(', ')}] }`, got '
+          '${describeValue(m)}',
+        );
+        continue;
+      }
+      for (final key in m.keys) {
+        if (!_moduleKeys.contains(key)) {
+          bad(
+            '$path.$key',
+            'unknown key — expected one of ${_moduleKeys.join(', ')}',
+          );
+        }
+      }
+
+      final moduleId = requiredString(m, 'id', '$path.id');
+      if (moduleId != null) {
+        if (!_packageName.hasMatch(moduleId)) {
+          bad(
+            '$path.id',
+            '`$moduleId` is not a valid package-name segment (lowercase '
+                'letters, digits, `_`)',
+          );
+        } else if (!ids.add(moduleId)) {
+          bad('$path.id', 'module `$moduleId` is listed more than once');
+        }
+      }
+
+      final rawLayers = m['layers'];
+      final layers = <String>[];
+      if (rawLayers is! YamlList || rawLayers.isEmpty) {
+        bad(
+          '$path.layers',
+          'expected a non-empty list drawn from ${_layers.join(', ')}, got '
+              '${rawLayers is YamlList ? 'an empty list' : describeValue(rawLayers)}',
+        );
+      } else {
+        for (var j = 0; j < rawLayers.length; j++) {
+          final layer = rawLayers[j];
+          if (layer is! String || !_layers.contains(layer)) {
+            bad(
+              '$path.layers[$j]',
+              'expected one of ${_layers.join(', ')}, got ${describeValue(layer)}',
+            );
+          } else if (layers.contains(layer)) {
+            bad('$path.layers[$j]', '`$layer` is listed more than once');
+          } else if (groupsOk &&
+              !collected.containsKey(layer) &&
+              !_workspaceOnlyLayers.contains(layer)) {
+            bad(
+              '$path.layers[$j]',
+              '`$layer` is not collected by any di_groups entry — add '
+                  '`from_modules: $layer` to one, or the layer is dropped',
+            );
+          } else {
+            layers.add(layer);
+          }
+        }
+      }
+      if (moduleId != null) modules.add(ModuleRef(moduleId, layers));
+    }
+  }
+
+  // -- extra_dependencies ------------------------------------------------------
+  final extras = packageList(doc['extra_dependencies'], 'extra_dependencies');
+  for (var i = 0; i < extras.length; i++) {
+    claim(extras[i], '`extra_dependencies`', 'extra_dependencies[$i]');
+  }
+
+  if (problems.length != before || id == null || declaration == null) {
+    return null;
+  }
+  return AppManifest(
+    id: id,
+    declaration: declaration,
+    dir: dir,
+    groups: groups,
+    modules: modules,
+    extraDependencies: extras,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Resolution
+// ---------------------------------------------------------------------------
+
+/// A module's package for [layer], under either naming convention.
+///
+/// Accepts `domain_auth` (layer-first, today) and `auth_domain` (module-first,
+/// where the vertical-slice layout is going), so the relayout does not have to
+/// land in the same commit as anything else.
+String? _modulePackage(
+  Map<String, String> packages,
+  String moduleId,
+  String layer,
+) {
+  final pluralised = layer == 'feature' ? 'feature' : layer;
+  for (final candidate in ['${pluralised}_$moduleId', '${moduleId}_$layer']) {
+    if (packages.containsKey(candidate)) return candidate;
+  }
+  return null;
+}
+
+class Resolved {
+  final diGroups = <({String name, String phase, List<String> packages})>[];
+
+  /// Everything the app depends on: its DI groups' packages and extras.
+  final allPackages = <String>[];
+
+  /// Module packages of a layer no group collects (an `api` layer): workspace
+  /// members, but neither app dependencies nor DI modules.
+  final workspaceOnly = <String>[];
+  final missing = <String>[];
+}
+
+Resolved _resolve(
+  AppManifest app,
+  Map<String, String> packages,
+  List<String> warnings,
+) {
+  final r = Resolved();
+
+  List<String> fromModules(String layer) {
+    final out = <String>[];
+    for (final m in app.modules) {
+      if (!m.layers.contains(layer)) continue;
+      final pkg = _modulePackage(packages, m.id, layer);
+      if (pkg == null) {
+        r.missing.add('${m.id}/$layer');
+        continue;
+      }
+      out.add(pkg);
+    }
+    return out;
+  }
+
+  for (final g in app.groups) {
+    final explicit = g.packages.where((pkg) {
+      if (packages.containsKey(pkg)) return true;
+      r.missing.add(pkg);
+      return false;
+    }).toList();
+    final derived = g.fromModules == null
+        ? const <String>[]
+        : fromModules(g.fromModules!);
+    final all = [...explicit, ...derived];
+    if (all.isEmpty) continue;
+    r.diGroups.add((name: g.name, phase: g.phase, packages: all));
+    r.allPackages.addAll(all);
+  }
+
+  for (final pkg in app.extraDependencies) {
+    if (packages.containsKey(pkg)) {
+      r.allPackages.add(pkg);
+    } else {
+      r.missing.add(pkg);
+    }
+  }
+
+  final collected = {
+    for (final g in app.groups)
+      if (g.fromModules != null) g.fromModules!,
+  };
+  for (final layer in _workspaceOnlyLayers) {
+    if (!collected.contains(layer)) r.workspaceOnly.addAll(fromModules(layer));
+  }
+
+  for (final m in r.missing) {
+    warnings.add('`$m` is declared by ${app.id} but not present on disk');
+  }
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// Generation
+// ---------------------------------------------------------------------------
+
+/// `feature_auth` -> `FeatureAuthPackageModule`.
+String _moduleClass(String packageName) {
+  final pascal = packageName
+      .split('_')
+      .where((s) => s.isNotEmpty)
+      .map((s) => s[0].toUpperCase() + s.substring(1))
+      .join();
+  return '${pascal}PackageModule';
+}
+
+/// True when the package declares `@InjectableInit.microPackage`.
+///
+/// Checked rather than assumed: `platform_kernel` has no DI module, and naming
+/// it in `injection.dart` would be a compile error.
+///
+/// Matched **without** the parentheses on purpose. A package may pass
+/// arguments — `core_notifications` declares
+/// `@InjectableInit.microPackage(ignoreUnregisteredTypesInPackages:
+/// ['firebase_core'])`, because the app registers `FirebaseOptions` — and an
+/// exact `...()` match would silently drop it, the kind of omission that only
+/// shows up at boot.
+bool _hasDiModule(String packageDir) {
+  final f = File(p.posix.join(packageDir, 'lib', 'di', 'module.dart'));
+  return f.existsSync() &&
+      f.readAsStringSync().contains('@InjectableInit.microPackage');
+}
+
+/// Replaces the region between the marker comments, keeping everything else.
+///
+/// Returns null when the markers are absent, so a caller can report that
+/// instead of silently overwriting a hand-written file.
+String? _replaceManaged(
+  String content,
+  String comment,
+  String region,
+  String body,
+) {
+  // Line-based, not offset-based: the markers carry their own indentation
+  // (two spaces inside a YAML block, none in Dart) and splicing by string
+  // offset silently ate it.
+  final begin = '$comment ${_beginMarker(region)}';
+  final end = '$comment ${_endMarker(region)}';
+  final lines = content.split('\n');
+  final i = lines.indexWhere((l) => l.contains(begin));
+  final j = lines.indexWhere((l) => l.contains(end));
+  if (i == -1 || j == -1 || j < i) return null;
+
+  final bodyLines = body.split('\n');
+  if (bodyLines.isNotEmpty && bodyLines.last.isEmpty) bodyLines.removeLast();
+  return [
+    ...lines.sublist(0, i + 1),
+    ...bodyLines,
+    ...lines.sublist(j),
+  ].join('\n');
+}
+
+String _workspaceBody(List<String> dirs) => dirs.map((d) => '  - $d\n').join();
+
+String _appDepsBody(
+  List<String> pkgs,
+  Map<String, String> packages,
+  String appDir,
+) {
+  final buf = StringBuffer();
+  for (final pkg in pkgs) {
+    final rel = p.posix.relative(packages[pkg]!, from: appDir);
+    buf.writeln('  $pkg:');
+    buf.writeln('    path: $rel');
+  }
+  return buf.toString();
+}
+
+({String imports, String modules}) _injectionParts(
+  Resolved r,
+  Map<String, String> packages,
+) {
+  final withDi = <String, List<String>>{};
+  for (final g in r.diGroups) {
+    final list = g.packages
+        .where((pkg) => _hasDiModule(packages[pkg]!))
+        .toList();
+    if (list.isNotEmpty) withDi[g.name] = list;
+  }
+
+  // The whole `package:` block is generated, fixed imports included. Emitting
+  // only the module imports would interleave them with hand-written ones and
+  // break `directives_ordering`, which requires one sorted block.
+  final imports = <String>[
+    "import 'package:core_common/core_common.dart';",
+    "import 'package:injectable/injectable.dart';",
+  ];
+  for (final list in withDi.values) {
+    for (final pkg in list) {
+      // `core_common.dart`, imported above, already re-exports its own
+      // `di/module.module.dart`; importing it again is an
+      // `unnecessary_import`, which `flutter analyze` fails on.
+      if (pkg == 'core_common') continue;
+      imports.add("import 'package:$pkg/di/module.module.dart';");
+    }
+  }
+  imports.sort();
+  imports.add('');
+  imports.add("import 'injection.config.dart';");
+
+  final buf = StringBuffer();
+  for (final g in r.diGroups) {
+    final list = withDi[g.name];
+    if (list == null) continue;
+    buf.writeln('const _${g.name}Modules = [');
+    for (final pkg in list) {
+      buf.writeln('  ExternalModule(${_moduleClass(pkg)}),');
+    }
+    buf.writeln('];');
+    buf.writeln();
+  }
+
+  final before = r.diGroups
+      .where((g) => g.phase == 'before' && withDi.containsKey(g.name))
+      .map((g) => '..._${g.name}Modules')
+      .join(', ');
+  final after = r.diGroups
+      .where((g) => g.phase == 'after' && withDi.containsKey(g.name))
+      .map((g) => '  ..._${g.name}Modules,')
+      .join('\n');
+
+  buf.writeln('const _externalModulesBefore = [$before];');
+  buf.writeln('const _externalModulesAfter = [\n$after\n];');
+  buf.write(_injectionTail);
+  // Both regions are emitted exactly as `dart format` would leave them —
+  // two-space list indent, a blank line after the last import — so a format
+  // pass over the app cannot put the file out of step with `composer verify`.
+  return (imports: '${imports.join('\n')}\n\n', modules: buf.toString());
+}
+
+/// The entry point every app's `injection.dart` ends with.
+///
+/// It used to be hand-written, copied from app to app and invisible to
+/// `composer verify`; now it is part of the `modules` region, so a hand edit is
+/// drift and a third app cannot get it wrong. `build_runner` generates
+/// `injection.config.dart` from the `@InjectableInit` annotation wherever it
+/// sits in the file.
+const _injectionTail = '''
+
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
+///
+/// A class the graph builds injects the profile sections it reads
+/// (`NetworkProfile`, `LocaleProfile`, ...). `runShellApp` registers the app's
+/// own before this runs; `registerProfileDefaults` then adds the template's
+/// default for any section still missing, so a graph booted without a profile
+/// completes instead of throwing `"<Section> is not registered"`.
+///
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
+@InjectableInit(
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
+)
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
+  final env = environment ?? AppConfig.appFlavor.toValue();
+  await target.init(environment: env);
+}
+
+/// Reset all dependencies (useful for testing)
+Future<void> resetDependencies() async {
+  await getIt.reset();
+}
+''';
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+void _list(
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  String? appFilter,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  OutputFormatter.printHeader(
+    'Composer',
+    subtitle: '${selected.length} app(s)',
+  );
+  for (final app in selected) {
+    final warnings = <String>[];
+    final r = _resolve(app, packages, warnings);
+    stdout.writeln('  ${app.id}  (${app.declaration.name})  ->  ${app.dir}');
+    stdout.writeln(
+      '    ${'flavors'.padRight(6)} ${''.padRight(8)} '
+      '${app.declaration.flavors.keys.join(', ')}',
+    );
+    stdout.writeln(
+      '    ${'platf.'.padRight(6)} ${''.padRight(8)} '
+      '${app.declaration.platforms.map((p) => '${p.name} (${p.runner})').join(', ')}',
+    );
+    for (final g in r.diGroups) {
+      stdout.writeln(
+        '    ${g.phase.padRight(6)} ${g.name.padRight(8)} '
+        '${g.packages.join(', ')}',
+      );
+    }
+    if (r.workspaceOnly.isNotEmpty) {
+      stdout.writeln(
+        '    ${'api'.padRight(6)} ${'(no DI)'.padRight(8)} '
+        '${r.workspaceOnly.join(', ')}',
+      );
+    }
+    if (r.missing.isNotEmpty) {
+      OutputFormatter.printWarning('    missing: ${r.missing.join(', ')}');
+    }
+    stdout.writeln('');
+  }
+  stdout.writeln('  ${packages.length} packages discovered.');
+}
+
+/// Everything the generators know about [app]: its declaration, the packages
+/// it composes and what each says about itself.
+///
+/// A package whose `platforms:` or `composition:` key is malformed is refused
+/// here, naming the pubspec, before anything is written.
+AppView _view(
+  String root,
+  AppManifest app,
+  Resolved r,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  ProvisionIndex provisions,
+) {
+  final byName = {for (final g in app.groups) g.name: g};
+  final problems = <String>[];
+  final facts = <String, PackageFacts>{};
+  for (final name in _closure([
+    ...r.allPackages,
+    ...r.workspaceOnly,
+  ], packages)) {
+    final dir = packages[name];
+    if (dir == null) continue;
+    facts[name] = readPackageFacts(
+      name,
+      dir,
+      p.posix.relative(p.posix.join(dir, 'pubspec.yaml'), from: root),
+      problems,
+    );
+  }
+  if (problems.isNotEmpty) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${problems.length} problem(s) in a package '
+      'pubspec. Nothing was written.',
+    );
+    exit(1);
+  }
+
+  var pubspecName = '${app.id}_app';
+  final pubspec = File(p.posix.join(app.dir, 'pubspec.yaml'));
+  if (pubspec.existsSync()) {
+    try {
+      final name = (loadYaml(pubspec.readAsStringSync()) as YamlMap)['name'];
+      if (name is String) pubspecName = name;
+    } on Object {
+      // Reported by the caller as invalid YAML.
+    }
+  }
+
+  return AppView(
+    id: app.id,
+    dir: p.posix.relative(app.dir, from: root),
+    pubspecName: pubspecName,
+    declaration: app.declaration,
+    groups: [
+      for (final g in r.diGroups)
+        ViewGroup(
+          name: g.name,
+          phase: g.phase,
+          packages: g.packages,
+          why: byName[g.name]?.why,
+        ),
+    ],
+    modules: [for (final m in app.modules) ViewModule(m.id, m.layers)],
+    composed: r.allPackages.toSet(),
+    packageFacts: facts,
+    catalog: catalog,
+    provisions: provisions,
+    native: readNativeFlavors(app.dir),
+    profile: readProfileOverrides(app.dir),
+    shippedLanguages: readShippedLanguages(packages['core_base_ui']),
+  );
+}
+
+/// `describe`: the app report on stdout — the text of the README's `report`
+/// region.
+void _describeApps(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  ProvisionIndex provisions,
+  String? appFilter,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  for (final app in selected) {
+    final r = _resolve(app, packages, <String>[]);
+    stdout.write(
+      renderReport(_view(root, app, r, packages, catalog, provisions)),
+    );
+    if (app != selected.last) stdout.writeln();
+  }
+}
+
+/// The platforms `describe --ci-matrix` boots off ubuntu, and the runner
+/// image each one needs.
+const Map<String, String> _ciRunnerImages = {
+  'android': 'ubuntu-latest',
+  'ios': 'macos-latest',
+  'windows': 'windows-latest',
+  'macos': 'macos-latest',
+};
+
+/// `describe --ci-matrix pr|full`: the matrix CI fans out over, as one line of
+/// compact JSON on stdout.
+///
+/// - `pr`: one row per app that declares web or Linux — what one ubuntu job
+///   builds and boots per pull request:
+///   `{"app": <id>, "web": bool, "linux": bool}`;
+/// - `full`: one row per (app, declared android / ios / windows / macos), in
+///   canonical platform order: the image (`os`), how the flavor is named
+///   (`--flavor dev` for a committed Android or iOS runner, which has native
+///   flavors; `--dart-define=APP_FLAVOR=dev` for a generated one) and `boot`
+///   — `firebase` where the derived push is on (the leg boots only when real
+///   Firebase files can be restored), else `test`.
+void _ciMatrix(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  String? appFilter, {
+  required bool full,
+}) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  final rows = <Map<String, Object>>[];
+  for (final app in selected) {
+    final declared = {for (final p in app.declaration.platforms) p.name};
+    if (!full) {
+      if (!declared.contains('web') && !declared.contains('linux')) continue;
+      rows.add({
+        'app': app.id,
+        'web': declared.contains('web'),
+        'linux': declared.contains('linux'),
+      });
+      continue;
+    }
+    final r = _resolve(app, packages, <String>[]);
+    final view = _view(
+      root,
+      app,
+      r,
+      packages,
+      catalog,
+      const ProvisionIndex.empty(),
+    );
+    for (final platform in derivePlatforms(view)) {
+      final os = _ciRunnerImages[platform.name];
+      if (os == null) continue;
+      final nativeFlavors =
+          platform.runner.value == 'committed' &&
+          (platform.name == 'android' || platform.name == 'ios');
+      rows.add({
+        'app': app.id,
+        'platform': platform.name,
+        'os': os,
+        'flavor': nativeFlavors
+            ? '--flavor dev'
+            : '--dart-define=APP_FLAVOR=dev',
+        'boot': platform.push.value ? 'firebase' : 'test',
+      });
+    }
+  }
+  stdout.writeln(jsonEncode(rows));
+}
+
+/// Every app as `composer runners` needs it: the declaration, the pubspec
+/// name `flutter create` gets, and whether it links `core_database`.
+List<RunnerApp> _runnerApps(String root) {
+  final packages = _discoverPackages(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
+  if (apps.isEmpty || catalog == null) {
+    for (final problem in catalogProblems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'No app_manifest.yaml found. Run this from the repository root.',
+    );
+    exit(1);
+  }
+  return [
+    for (final app in apps)
+      () {
+        final r = _resolve(app, packages, <String>[]);
+        final view = _view(
+          root,
+          app,
+          r,
+          packages,
+          catalog,
+          const ProvisionIndex.empty(),
+        );
+        return RunnerApp(
+          id: app.id,
+          dir: app.dir,
+          pubspecName: view.pubspecName,
+          decl: app.declaration,
+          linksDatabase: linkedPackages(view).contains(kDatabasePackageName),
+        );
+      }(),
+  ];
+}
+
+/// What a runner that was just ejected switches on before its native setup
+/// exists. [previousRunners] is the `runners` region of the app's
+/// `.gitignore` as it stands — the platforms the last `sync` saw as
+/// generated — or null when there is none to read.
+///
+/// A platform that is `committed` now but still listed there was ejected
+/// since: `flutter create` wrote it, so it has no google-services.json,
+/// aps-environment or URL scheme, yet push and deep links derive on for a
+/// committed runner where the platform has them. Said once — the `sync` that
+/// drops the platform from the region — and only for a derived `true`: a
+/// value the manifest writes is a decision.
+List<String> _ejectWarnings(AppView view, String? previousRunners) {
+  if (previousRunners == null) return const [];
+  final generated = {
+    for (final line in previousRunners.split('\n'))
+      if (RegExp(r'^/(\w+)/$').firstMatch(line.trim()) case final m?)
+        m.group(1)!,
+  };
+  final out = <String>[];
+  for (final derived in derivePlatforms(view)) {
+    final declared = view.declaration.platform(derived.name);
+    if (declared == null || declared.isScaffold) continue;
+    if (!generated.contains(derived.name)) continue;
+    final push = derived.push.value && derived.push.source != 'manifest';
+    final links =
+        derived.deepLinks.value && derived.deepLinks.source != 'manifest';
+    if (!push && !links) continue;
+    final on = [
+      if (push)
+        'push (no google-services.json, GoogleService-Info.plist or '
+            'aps-environment yet)',
+      if (links) 'deep_links (no URL scheme or intent filter yet)',
+    ];
+    final off = [
+      if (push) '`push: false`',
+      if (links) '`deep_links: false`',
+    ];
+    out.add(
+      '${view.dir}/${derived.name}/ is ejected (`runner: committed`) but is '
+      'still the runner `flutter create` wrote: ${on.join(' and ')} now '
+      'derive${on.length == 1 ? 's' : ''} true. Until its native setup is '
+      'done, write ${off.join(' and ')} under platforms.${derived.name} in '
+      '${view.manifestPath}, and delete '
+      '${off.length == 1 ? 'it' : 'them'} once the runner has it',
+    );
+  }
+  return out;
+}
+
+/// The text between the [region] markers of the file at [path], or null
+/// when the file or a marker is missing.
+String? _regionBody(String path, String comment, String region) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
+  final lines = file.readAsLinesSync();
+  final i = lines.indexWhere(
+    (l) => l.contains('$comment ${_beginMarker(region)}'),
+  );
+  final j = lines.indexWhere(
+    (l) => l.contains('$comment ${_endMarker(region)}'),
+  );
+  if (i == -1 || j == -1 || j < i) return null;
+  return lines.sublist(i + 1, j).join('\n');
+}
+
+/// The `runners` region of an app's `.gitignore`: one `/<p>/` per platform
+/// declared `runner: scaffold`, in canonical order — a generated runner is
+/// never committed (RULE-83).
+String _runnersBody(AppDeclaration decl) => [
+  for (final platform in decl.platforms)
+    if (platform.isScaffold) '/${platform.name}/\n',
+].join();
+
+/// `new`: creates `apps/<id>/` from `app_template/`, then runs `sync` and
+/// `verify` over the workspace.
+///
+/// Everything that can refuse runs first, on nothing but the workspace and the
+/// text about to be written: the request, the composition the modules imply,
+/// and the rendered manifest through the same parser and checks every manifest
+/// goes through (a platform a composed package cannot run on is V7). A refusal
+/// writes nothing. No runner is generated — `composer runners` does that,
+/// once the app resolves.
+void _newApp(String root, NewAppRequest request) {
+  OutputFormatter.printHeader(
+    'Composer — new',
+    subtitle: 'apps/${request.id} from app_template/',
+  );
+
+  final packages = _discoverPackages(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+  if (catalog == null) {
+    for (final problem in catalogProblems) {
+      OutputFormatter.printError(problem);
+    }
+    exit(1);
+  }
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
+  final provisions = ProvisionIndex.scan(root, packages);
+
+  void refuse(List<String> problems) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to create apps/${request.id}: ${problems.length} problem(s). '
+      'Nothing was written.',
+    );
+    exit(1);
+  }
+
+  final planned = planNewApp(
+    request: request,
+    root: root,
+    packages: packages,
+    existingIds: {for (final app in apps) app.id},
+    catalog: catalog,
+    provisions: provisions,
+    modulePackage: (module, layer) => _modulePackage(packages, module, layer),
+  );
+  if (planned.plan == null) refuse(planned.problems);
+  final plan = planned.plan!;
+
+  final Map<String, String> files;
+  try {
+    files = renderAppFiles(
+      plan,
+      templateDir: p.join(root, kAppTemplateDir),
+      root: root,
+    );
+  } on FileSystemException catch (e) {
+    refuse([e.message]);
+    return;
+  }
+
+  // The manifest goes through the parser and the checks `sync` and `verify`
+  // run, before any file exists.
+  final dir = p.posix.join(root, 'apps', plan.id);
+  final rel = 'apps/${plan.id}/app_manifest.yaml';
+  final problems = <String>[];
+  final manifest = _parseManifest(
+    loadYaml(files['app_manifest.yaml']!),
+    rel,
+    dir,
+    problems,
+  );
+  if (manifest != null) {
+    problems.addAll(
+      checkDeclaration(
+        rel: rel,
+        decl: manifest.declaration,
+        catalog: catalog,
+        appDir: dir,
+        appRel: 'apps/${plan.id}',
+        appId: plan.id,
+      ),
+    );
+    final resolved = _resolve(manifest, packages, <String>[]);
+    for (final missing in resolved.missing) {
+      problems.add('$rel: `$missing` is not on disk');
+    }
+    final view = _view(root, manifest, resolved, packages, catalog, provisions);
+    problems
+      ..addAll(checkPlatformSwitches(view))
+      ..addAll(checkPackagePlatforms(view));
+  }
+  if (problems.isNotEmpty) refuse(problems);
+
+  for (final entry in files.entries) {
+    final file = File(p.join(dir, entry.key));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(entry.value);
+    stdout.writeln('    wrote apps/${plan.id}/${entry.key}');
+  }
+
+  // Generates what the manifest says (the regions of the files above and the
+  // root workspace list), then holds the whole workspace to it.
+  _run('sync', root, plan.id, false, catalogOnly: false);
+  _run('verify', root, null, true, catalogOnly: false);
+
+  stdout.writeln();
+  for (final line in nextSteps(plan)) {
+    stdout.writeln(line);
+  }
+}
+
+void _sync(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  ProvisionIndex provisions,
+  String? appFilter,
+  bool strict, {
+  required bool dryRun,
+}) {
+  OutputFormatter.printHeader(
+    dryRun ? 'Composer — verify' : 'Composer — sync',
+    subtitle: 'generated from app_manifest.yaml',
+  );
+
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+
+  // The specific refusal first: a managed package also declared by hand is
+  // a duplicate key, the usual reason a pubspec stops parsing.
+  for (final app in selected) {
+    final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
+    _refuseHandDeclared(
+      appPubspec,
+      _resolve(app, packages, <String>[]).allPackages.toSet(),
+      root,
+    );
+  }
+  if (_invalidYaml.isNotEmpty) {
+    _reportInvalidYaml(root);
+    exit(1);
+  }
+
+  final warnings = <String>[];
+  // Files whose managed region differs from what the manifest generates:
+  // drift under `verify`, and under `sync` the files actually rewritten —
+  // what the partial-composition warning names, and nothing else.
+  final drift = <String>[];
+  final workspace = <String>{};
+  // Missing packages across *every* app: the root workspace list is written
+  // from all of them, so an app `--app` did not select can still make it
+  // partial.
+  final missing = <String>{};
+
+  // The root `workspace:` list is shared by every app, so it is the union
+  // over *all* of them even when `--app` narrows what else is written. It
+  // used to be built from the selected apps only: with two apps,
+  // `sync --app admin` would have dropped every package only `mobile` uses
+  // from the workspace, and `pub get` would then fail to resolve `mobile`.
+  for (final app in apps) {
+    workspace.add(p.posix.relative(app.dir, from: root));
+    final r = _resolve(app, packages, warnings);
+    missing.addAll(r.missing);
+    for (final pkg in _closure([
+      ...r.allPackages,
+      ...r.workspaceOnly,
+    ], packages)) {
+      workspace.add(p.posix.relative(packages[pkg]!, from: root));
+    }
+  }
+  final missingCount = missing.length;
+
+  // Checked before anything is written: `--strict` failing *after* writing
+  // would leave the partial composition on disk it exists to refuse.
+  if (missingCount > 0 && strict) {
+    for (final w in warnings.toSet()) {
+      OutputFormatter.printWarning('  $w');
+    }
+    OutputFormatter.printError(
+      '$missingCount declared package(s) missing from disk. '
+      '`--strict` treats that as an error, so a release can never quietly '
+      'ship without one.',
+    );
+    exit(1);
+  }
+
+  // Every region this run generates, collected before anything is written
+  // so a file or marker that has gone missing is refused up front instead of
+  // leaving the other regions rewritten around it.
+  final regions = <_Region>[];
+  final switchProblems = <String>[];
+  // What only the source can say (V3, V6's undeclared runner folders, V10,
+  // V11, V12, V13, V15, V16, V17): `verify`
+  // fails on them, `sync` says so and still writes — the generated files do not depend on
+  // them, and a half-finished edit must stay possible to regenerate.
+  final sourceProblems = <String>[];
+  for (final app in selected) {
+    final r = _resolve(app, packages, <String>[]);
+
+    final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
+    regions.add(
+      _Region(
+        appPubspec,
+        '#',
+        'deps',
+        _appDepsBody(r.allPackages, packages, app.dir),
+      ),
+    );
+    final injection = _injectionParts(r, packages);
+    final injectionPath = p.posix.join(app.dir, 'lib', 'di', 'injection.dart');
+    regions
+      ..add(_Region(injectionPath, '//', 'imports', injection.imports))
+      ..add(_Region(injectionPath, '//', 'modules', injection.modules));
+
+    // What the app declares, as const Dart the shell reads at boot, and as
+    // the page a newcomer reads first.
+    final view = _view(root, app, r, packages, catalog, provisions);
+    switchProblems.addAll(checkPlatformSwitches(view));
+    switchProblems.addAll(checkPackagePlatforms(view));
+    sourceProblems.addAll(checkComposition(view, root: root));
+    warnings.addAll(
+      _ejectWarnings(
+        view,
+        _regionBody(p.posix.join(app.dir, '.gitignore'), '#', 'runners'),
+      ),
+    );
+    regions
+      ..add(
+        _Region(
+          p.posix.join(app.dir, 'lib', 'app', 'app_profile.dart'),
+          '//',
+          'facts',
+          emitFacts(view),
+        ),
+      )
+      ..add(
+        _Region(
+          p.posix.join(app.dir, 'README.md'),
+          '<!--',
+          'report',
+          '\n${renderReport(view)}\n',
+        ),
+      )
+      ..add(
+        _Region(
+          p.posix.join(app.dir, '.gitignore'),
+          '#',
+          'runners',
+          _runnersBody(app.declaration),
+        ),
+      );
+  }
+
+  // V17: the repository root is the only workspace node (RULE-16).
+  sourceProblems.addAll(checkNestedWorkspaces(packages, root: root));
+
+  // The tooling package is a workspace member but belongs to no app, so no
+  // manifest names it. Matched by directory, since its package name
+  // (`core_tools`) does not match its folder.
+  for (final entry in packages.entries) {
+    if (p.posix.basename(entry.value) == 'tools') {
+      workspace.add(p.posix.relative(entry.value, from: root));
+    }
+  }
+  final ordered = workspace.toList()..sort();
+  final stranded = _strandedPackages(root, packages, workspace);
+  regions.add(
+    _Region(
+      p.posix.join(root, 'pubspec.yaml'),
+      '#',
+      'workspace',
+      _workspaceBody(ordered),
+    ),
+  );
+
+  // What a platform switches on has to be something the app composes and the
+  // composed packages run on (V7, V8). Refused before anything is written,
+  // like a malformed manifest.
+  if (switchProblems.isNotEmpty) {
+    for (final problem in switchProblems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${switchProblems.length} problem(s) in '
+      'app_manifest.yaml. Nothing was written.',
+    );
+    exit(1);
+  }
+
+  // A missing file or marker is drift, not a skip. It used to be a warning
+  // followed by "up to date" and exit 0 — so deleting a marker (and then
+  // hand-editing what it had guarded) passed CI Gate 0, the one check that
+  // exists to stop exactly that.
+  final broken = <String>[
+    for (final region in regions) ?_regionProblem(region, root),
+  ];
+  if (broken.isNotEmpty) {
+    for (final b in broken.toSet()) {
+      OutputFormatter.printError('  $b');
+    }
+    OutputFormatter.printError(
+      '${dryRun ? 'Cannot verify' : 'Nothing was written'}: every generated '
+      'region needs its file and its '
+      '`composer:managed:<region>` / `composer:end:<region>` marker pair. '
+      'Restore them (e.g. `git checkout -- <file>`), then run '
+      '`dart tools/composer/composer.dart sync`.',
+    );
+    exit(1);
+  }
+
+  // The two regions of `injection.dart` are all composer renders of it. The
+  // rest of the file is the header comment; code there is a hand edit that the
+  // region comparison cannot see, so it is held to the source too.
+  for (final path in {
+    for (final r in regions)
+      if (r.region == 'imports' || r.region == 'modules') r.path,
+  }) {
+    sourceProblems.addAll(
+      checkInjectionOutsideRegions(path, root: root),
+    );
+  }
+
+  // Grouped by file: `injection.dart` holds two regions, and writing them one
+  // at a time reported the file — "wrote" or "out of date" — once for each.
+  final byFile = <String, List<_Region>>{};
+  for (final region in regions) {
+    (byFile[region.path] ??= []).add(region);
+  }
+  final driftRegions = <String, List<String>>{};
+  for (final entry in byFile.entries) {
+    _write(entry.key, entry.value, dryRun, drift, root, driftRegions);
+  }
+
+  for (final w in warnings.toSet()) {
+    OutputFormatter.printWarning('  $w');
+  }
+
+  if (dryRun) {
+    for (final line in stranded) {
+      OutputFormatter.printError('  $line');
+    }
+    if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printError);
+    for (final problem in sourceProblems) {
+      OutputFormatter.printError(problem);
+    }
+    if (sourceProblems.isNotEmpty) {
+      OutputFormatter.printError(
+        '${sourceProblems.length} problem(s) between app_manifest.yaml and '
+        'the source (V3, V6, V10, V11, V12, V13, V15, V16, V17). Fix the line each one '
+        'names; `sync` does not change them.',
+      );
+    }
+    if (drift.isEmpty && stranded.isEmpty && sourceProblems.isEmpty) {
+      OutputFormatter.printSuccess('Generated artifacts are up to date.');
+    } else {
+      for (final d in drift) {
+        final changed = driftRegions[d] ?? const <String>[];
+        OutputFormatter.printError(
+          '  out of date: $d'
+          '${changed.isEmpty ? '' : ' (${changed.join(', ')})'}',
+        );
+      }
+      if (drift.isNotEmpty) {
+        OutputFormatter.printError(
+          'Run `dart tools/composer/composer.dart sync`.',
+        );
+      }
+      exit(1);
+    }
+  } else {
+    for (final line in stranded) {
+      OutputFormatter.printWarning('  $line');
+    }
+    if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printWarning);
+    for (final problem in sourceProblems) {
+      OutputFormatter.printWarning(problem);
+    }
+    if (sourceProblems.isNotEmpty) {
+      OutputFormatter.printWarning(
+        '${sourceProblems.length} problem(s) between app_manifest.yaml and '
+        'the source: `composer verify` fails until each is fixed.',
+      );
+    }
+    OutputFormatter.printSuccess(
+      '${selected.length} app(s) composed, '
+      '${ordered.length} workspace members.',
+    );
+    if (missingCount > 0) {
+      _warnPartialComposition(root, selected, missingCount, drift);
+    }
+  }
+}
+
+/// `reconcile`: declares `absent` every optional capability an app still says
+/// is `provided` although no composed package (or the app's own `lib/`)
+/// registers its contract any more — the V3 failure a removed module leaves
+/// behind (`tabs: provided` with the last `INavDestinationModule` gone).
+///
+/// The provider is the one V3 uses (`orphanedCapabilities`, the scan of
+/// `tools/shared/contract_scan.dart`), not a list. Each flipped line becomes
+/// `key: { state: absent, reason: "<prefix>: <what the shell does without
+/// it>" }`, [reasonPrefix] being `--reason`. Only the `key: provided` line is
+/// edited; a key it cannot find on one line is reported and left for V3 to
+/// name. Run `sync` afterwards (the facts and report regions follow the
+/// manifest).
+void _reconcile(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  ProvisionIndex provisions,
+  String? appFilter,
+  String? reasonPrefix,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+
+  var flipped = 0;
+  var unreadable = 0;
+  for (final app in selected) {
+    final r = _resolve(app, packages, <String>[]);
+    final view = _view(root, app, r, packages, catalog, provisions);
+    final orphans = orphanedCapabilities(view);
+    if (orphans.isEmpty) continue;
+
+    final manifest = File(p.posix.join(app.dir, 'app_manifest.yaml'));
+    final lines = manifest.readAsLinesSync();
+    var inCapabilities = false;
+    final done = <String>{};
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (RegExp(r'^\S').hasMatch(line)) {
+        inCapabilities = line.startsWith('capabilities:');
+        continue;
+      }
+      if (!inCapabilities) continue;
+      final provided = RegExp(
+        r'^(\s+)([a-z_]+):\s*provided\s*(?:#.*)?$',
+      ).firstMatch(line);
+      if (provided == null) continue;
+      final orphan = orphans
+          .where((o) => o.key == provided.group(2))
+          .firstOrNull;
+      if (orphan == null) continue;
+      final why = reasonPrefix == null || reasonPrefix.trim().isEmpty
+          ? orphan.whenAbsent
+          : '${reasonPrefix.trim()}: ${orphan.whenAbsent}';
+      final escaped = why.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+      lines[i] =
+          '${provided.group(1)}${orphan.key}: { state: absent, reason: '
+          '"$escaped" }';
+      done.add(orphan.key);
+    }
+    for (final orphan in orphans) {
+      if (done.contains(orphan.key)) continue;
+      unreadable++;
+      OutputFormatter.printWarning(
+        '${app.dir}/app_manifest.yaml: `${orphan.key}` is provided with no '
+        'provider left, but is not a one-line `${orphan.key}: provided` entry '
+        'under `capabilities:` — declare it `{ state: absent, reason: ... }` '
+        'by hand.',
+      );
+    }
+    if (done.isEmpty) continue;
+    manifest.writeAsStringSync('${lines.join('\n')}\n');
+    flipped += done.length;
+    OutputFormatter.printSuccess(
+      '${p.posix.relative(manifest.path, from: root)}: '
+      '${done.toList()..sort()} now absent (no provider left)',
+    );
+  }
+  if (flipped == 0 && unreadable == 0) {
+    OutputFormatter.printSuccess(
+      'Every `provided` capability still has a provider.',
+    );
+  }
+  if (unreadable > 0) exit(1);
+}
+
+/// Packages on disk under `modules/` or `platform/` that no app composes —
+/// one line each, `<dir> (<name>)`, sorted.
+///
+/// Dropping a module from every manifest removes it from the root
+/// `workspace:` list, but its directory stays. `flutter analyze` from the
+/// root still reads it, and Gate 3 still runs its tests, against a package
+/// pub no longer resolves — failing with errors that never name the cause.
+List<String> _strandedPackages(
+  String root,
+  Map<String, String> packages,
+  Set<String> workspace,
+) {
+  final out = <String>[
+    for (final entry in packages.entries)
+      if (p.posix.relative(entry.value, from: root) case final dir
+          when (dir.startsWith('modules/') || dir.startsWith('platform/')) &&
+              !workspace.contains(dir))
+        '$dir (${entry.key}) is on disk but in no app\'s composition',
+  ];
+  return out..sort();
+}
+
+/// The fix for [_strandedPackages], printed once after the list.
+void _explainStranded(void Function(String) print) => print(
+  'A package left on disk outside the workspace breaks `flutter analyze` and '
+  'Gate 3 with errors that do not name it. Delete it (the module\'s '
+  '`modules/<id>/<layer>`, or the platform package), or re-add it: a module '
+  'layer to an app_manifest.yaml `layers:` list, a platform package to a DI '
+  'group or to what an app depends on — then run '
+  '`dart tools/composer/composer.dart sync`.',
+);
+
+/// Says, loudly, that the files just written describe a *partial* workspace.
+///
+/// This is the expected state while working on one module in a submodule
+/// checkout — and it edits three files that are committed. Committing them
+/// would drop everyone else's modules from the app. CI catches it (Gate 0
+/// regenerates from the manifest, where every module *is* present, and fails
+/// on the difference), but finding out in CI is worse than being told here,
+/// with the command to undo it.
+void _warnPartialComposition(
+  String root,
+  List<AppManifest> selected,
+  int missingCount,
+  List<String> written,
+) {
+  // Only what this run rewrote. Listing every candidate — byte-identical
+  // ones included — told people to `git checkout` files that had not changed.
+  final touched = written.toSet().toList();
+
+  stdout.writeln('');
+  OutputFormatter.printWarning(
+    'PARTIAL COMPOSITION — $missingCount declared package(s) are not on disk.',
+  );
+  stdout.writeln(
+    '  What was just written composes only what is present, which is exactly '
+    'right\n'
+    '  for working on one module. It is wrong to commit: it would drop the '
+    'other\n'
+    '  modules from the app for everyone.\n',
+  );
+  if (touched.isEmpty) {
+    stdout.writeln(
+      '  Files changed by this run: none — they already held this partial\n'
+      '  composition. `git status` shows whether an earlier sync left it there.\n',
+    );
+    return;
+  }
+  stdout.writeln('  Files changed:');
+  for (final t in touched) {
+    stdout.writeln('    $t');
+  }
+  stdout.writeln('\n  Restore them before you commit:');
+  stdout.writeln('    git checkout -- ${touched.join(' ')}\n');
+}
+
+/// Exits with the specific refusal when [pubspecPath] declares a package of
+/// [managed] by hand as well — see [_declaredOutsideManaged].
+void _refuseHandDeclared(
+  String pubspecPath,
+  Set<String> managed,
+  String root,
+) {
+  final clashes = _declaredOutsideManaged(pubspecPath, managed);
+  if (clashes.isEmpty) return;
+  OutputFormatter.printError(
+    '${p.posix.relative(pubspecPath, from: root)} declares '
+    '${clashes.join(', ')} by hand as well as inside the '
+    '`composer:managed:deps` region. Pub rejects a duplicate key, so '
+    'nothing in the workspace resolves. Delete the hand-written entry — '
+    'the manifest owns it.',
+  );
+  exit(1);
+}
+
+/// Packages [managed] that [pubspecPath] also declares *outside* the managed
+/// region, under `dependencies:` or `dev_dependencies:`.
+///
+/// Exists because composer once produced exactly this: `extra_dependencies`
+/// put `core_responsive` into the generated block while the hand-written
+/// block below still had it. YAML parsers disagree about duplicate keys —
+/// several keep the last one silently — but pub rejects them, so the whole
+/// workspace stopped resolving while every check written against a lenient
+/// parser still read clean.
+List<String> _declaredOutsideManaged(String pubspecPath, Set<String> managed) {
+  final file = File(pubspecPath);
+  if (!file.existsSync()) return const [];
+
+  final top = RegExp(r'^([A-Za-z_]\w*):');
+  final dep = RegExp(r'^  ([a-z_][a-z0-9_]*):');
+  final clashes = <String>{};
+  var section = '';
+  var inManaged = false;
+
+  for (final line in file.readAsLinesSync()) {
+    if (line.contains('composer:managed:deps')) {
+      inManaged = true;
+      continue;
+    }
+    if (line.contains('composer:end:deps')) {
+      inManaged = false;
+      continue;
+    }
+    if (inManaged) continue;
+
+    final t = top.firstMatch(line);
+    if (t != null) {
+      section = t.group(1)!;
+      continue;
+    }
+    if (section != 'dependencies' && section != 'dev_dependencies') continue;
+    final d = dep.firstMatch(line);
+    if (d != null && managed.contains(d.group(1))) clashes.add(d.group(1)!);
+  }
+  return clashes.toList()..sort();
+}
+
+/// One generated region: the file, its comment syntax and the region name.
+class _Region {
+  const _Region(this.path, this.comment, this.region, this.body);
+
+  final String path;
+  final String comment;
+  final String region;
+  final String body;
+}
+
+/// Why [region] cannot be generated — the file or a marker is missing — or
+/// null when it can.
+String? _regionProblem(_Region region, String root) {
+  final file = File(region.path);
+  final rel = p.posix.relative(region.path, from: root);
+  final begin = '${region.comment} ${_beginMarker(region.region)}';
+  final end = '${region.comment} ${_endMarker(region.region)}';
+  // An app made before generated runners has never had this region, so
+  // there is nothing in git to restore: say which two lines to add.
+  final addRunners = region.region == 'runners'
+      ? ' — an app made before generated runners has none: add these two '
+            'lines at the end of $rel, then run sync:\n      $begin\n      $end'
+      : '';
+  if (!file.existsSync()) {
+    return '$rel does not exist (needed for the `${region.region}` region)'
+        '$addRunners';
+  }
+  final lines = file.readAsLinesSync();
+  final i = lines.indexWhere((l) => l.contains(begin));
+  final j = lines.indexWhere((l) => l.contains(end));
+  if (i == -1) return '$rel has no `$begin` marker$addRunners';
+  if (j == -1) return '$rel has no `$end` marker$addRunners';
+  if (j < i) return '$rel has `$end` before `$begin`';
+  return null;
+}
+
+/// Applies every region of the file at [path] in one pass, and writes and
+/// reports the file at most once.
+void _write(
+  String path,
+  List<_Region> regions,
+  bool dryRun,
+  List<String> drift,
+  String root,
+  Map<String, List<String>> driftRegions,
+) {
+  final file = File(path);
+  final rel = p.posix.relative(path, from: root);
+  final current = file.readAsStringSync();
+  var updated = current;
+  for (final region in regions) {
+    final next = _replaceManaged(
+      updated,
+      region.comment,
+      region.region,
+      region.body,
+    );
+    // [_regionProblem] vetted every region before the first write.
+    if (next == null) {
+      throw StateError('$rel lost its `${region.region}` markers mid-run');
+    }
+    if (next != updated) (driftRegions[rel] ??= []).add(region.region);
+    updated = next;
+  }
+  if (updated == current) return;
+  drift.add(rel);
+  if (!dryRun) {
+    file.writeAsStringSync(updated);
+    stdout.writeln('    wrote $rel');
+  }
+}
+
+void _printHelp([IOSink? sink]) {
+  (sink ?? stdout).writeln('''
+Composer — generates an app's composition from `app_manifest.yaml`.
+
+USAGE
+  dart tools/composer/composer.dart <command> [options]
+
+COMMANDS
+  list              Show every app, its flavors, platforms, DI groups and
+                    anything missing.
+  describe          Print an app's report — identity, platforms, composition,
+                    what the shell resolves from it — the text of the `report`
+                    region of its README.md. With --catalog: the manifest keys
+                    (type, default, what refuses and what reads each), the
+                    shell's contract catalog and the derived defaults. With
+                    --ci-matrix pr|full: one line of JSON for CI — `pr` lists
+                    each app that declares web or linux, `full` each app's
+                    android, ios, windows and macos legs (os, flavor, boot).
+  reconcile         Declare `absent` every optional capability an app still
+                    says is `provided` although nothing it composes (or its
+                    own lib/) registers the contract any more — what removing
+                    a module leaves behind (V3). Edits only those lines of
+                    app_manifest.yaml, with the reason `<--reason text>: <what
+                    the shell does without it>`; run `sync` afterwards.
+                    remove_sample runs it for you.
+  new               Create a whole app: `new <id> --platforms <a,b>
+                    [--modules <x,y>] [--name "<Display Name>"] [--org <reverse
+                    domain>]` renders tools/composer/app_template/ into
+                    apps/<id>/, derives its `capabilities:` from what the
+                    modules register, runs `sync` and `verify`, and prints what
+                    to run next. Refuses an id that exists or a platform a
+                    module blocks, writing nothing. It generates no runner:
+                    `runners --app <id>` does, once the app resolves.
+  runners           Generate the runner of every platform declared
+                    `runner: scaffold` (never committed: the app's .gitignore
+                    `runners` region ignores it): `flutter create` in a
+                    temporary directory with `app.org` and the pubspec name,
+                    then only apps/<id>/<p>/ is copied in, and `flutter pub
+                    get` runs in the app so the new runner has its plugin
+                    files and builds with `--no-pub`. Any later run that
+                    finds a runner without them (a pub get that failed)
+                    runs pub get again. Every run applies the
+                    patch set: the macOS network-client entitlement, and for
+                    an app on the web that links core_database the
+                    sqlite3.wasm the resolved sqlite3 names (sha256-checked)
+                    and a compiled drift_worker.js. A missing folder is
+                    generated, an existing one only patched; a file whose
+                    bytes would not change is not rewritten, so a second run
+                    says `up to date` and writes nothing. `--force`
+                    regenerates (after a Flutter upgrade). Refuses a committed
+                    platform. configure.dart runs it last. Exit 0 done, 1 a
+                    failed step, 64 usage.
+  sync              Regenerate the managed regions of:
+                      - the root pubspec.yaml `workspace:` list
+                      - each app's path dependencies
+                      - each app's lib/di/injection.dart (`imports` and
+                        `modules`, which carries configureDependencies)
+                      - each app's lib/app/app_profile.dart (`facts`: the
+                        manifest's declaration as const Dart)
+                      - each app's README.md (`report`)
+                      - each app's .gitignore (`runners`: one `/<p>/` per
+                        scaffold platform)
+                    Writes nothing and exits 1 if any of those files, or a
+                    region's composer:managed / composer:end marker, is
+                    missing, or if a manifest declaration is refused.
+  verify            Same resolution, writes nothing; exits 1 on drift — a
+                    missing file or marker counts as drift — and on a package
+                    under modules/ or platform/ that no app composes (sync
+                    only warns about one). Also implies --strict. Use in CI.
+
+OPTIONS
+  --app <id>        Only this app (list, describe, reconcile, sync, verify,
+                    runners). The root `workspace:` list is still computed
+                    from every app.
+  --catalog         With `describe`: the schema and catalog, not an app.
+  --ci-matrix <k>   With `describe`: `pr` or `full`, one line of JSON on stdout.
+  --reason <text>   With `reconcile`: the start of each `reason:` it writes.
+  --platforms <a,b> With `new`: where the app runs (android, ios, web,
+                    windows, macos, linux), each `runner: scaffold`
+                    (generated by `runners`, never committed).
+  --modules <x,y>   With `new`: the modules it composes, every layer each has.
+  --name <text>     With `new`: the display name (default: the id, title-cased).
+  --org <domain>    With `new`: `app.org`, the reverse domain every generated
+                    runner's application / bundle id starts with (default
+                    com.example).
+  --platform <p,q>  With `runners`: only these scaffold platforms; naming a
+                    committed one is refused.
+  --force           With `runners`: delete and regenerate the selected runners.
+  --offline         With `runners`: no network — `flutter pub get --offline`
+                    (from the pub cache; when that fails, run again online),
+                    no sqlite3.wasm download (a cached copy is still used).
+  --strict          A module declared in a manifest but absent from disk is an
+                    error instead of a warning. CI runs with this, so a release
+                    can never silently ship without a module.
+
+THE DECLARATION
+  `app.name`, `flavors` (+ `ssl_pinning`), `env`, `platforms`, `capabilities`
+  and `di_groups[].why` say what the app is. Every optional contract the shell
+  resolves is `provided` or `{ state: absent, reason }`: absence is a decision.
+  `app.kind` is gone. `describe --catalog` prints every key.
+
+WHAT VERIFY HOLDS THE DECLARATION TO
+  V3   `capabilities:` equals what the composed packages and the app's own
+       lib/ register (both directions; every required contract has an
+       implementer)
+  V7   every package the app links (composed, or reached through the
+       `dependencies:` of one) that declares `platforms:` supports every
+       platform the app declares
+  V10  what a composed package needs the app to register (`FirebaseOptions`,
+       per flavor) is registered under the app's lib/
+  V11  the env files that exist hold exactly the keys `env:` declares
+  V12  the entry point passes `profile:`; test/di_smoke_test.dart exists,
+       iterates `appFacts.platforms`, calls checkAppContract and builds every
+       factory (`FactoryRecorder` + `buildEvery`); integration_test/
+       boot_test.dart exists and calls `debugBootStage(`; an app that declares
+       web has test_driver/integration_test.dart (RULE-83)
+  V13  the generated regions equal regeneration (the .gitignore `runners`
+       region included), and lib/di/injection.dart holds nothing but comments
+       and blank lines outside its two regions
+  V15  a committed Android runner has a `productFlavor` per declared flavor,
+       a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-`
+       configurations per declared flavor, and neither names a flavor the
+       manifest does not declare
+  V16  every DI group says `why` it sits where it does, and the groups the
+       template names follow the canonical order
+  V17  no member pubspec but the root's has a top-level `workspace:` key
+       (a nested workspace node, RULE-16)
+  V6 refuses a committed runner whose folder is missing; a runner folder of a
+  platform `platforms:` does not declare fails `verify` (`sync` still writes,
+  so a platform can be removed: its line, `sync`, then the folder).
+  V7 and V8 (push and deep links need a committed runner; deep links are
+  refused on the web) refuse before anything is written, in `sync` too.
+  V3, V10, V11, V12, V13, V15, V16 and V17 fail `verify`; `sync` prints them
+  as warnings and still writes.
+  The scan reads source, not the graph: `checkAppContract` stays the authority.
+
+MODULE LAYERS
+  `modules: - { id: <m>, layers: [api, domain, data, feature] }`. `domain`,
+  `data` and `feature` need a di_groups entry with `from_modules: <layer>`.
+  `api` (the module's `<m>_api` contracts package) needs none: it becomes a
+  workspace member only — no app dependency, no injection.dart entry.
+
+WHY
+  The root workspace list, an app's dependencies and its injection.dart all had
+  to agree, and were maintained by hand. Getting them out of step fails at boot
+  with "<Type> is not registered" — something `flutter analyze` cannot see.
+
+  Only the region between the `composer:managed` and `composer:end` markers is
+  generated. Everything else in those files stays hand-written.
+''');
+}

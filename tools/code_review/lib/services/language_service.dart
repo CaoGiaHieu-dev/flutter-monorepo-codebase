@@ -91,8 +91,7 @@ class LanguageService {
     'most_common_issues': '🔍 Vấn Đề Phổ Biến Nhất',
     'final_verification': '✅ KIỂM TRA CUỐI CÙNG',
     'additional_resources': '📚 Tài Liệu Tham Khảo',
-    'generated_by':
-        'Được tạo bởi Code Review Tool (Cao Gia Hiếu - caogiahieu99@gmail.com)',
+    'generated_by': 'Được tạo bởi Code Review Tool',
     'total_files': 'Tổng số file',
     'files_with_issues': 'File có vấn đề',
     'critical_files': 'File nghiêm trọng',

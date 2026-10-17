@@ -21,57 +21,173 @@ on:
         description: "Notes"
         required: false
         type: string
+      groups:
+        description: "Firebase App Distribution tester group aliases, comma-separated (empty = upload without inviting anyone)"
+        required: false
+        type: string
+        default: "test"
+# Nothing here writes to the repository; the build uploads to Firebase App
+# Distribution with its own credentials.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build & Release
-    runs-on: macos-latest
+    # Android only (the IPA steps below are commented out), so ubuntu: a
+    # macOS runner bills ten times the minutes for nothing. Uncommenting the
+    # IPA build needs `macos-latest` back.
+    runs-on: ubuntu-latest
+    env:
+      FLAVOR: ${{ inputs.flavor }}
 
     steps:
       #1 Checkout Repository
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
         #2 Setup Java
       - name: Set Up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: "oracle"
           java-version: "17"
 
-        #3 Setup Flutter
+        #3 Setup Flutter — the version pinned in .fvmrc
       - name: Set Up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
 
-        #4 Install Dependencies and Generate
+        #4 Restore gitignored build inputs
+      # A clean checkout has none of these files. Each comes from a base64
+      # secret (`base64 -w0 <file>`), only for the flavor being built, and a
+      # missing secret fails here by name. This runs BEFORE code generation:
+      # apps/mobile/lib/firebase/firebase_module.dart imports all three
+      # firebase_options_*.dart files, so the other two flavors get a
+      # compile-only stub. Secrets: docs/en/operations/01_cicd.md §7.
+      - name: Restore gitignored build inputs from secrets
+        shell: bash
+        env:
+          FIREBASE_OPTIONS_DEV_DART_B64: ${{ secrets.FIREBASE_OPTIONS_DEV_DART_B64 }}
+          FIREBASE_OPTIONS_STAGING_DART_B64: ${{ secrets.FIREBASE_OPTIONS_STAGING_DART_B64 }}
+          FIREBASE_OPTIONS_PROD_DART_B64: ${{ secrets.FIREBASE_OPTIONS_PROD_DART_B64 }}
+          GOOGLE_SERVICES_DEV_JSON_B64: ${{ secrets.GOOGLE_SERVICES_DEV_JSON_B64 }}
+          GOOGLE_SERVICES_STAGING_JSON_B64: ${{ secrets.GOOGLE_SERVICES_STAGING_JSON_B64 }}
+          GOOGLE_SERVICES_PROD_JSON_B64: ${{ secrets.GOOGLE_SERVICES_PROD_JSON_B64 }}
+          ENV_PROD_B64: ${{ secrets.ENV_PROD_B64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APP=apps/mobile
+          case "$FLAVOR" in
+            dev)     KEY=DEV;     ENV_FILE=env.dev ;;
+            staging) KEY=STAGING; ENV_FILE=env.stg ;;
+            prod)    KEY=PROD;    ENV_FILE=env.prod ;;
+            *) echo "::error::Unknown flavor '$FLAVOR'"; exit 1 ;;
+          esac
+          # The build step reads the dart-define file from here.
+          echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
+
+          missing=0
+          fail() { echo "::error title=$1::$2"; missing=1; }
+          # restore <secret> <target>: decode a base64 secret into a file.
+          restore() {
+            local name="$1" target="$2" value="${!1:-}"
+            if [ -z "$value" ]; then
+              fail "Missing secret $name" "$target is gitignored and required to build flavor $FLAVOR. Add it as the base64 secret $name - see docs/en/operations/01_cicd.md section 7."
+              return 0
+            fi
+            mkdir -p "$(dirname "$target")"
+            printf '%s' "$value" | base64 --decode > "$target"
+            echo "restored $target from $name"
+          }
+
+          # Dart-define file: env.dev / env.stg are committed, env.prod is not.
+          if [ "$FLAVOR" = prod ]; then
+            restore ENV_PROD_B64 "$APP/env.prod"
+          elif [ ! -f "$APP/$ENV_FILE" ]; then
+            fail "Missing $APP/$ENV_FILE" "It is committed to git; restore it."
+          fi
+
+          restore "FIREBASE_OPTIONS_${KEY}_DART_B64" "$APP/lib/firebase/firebase_options_${FLAVOR}.dart"
+          for other in dev staging prod; do
+            [ "$other" = "$FLAVOR" ] && continue
+            file="$APP/lib/firebase/firebase_options_${other}.dart"
+            [ -f "$file" ] && continue
+            printf '%s\n' \
+              "// CI-only stub for a flavor this job does not build. Never used at runtime:" \
+              "// injectable registers only the built flavor's FirebaseOptions." \
+              "import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;" \
+              "" \
+              "class DefaultFirebaseOptions {" \
+              "  static FirebaseOptions get currentPlatform => const FirebaseOptions(" \
+              "        apiKey: 'ci-stub'," \
+              "        appId: 'ci-stub'," \
+              "        messagingSenderId: 'ci-stub'," \
+              "        projectId: 'ci-stub'," \
+              "      );" \
+              "}" > "$file"
+            echo "stubbed $file"
+          done
+
+          # Required by the com.google.gms.google-services Gradle plugin.
+          restore "GOOGLE_SERVICES_${KEY}_JSON_B64" "$APP/android/app/src/${FLAVOR}/google-services.json"
+
+          # Prod signing: Gradle refuses a prod release without key.properties,
+          # so the secrets are required. dev uses the committed dev keystore;
+          # staging opts in to it below.
+          if [ "$FLAVOR" = prod ]; then
+            restore KEYSTORE_BASE64 "$APP/android/keystore.jks"
+            for v in KEYSTORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
+              [ -n "${!v:-}" ] || fail "Missing secret $v" "Required to sign the prod build."
+            done
+            {
+              echo "storePassword=${KEYSTORE_PASSWORD:-}"
+              echo "keyPassword=${KEY_PASSWORD:-}"
+              echo "keyAlias=${KEY_ALIAS:-}"
+              echo "storeFile=../keystore.jks"
+            } > "$APP/android/key.properties"
+          elif [ "$FLAVOR" = staging ]; then
+            # Staging has no secrets of its own: it is signed with the committed
+            # dev keystore, which Gradle refuses for a release unless asked
+            # explicitly (docs/en/operations/02_fastlane_release.md section 4).
+            # Add key-stg.properties secrets here to sign staging properly.
+            echo "::warning::Signing the staging release with the public dev keystore."
+            echo "ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true" >> "$GITHUB_ENV"
+          fi
+
+          [ "$missing" -eq 0 ] || exit 1
+
+        #5 Resolve the dependencies
+      # Lock files are generated and not committed; versions come from
+      # pubspec_dependencies.yaml.
+      - name: Get dependencies
+        run: flutter pub get
+
+        #6 Install Dependencies and Generate
+      # --no-runners: an Android-only build uses the committed android/
+      # runner; the generated web and desktop runners would only add
+      # failure surface (flutter create, a download, a compile) to a release.
       - name: Install Dependencies
-        run: dart tools/workspace_setup/configure.dart
-
-        #5 Setup Env
-      - name: Decode Env
-        run: |
-          echo -n ${{ secrets.ENV }} | base64 -d > .env
-
-        #6 Setup Keystore
-      - name: Decode Keystore
-        run: |
-          echo -n ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > app/android/keystore.jks
-
-      - name: Create key.properties
-        run: |
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > app/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> app/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> app/android/key.properties
-          echo "storeFile=../keystore.jks" >> app/android/key.properties
+        run: dart tools/workspace_setup/configure.dart --no-runners
 
         #7 Building APK
+      # The dart-define file sits in apps/mobile/ (env.dev / env.stg committed,
+      # env.prod restored above) and the obfuscation map at the repository
+      # root. `$GITHUB_WORKSPACE` says root without counting `..`, so moving
+      # the app again cannot silently point these at the wrong place.
       - name: Build APK
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          cd app
-          flutter build apk --flavor=${{ inputs.flavor }} --build-name=${{ inputs.version }} --build-number=${{ github.run_number }} --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ --no-tree-shake-icons --verbose
+          cd apps/mobile
+          flutter build apk --flavor="$FLAVOR" --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" --dart-define-from-file="$GITHUB_WORKSPACE/apps/mobile/$ENV_FILE" --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" --no-tree-shake-icons --verbose
 
       #   #7 Building App Bundle (aab)
       # - name: Build appBundle
@@ -86,14 +202,58 @@ jobs:
       #     cd build
       #     tar -czf ios_build.tar.gz ios
 
-      #8 Distribute Android
-      - name: Upload and Distribute App
-        uses: nickwph/firebase-app-distribution-action@v1
+      #8 Keep the obfuscation symbols
+      # --obfuscate makes every stack trace from this build unreadable without
+      # the symbol files --split-debug-info wrote to obfuscate/. They are not in
+      # the APK and the runner is thrown away, so upload them now — before the
+      # distribution step, which can fail — and keep them as long as the build
+      # is in testers' hands. Symbolize with
+      #   flutter symbolize -i <stack-trace-file> -d <artifact>/app.android-arm64.symbols
+      - name: Upload obfuscation symbols
+        uses: actions/upload-artifact@v7
         with:
-          credentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-          app: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-          file: "app/build/app/outputs/flutter-apk/app-${{ inputs.flavor}}-release.apk"
-          release-notes: |
-            Build version: ${{ inputs.version }}+${{ github.run_number }}
-            Flavor: ${{ inputs.flavor }}
-            Notes: ${{ inputs.notes }}
+          name: debug-symbols-${{ inputs.flavor }}-${{ inputs.version }}+${{ github.run_number }}
+          path: obfuscate/
+          if-no-files-found: error
+          retention-days: 90
+
+      #9 Distribute Android — the Firebase CLI, authenticated through
+      # GOOGLE_APPLICATION_CREDENTIALS with the service-account JSON from the
+      # FIREBASE_SERVICE_ACCOUNT_KEY secret (raw, not base64), written to a
+      # temp file that is deleted when the step ends. Inputs reach the script
+      # through env, never interpolated into it, and the release notes go
+      # through a file, so quotes and `$(…)` in them are passed verbatim.
+      - name: Set up Node.js (Firebase CLI)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install the Firebase CLI
+        run: npm install --global firebase-tools@15
+
+      - name: Upload and Distribute App
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          TESTER_GROUPS: ${{ inputs.groups }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          [ -n "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ] || { echo "::error title=Missing secret FIREBASE_SERVICE_ACCOUNT_KEY::Firebase distribution needs the service-account JSON (raw, not base64) - see docs/en/operations/01_cicd.md section 7."; exit 1; }
+          [ -n "${FIREBASE_APP_ID:-}" ] || { echo "::error title=Missing secret FIREBASE_ANDROID_APP_ID::Set it to the Firebase App ID of the flavor you build - see docs/en/operations/01_cicd.md section 7."; exit 1; }
+
+          sa="$RUNNER_TEMP/firebase-service-account.json"
+          notes="$RUNNER_TEMP/release-notes.txt"
+          trap 'rm -f "$sa" "$notes"' EXIT
+          ( umask 077; printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$sa" )
+          export GOOGLE_APPLICATION_CREDENTIALS="$sa"
+          printf 'Build version: %s+%s\nFlavor: %s\nNotes: %s\n' \
+            "$VERSION" "$GITHUB_RUN_NUMBER" "$FLAVOR" "$NOTES" > "$notes"
+
+          args=(--app "$FIREBASE_APP_ID" --release-notes-file "$notes")
+          if [ -n "$TESTER_GROUPS" ]; then args+=(--groups "$TESTER_GROUPS"); fi
+          firebase appdistribution:distribute \
+            "apps/mobile/build/app/outputs/flutter-apk/app-$FLAVOR-release.apk" \
+            "${args[@]}"

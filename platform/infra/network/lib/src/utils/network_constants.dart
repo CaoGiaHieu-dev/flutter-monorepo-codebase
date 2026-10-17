@@ -1,0 +1,68 @@
+/// Constants owned exclusively by `core_network`.
+///
+/// Kept inside this package — not in `platform_kernel` — so transport-level
+/// details (header names, request-extra flags, log tags) stay invisible to
+/// features and other layers. What an app tunes — the timeouts, extra headers
+/// and redirect policy — is the `NetworkProfile` in `platform_kernel`; the
+/// fallback language is its `LocaleProfile`.
+class NetworkConstants {
+  /// Private constructor to prevent instantiation of this class.
+  NetworkConstants._();
+
+  // ---------------------------------------------------------------------------
+  // Headers
+  //
+  // `Authorization` and `Content-Type` come from `HttpHeaders` in `dart:io`;
+  // only the non-standard ones are declared here.
+  // ---------------------------------------------------------------------------
+
+  /// Custom header carrying the upper-cased language code (e.g. `VI`, `EN`).
+  static const String LANGUAGE_HEADER = 'language';
+
+  /// Scheme prefix for the bearer token in the `Authorization` header.
+  static const String BEARER_PREFIX = 'Bearer';
+
+  // ---------------------------------------------------------------------------
+  // RequestOptions.extra flags
+  //
+  // Read per-request by the interceptors; both default to `true` when absent.
+  // ---------------------------------------------------------------------------
+
+  /// Set `false` to stop [AuthInterceptor] attaching the bearer token.
+  static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
+
+  /// Set `false` to opt a request out of [RetryInterceptor].
+  static const String EXTRA_CAN_RETRY = 'canRetry';
+
+  /// Set `true` on a `POST` / `PATCH` that is safe to send twice — the server
+  /// deduplicates it, typically by an idempotency key — so [RetryHandler] may
+  /// replay it after a send or receive timeout. Without it such a request is
+  /// never replayed on a timeout: the server may already have processed it.
+  /// `GET`, `HEAD`, `PUT`, `DELETE` and `OPTIONS` need no flag.
+  static const String EXTRA_IDEMPOTENT = 'idempotent';
+
+  /// Set `false` on a request whose `401` must never start a token refresh —
+  /// the login and refresh calls themselves. The bearer token is still
+  /// attached; only the refresh reaction is skipped. Without it a `401` from
+  /// the refresh call waits on the refresh that is waiting on it.
+  static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
+
+  /// Set by [RefreshTokenInterceptor] on a request it has already replayed
+  /// after a token refresh. Its presence stops a second `401` on the replayed
+  /// request from starting another refresh, which would otherwise recurse.
+  static const String EXTRA_TOKEN_REFRESH_ATTEMPTED = 'tokenRefreshAttempted';
+
+  // ---------------------------------------------------------------------------
+  // HTTP status codes handled inside the transport layer
+  // ---------------------------------------------------------------------------
+
+  /// Triggers the refresh-token flow in [RefreshTokenInterceptor].
+  static const int STATUS_UNAUTHORIZED = 401;
+
+  // ---------------------------------------------------------------------------
+  // Log tags
+  // ---------------------------------------------------------------------------
+
+  static const String DEFAULT_LOG_TAG = 'AppClient';
+  static const String CLIENT_LOG_TAG = 'DioClient';
+}

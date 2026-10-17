@@ -1,0 +1,17 @@
+name: {{moduleName}}
+description: "Public API of the {{snakeNameInput}} module — the contracts other features may depend on"
+version: 0.0.1
+publish_to: 'none'
+
+resolution: workspace
+
+environment:
+  sdk: "{{{sdkConstraint}}}"
+  flutter: "{{{flutterConstraint}}}"
+
+# An API package holds contracts only: no DI module, no code generation, and
+# no dependency on this module's domain/data/feature or on any other module
+# (arch_check R3). Flutter is here for `BuildContext` alone.
+dependencies:
+  flutter:
+    sdk: flutter

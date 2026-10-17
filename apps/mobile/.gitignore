@@ -1,4 +1,8 @@
 # App-specific Dart/Flutter ignore
+# Build output, at ANY depth. The bare `/build/` below only ever covered
+# `app/build/`, so Gradle's `app/android/app/build/` was tracked instead —
+# about 160 MB (uncompressed) of kernel_blob.bin and merged assets that every clone paid for.
+build/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -26,7 +30,22 @@
 # Lock files
 pubspec.lock
 
+# Production environment values.
+# `env.dev` and `env.stg` are committed deliberately — they hold no secrets
+# and a fresh clone must build. `env.prod` is the one the setup guide tells
+# you to create yourself, so it must never be committable.
+env.prod
+
 # Firebase configuration
+# `lib/firebase/firebase_options_*.dart` are generated per project by
+# `tools/firebase/firebase_config.dart` and carry this app's identifiers.
+firebase_options_*.dart
 firebase.json
 google-services.json
 **/google-services.json
+
+# Generated runners (RULE-83): `composer runners` writes them, git never tracks them.
+# composer:managed:runners — generated from app_manifest.yaml
+/web/
+/linux/
+# composer:end:runners

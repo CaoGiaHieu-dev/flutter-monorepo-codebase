@@ -1,0 +1,129 @@
+# Contributing
+
+Thanks for helping improve this template. This page is the short version of what a pull request
+needs. Every rule is stated once, with a stable `RULE-NN` id, in the registry at
+[`docs/en/reference/01_rules.md`](docs/en/reference/01_rules.md); the review checklist is
+[`docs/en/reference/04_review_checklist.md`](docs/en/reference/04_review_checklist.md).
+
+By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems go
+through [SECURITY.md](SECURITY.md), never a public issue.
+
+## 1. Set up
+
+Follow [`docs/en/getting-started/01_setup.md`](docs/en/getting-started/01_setup.md) (Vietnamese:
+[`docs/vi/getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md)). In short:
+
+```bash
+dart tools/workspace_setup/configure.dart --stub-firebase   # pub get → gen-l10n → build_runner → barrels
+```
+
+Building the app needs the gitignored Firebase files: `--stub-firebase` writes compile-only stubs
+for them (setup guide § 3 has the real ones). The barrel pass is needed again only after you add,
+rename or delete a `lib/` file: `dart tools/barrel_generator/generate.dart <package>/lib`. FVM is
+optional: write commands bare and add `fvm ` yourself if you use it.
+
+## 2. Branches and commits
+
+- Branch from `main`; name the branch `<type>/<short-topic>` (e.g. `fix/refresh-deadlock`).
+- Commits follow [Conventional Commits](https://www.conventionalcommits.org/), as the history does:
+  `<type>(<scope>): <summary>` — lowercase, imperative or descriptive, no trailing period.
+  - Types in use: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `build`, `ci`, `style`.
+  - Scope is the package or area touched: `network`, `app_shell`, `base_ui`, `tools`, `composer`,
+    `module_generator`, `fastlane`, `ci`, `docs_check`, … Omit it for cross-cutting changes.
+  - The body says **why**, and lists each distinct change as a bullet when there are several.
+- Keep a PR to one concern. Fill in the [PR template](.github/pull_request_template.md).
+
+## 3. Checks to run before opening a PR
+
+These mirror [`.github/workflows/pr_quality_check.yml`](.github/workflows/pr_quality_check.yml)
+in its order. Run them from the repository root:
+
+```bash
+flutter pub get                                     # lock files are generated, never committed
+dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
+dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R22
+(cd tools && dart test)                              # Gate 1 — the gate tools' own tests
+dart tools/workspace_setup/configure.dart --stub-firebase   # codegen (skip if you just ran it)
+# CI then fails on barrel drift (RULE-75): on a clean checkout, the line above must leave no tracked
+# `*.dart` file changed and no untracked one — commit a regenerated barrel with the change that caused it
+flutter analyze                                      # Gate 2 — static analysis
+# Gate 3 — flutter test in every package that has a test/ directory, except ./tools (it ran above)
+for p in $(find . -name pubspec.yaml -not -path './.git/*' -not -path '*/build/*' \
+             -not -path '*/.dart_tool/*' | sort); do
+  d=$(dirname "$p"); [ -d "$d/test" ] || continue
+  [ "$d" = "./tools" ] && continue
+  (cd "$d" && flutter test) || echo "FAILED: $d"
+done
+dart tools/dependency_sync.dart --check              # Gate 4 — version catalog in sync
+dart tools/docs_check/check.dart                     # Gate 5 — doc paths exist, en↔vi parity, RULE-ID citations
+dart tools/unused_checker/check_unused_packages.dart # declared but never imported (exit 2 = findings; blocking in CI)
+
+# The separate `build` job — the only proof generated code compiles
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+A clean `flutter analyze` does not mean the app builds: `analysis_options.yaml` excludes every
+generated file. The debug APK build is what catches a broken `.freezed.dart` or
+`injection.config.dart`.
+
+## 4. House rules that trip people up
+
+Each is a registry row — read it there; this list only says where people trip.
+
+- **Composer-managed regions are generated** (RULE-16): the root `workspace:` list, each app's path
+  dependencies, all of `lib/di/injection.dart`, the `facts` region of `lib/app/app_profile.dart` and
+  the `report` region of the app's `README.md`. Edit `apps/<id>/app_manifest.yaml`, run
+  `dart tools/composer/composer.dart sync`; `tools/module_generator/generate.dart` does it for you,
+  and `composer new` creates a whole app.
+- **Per-app values are declared in the app** (RULE-80, RULE-81, RULE-82): the manifest, the profile,
+  the hooks — never a constant in `platform/` or a new platform fork. Guide:
+  [`13_app_composition.md`](docs/en/guides/13_app_composition.md).
+- **Versions live in the catalog** (RULE-74). Lock files (`pubspec.lock`,
+  `Gemfile.lock`, `Podfile.lock`) are generated and git-ignored: never commit one.
+- **Generated files** (RULE-76). Not committed: `*.g.dart`, `*.freezed.dart`, `*.config.dart`,
+  `*.module.dart`, `lib/src/gen/**`. Committed: barrel files, regenerated after codegen (RULE-75).
+- **The analyzer is strict** (RULE-70) and `// ignore:` is not a fix (RULE-71).
+- **DI changes are proven by the smoke test** (RULE-13, RULE-63), and a clean analyze is not a
+  build (RULE-77).
+- **Tools** print with `stdout.writeln` / `stderr.writeln` (RULE-65); no PowerShell (RULE-72).
+- **Sample modules** (auth, home, settings, …) are reference code. Fix them when they teach the
+  wrong pattern; do not grow them into product features.
+
+## 5. Documentation contract
+
+The docs are unusually complete, which means they go stale unusually fast. These rules keep them
+true (RULE-79):
+
+1. **Docs ship in the same PR as the code.** A change is not done when only the code has landed.
+2. **Source of truth, most authoritative first:** the code → the rule registry
+   (`docs/en/reference/01_rules.md`) → `docs/en/**` → `CLAUDE.md`, `.agents/AGENTS.md` and
+   `.claude/skills/` → `README.md` → `docs/vi/**`. When two disagree, the lower one is the one to fix.
+3. **State a rule once.** A rule lives in the registry, with its why, what enforces it, how to
+   verify it and a link to its explanation. Everywhere else — `CLAUDE.md`, `AGENTS.md`, guides,
+   skills, the review checklist, `tools/code_review/review_prompt.md` — cites `RULE-NN` and links
+   there; keep the guide-specific *how*, drop the restated *what*. `docs_check` fails on an id the
+   registry does not define. Ids are stable: never renumber or reuse one; retire it in place.
+4. **When a rule becomes machine-checked, say so** — update its **Enforced by** column and name
+   the check (`arch_check Rn`, a test file, a CI gate), so a reader knows whether CI or review holds it.
+5. **`docs/vi/**` mirrors `docs/en/**` 1:1**: same filenames, headings, fenced code blocks and table
+   rows, in the same PR — `README.md` / `README.vi.md`, `tools/README*.md` and package
+   `README.vi.md` files likewise. `docs_check` enforces the shape; intentional differences go in
+   `tools/docs_check/parity_allowlist.txt` with a reason. After syncing a translation, commit the
+   English change, then stamp it:
+   `dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md`
+   (`--stale-translations` lists the ones behind).
+6. **Never document an intention.** Every code fence runs against the tree in that commit; code
+   samples are copied from real files, not written from memory; known limitations are stated plainly.
+7. **Numbers get re-measured, not copied.** Counts of packages, dependencies, rules or tests in prose
+   are re-derived each time they are touched.
+8. **History is not guidance.** A record of how the repo got here belongs in `docs/history/`
+   (English only, outside the parity check) — see `docs/history/restructure-log.md`.
+
+## 6. Reporting bugs and proposing features
+
+Use the [issue forms](.github/ISSUE_TEMPLATE). Questions about how to do something are usually
+answered in the [docs hub](docs/en/README.md) — please check there first.
+
+## License
+
+Contributions are accepted under the repository's [BSD 3-Clause License](LICENSE).

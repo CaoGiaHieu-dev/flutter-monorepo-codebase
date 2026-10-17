@@ -1,0 +1,417 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:core_network/core_network.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_kernel/platform_kernel.dart';
+
+/// Dio's exceptions reach `ErrorHandler.handleError` through
+/// [DioFailureClassifier] — the kernel names no transport type. These are
+/// the Dio cases of the kernel's error handler, plus the registration
+/// contract.
+void main() {
+  setUpAll(DioFailureClassifier.ensureRegistered);
+
+  group('ErrorHandler with DioFailureClassifier', () {
+    group('handleError with DioException', () {
+      test('should map connectionTimeout to NetworkFailure', () {
+        final exception = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.connectionTimeout,
+        );
+        final failure = ErrorHandler.handleError(exception);
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.message, equals('Connection timeout'));
+        expect(failure.code, equals(1003));
+      });
+
+      test('should map badResponse 401 to AuthFailure', () {
+        final exception = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: RequestOptions(path: '/'),
+            statusCode: 401,
+            statusMessage: 'Unauthorized user',
+            data: {'message': 'Custom unauthorized message'},
+          ),
+        );
+        final failure = ErrorHandler.handleError(exception);
+        expect(failure, isA<AuthFailure<dynamic>>());
+        expect(failure.message, equals('Custom unauthorized message'));
+        expect(failure.code, equals(401));
+      });
+
+      test('should map badResponse 500 to ServerFailure', () {
+        final exception = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: RequestOptions(path: '/'),
+            statusCode: 500,
+            statusMessage: 'Internal Error',
+          ),
+        );
+        final failure = ErrorHandler.handleError(exception);
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.message, equals('Internal Error'));
+        expect(failure.code, equals(500));
+      });
+
+      test('a response without a status is HTTP_ERROR, not a made-up 500', () {
+        final exception = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.badResponse,
+        );
+        final failure = ErrorHandler.handleError(exception);
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.HTTP_ERROR);
+      });
+
+      test('every transport failure carries its ErrorCodes code', () {
+        const expected = {
+          DioExceptionType.connectionTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.sendTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.receiveTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.cancel: ErrorCodes.REQUEST_CANCELLED,
+          DioExceptionType.connectionError: ErrorCodes.CONNECTION_ERROR,
+          DioExceptionType.badCertificate: ErrorCodes.BAD_CERTIFICATE,
+          DioExceptionType.transformTimeout: ErrorCodes.TRANSFORM_TIMEOUT,
+          DioExceptionType.unknown: ErrorCodes.NETWORK_UNKNOWN,
+        };
+        for (final MapEntry(key: type, value: code) in expected.entries) {
+          final failure = const DioFailureClassifier().classify(
+            DioException(
+              requestOptions: RequestOptions(path: '/'),
+              type: type,
+            ),
+          );
+          expect(failure?.code, code, reason: '$type');
+        }
+      });
+    });
+
+    group('an unknown Dio error is read from the exception it wraps', () {
+      AppFailure<dynamic> classify(Object cause, {String? message}) {
+        return ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.unknown,
+            error: cause,
+            message: message,
+          ),
+        );
+      }
+
+      test('a FormatException is a ParseFailure, not the network', () {
+        final failure = classify(const FormatException('Unexpected <'));
+
+        expect(failure, isA<ParseFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.INVALID_FORMAT);
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+      });
+
+      test('a TLS failure is a rejected certificate, and not a '
+          'NetworkFailure (callers read those as "offline")', () {
+        for (final cause in [
+          const HandshakeException('CERTIFICATE_VERIFY_FAILED'),
+          const CertificateException('bad cert'),
+        ]) {
+          final failure = classify(cause);
+
+          expect(failure, isA<ServerFailure<dynamic>>(), reason: '$cause');
+          expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        }
+      });
+
+      test('a certificate-pin mismatch is a rejected certificate too', () {
+        // The pinning client's exception, which core_network does not
+        // import: recognised by the message it has always carried.
+        final failure = classify(
+          _PinException('No valid SPKI pins found for host: api.example.com'),
+        );
+
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+      });
+
+      test('a pin mismatch carries what the server presented into the '
+          'diagnostic', () {
+        final failure = classify(
+          _PinException(
+            'No valid SPKI pins found for host: api.example.com '
+            '(server presented: AAAA=, BBBB=)',
+          ),
+        );
+
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+        expect(failure.message, contains('server presented: AAAA=, BBBB='));
+      });
+
+      test('a refusal to use a non-HTTPS URL on a pinned host, requested or '
+          'reached by a redirect, is not a pin mismatch', () {
+        final failure = classify(
+          _PinException(
+            'Refusing to open a non-HTTPS connection to api.example.com '
+            'while certificate pinning is enabled: http://api.example.com/',
+          ),
+        );
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+      });
+
+      test('a desktop pin mismatch keeps its leaf-only hint in the '
+          'diagnostic', () {
+        final failure = classify(
+          _PinException(
+            'No valid SPKI pins found for host: api.example.com '
+            '(server presented: AAAA=). Only the leaf certificate is visible '
+            'on this platform, so intermediate or root CA pins cannot match '
+            'here; pin the leaf key (and a backup key).',
+          ),
+        );
+
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        expect(failure.message, contains('Only the leaf certificate'));
+      });
+
+      test('a redirect that cannot be followed is not the certificate, and '
+          'stays NETWORK_UNKNOWN', () {
+        for (final cause in [
+          const RedirectException('Redirect loop detected', []),
+          const RedirectException('Redirect limit exceeded', []),
+          // The pinning client's message; `dart:io`'s own client throws a
+          // FormatException for a malformed `Location` (a ParseFailure, above).
+          const RedirectException('Invalid Location header: bad', []),
+        ]) {
+          final failure = classify(cause);
+
+          expect(failure, isA<NetworkFailure<dynamic>>(), reason: '$cause');
+          expect(failure.code, ErrorCodes.NETWORK_UNKNOWN, reason: '$cause');
+        }
+      });
+
+      test('failing to read the certificate chain at all is not a pin '
+          'mismatch', () {
+        final failure = classify(
+          _PinException('Failed to fetch certificate chain. Reason: timeout'),
+        );
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+      });
+
+      test('anything else stays NETWORK_UNKNOWN, with the Dio message', () {
+        final failure = classify(StateError('x'), message: 'odd');
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+        expect(failure.message, 'odd');
+      });
+
+      test('through a real Dio: a 200 with a non-JSON body is a '
+          'ParseFailure', () async {
+        final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+          ..httpClientAdapter = _HtmlAdapter();
+
+        Object? caught;
+        try {
+          await dio.get<dynamic>('/me');
+        } catch (e) {
+          caught = e;
+        }
+
+        expect(caught, isA<DioException>());
+        final failure = ErrorHandler.handleError(caught);
+        expect(failure, isA<ParseFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.INVALID_FORMAT);
+      });
+    });
+
+    group('badResponse message extraction', () {
+      AppFailure<dynamic> failureFor(Object? data, {String? statusMessage}) {
+        return ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.badResponse,
+            response: Response(
+              requestOptions: RequestOptions(path: '/'),
+              statusCode: 400,
+              statusMessage: statusMessage,
+              data: data,
+            ),
+          ),
+        );
+      }
+
+      test('joins a list of messages (NestJS validation) one per line', () {
+        final failure = failureFor({
+          'message': ['email must be an email', 'password is too short'],
+          'error': 'Bad Request',
+        });
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, 400);
+        expect(
+          failure.message,
+          'email must be an email\npassword is too short',
+        );
+      });
+
+      test('skips empty and null entries of a list', () {
+        final failure = failureFor({
+          'message': ['', null, 'only this'],
+        });
+        expect(failure.message, 'only this');
+      });
+
+      test('falls back to the status message for an empty list', () {
+        final failure = failureFor({
+          'message': <String>[],
+        }, statusMessage: 'Bad Request');
+        expect(failure.message, 'Bad Request');
+      });
+
+      test('stringifies a map or a number message', () {
+        expect(
+          failureFor({
+            'message': {'email': 'taken'},
+          }).message,
+          contains('taken'),
+        );
+        expect(failureFor({'message': 42}).message, '42');
+      });
+
+      test('uses the status message when the body is not a map', () {
+        expect(
+          failureFor('<html>oops</html>', statusMessage: 'Bad Gateway').message,
+          'Bad Gateway',
+        );
+        expect(
+          failureFor(['a', 'b'], statusMessage: 'Bad Request').message,
+          'Bad Request',
+        );
+      });
+
+      test('uses a generic message when nothing usable is present', () {
+        expect(failureFor(null).message, 'Server error');
+        expect(failureFor({'message': '   '}).message, 'Server error');
+      });
+
+      test('a 404 is a ServerFailure carrying the status code', () {
+        final failure = ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.badResponse,
+            response: Response(
+              requestOptions: RequestOptions(path: '/'),
+              statusCode: 404,
+              data: {'message': 'User not found'},
+            ),
+          ),
+        );
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, 404);
+        expect(failure.message, 'User not found');
+      });
+    });
+
+    group('handleError never throws', () {
+      test('a badResponse without a response still classifies', () {
+        final failure = ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.badResponse,
+          ),
+        );
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.message, 'Server error');
+      });
+    });
+
+    group('registration', () {
+      test('registering again replaces instead of stacking', () {
+        DioFailureClassifier.ensureRegistered();
+        const DioFailureClassifier().register();
+        expect(
+          ErrorHandler.classifiers.whereType<DioFailureClassifier>(),
+          hasLength(1),
+        );
+      });
+
+      test('ignores anything but a DioException', () {
+        const classifier = DioFailureClassifier();
+        expect(classifier.classify(const FormatException('x')), isNull);
+        expect(classifier.classify(Exception('x')), isNull);
+      });
+
+      test('unregistered, a DioException is an unclassified error', () {
+        const classifier = DioFailureClassifier();
+        addTearDown(DioFailureClassifier.ensureRegistered);
+        final seen = <Object>[];
+        ErrorHandler.onUnclassifiedError = (error, _) => seen.add(error);
+        addTearDown(() => ErrorHandler.onUnclassifiedError = null);
+
+        expect(ErrorHandler.unregisterClassifier(classifier), isTrue);
+        final error = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.connectionTimeout,
+        );
+        final failure = ErrorHandler.handleError(error);
+
+        expect(failure.code, ErrorCodes.UNKNOWN);
+        expect(seen, [same(error)]);
+      });
+
+      test('a classified DioException is not passed on as unclassified', () {
+        final seen = <Object>[];
+        ErrorHandler.onUnclassifiedError = (error, _) => seen.add(error);
+        addTearDown(() => ErrorHandler.onUnclassifiedError = null);
+
+        ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.connectionTimeout,
+          ),
+        );
+
+        expect(seen, isEmpty);
+      });
+    });
+  });
+}
+
+/// Stands in for `http_security_pinning`'s exceptions, whose `toString` is
+/// `CertificatePinningException: <message>`.
+class _PinException implements Exception {
+  _PinException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'CertificatePinningException: $message';
+}
+
+/// Answers every request with an HTML page declared as JSON — what a captive
+/// portal or a maintenance page does to a client that expects JSON.
+class _HtmlAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    '<html>maintenance</html>',
+    200,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+
+  @override
+  void close({bool force = false}) {}
+}

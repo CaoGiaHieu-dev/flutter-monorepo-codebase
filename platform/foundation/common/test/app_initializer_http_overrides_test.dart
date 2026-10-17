@@ -1,0 +1,180 @@
+import 'dart:io';
+
+import 'package:core_common/core_common.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http_security_pinning/http_security_pinning.dart';
+
+class _Sentinel extends HttpOverrides {}
+
+const _pinned = SslPinning.pinned(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+);
+
+AppProfile _profile({required SslPinning? decision}) => AppProfile(
+  facts: AppFacts(
+    id: 'overrides',
+    name: 'Overrides',
+    flavors: Flavor.values.toSet(),
+    platforms: {
+      for (final platform in AppPlatform.values)
+        platform: const PlatformFacts.today(),
+    },
+    sslPinning: SslPinningPolicy({
+      if (decision != null)
+        for (final flavor in Flavor.values) flavor: decision,
+    }),
+  ),
+);
+
+/// `runShellApp` installs certificate pinning before dependency injection
+/// starts, so `initBeforeRunApp` must do it synchronously, from the profile
+/// alone — and `init`, which runs later and calls it again, must not install
+/// a second override.
+void main() {
+  setUp(() async {
+    await getIt.reset();
+    AppInitializer.debugResetBeforeRunApp();
+  });
+
+  tearDown(() async {
+    HttpOverrides.global = null;
+    await getIt.reset();
+    AppInitializer.debugResetBeforeRunApp();
+  });
+
+  test('installs the pinning HttpOverrides synchronously', () {
+    final before = HttpOverrides.current;
+
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: _pinned),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    expect(HttpOverrides.current, isNot(same(before)));
+    expect(
+      HttpOverrides.current?.createHttpClient(null),
+      isA<HttpSecurityPinningClient>(),
+      reason: 'a new override is not enough: the accept-all bypass is one too',
+    );
+  });
+
+  test('installs the pinning HttpOverrides on every platform that can pin', () {
+    for (final platform in AppPlatform.values.where((p) => p.canPinTls)) {
+      AppInitializer.debugResetBeforeRunApp();
+      HttpOverrides.global = _Sentinel();
+
+      AppInitializer.initBeforeRunApp(
+        profile: _profile(decision: _pinned),
+        platform: platform,
+        flavor: Flavor.prod,
+      );
+
+      expect(
+        HttpOverrides.current?.createHttpClient(null),
+        isA<HttpSecurityPinningClient>(),
+        reason: platform.name,
+      );
+    }
+  });
+
+  test('a pin the client cannot parse stops the boot, and a retry stops it '
+      'again', () {
+    const unparsable = SslPinning.pinned('not-a-pin', 'also not a pin');
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+    void boot() => AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: unparsable),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    expect(boot, throwsA(isA<InvalidPinException>()));
+    expect(
+      HttpOverrides.current,
+      same(sentinel),
+      reason: 'nothing half-installed',
+    );
+    // `runShellApp`'s boot-failure screen retries the boot: it must find the
+    // work undone and fail again, not "already ran" and start unpinned.
+    expect(boot, throwsA(isA<InvalidPinException>()));
+    expect(HttpOverrides.current, same(sentinel));
+  });
+
+  test('every declared pin is checked at boot, not only the first', () {
+    const valid = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+    const backup = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=';
+    for (final decision in const [
+      SslPinning.pinned('not-a-pin', backup),
+      SslPinning.pinned(valid, 'not-a-pin'),
+      SslPinning.pinned(valid, backup, ['not-a-pin']),
+    ]) {
+      AppInitializer.debugResetBeforeRunApp();
+      expect(
+        () => AppInitializer.initBeforeRunApp(
+          profile: _profile(decision: decision),
+          platform: AppPlatform.android,
+          flavor: Flavor.prod,
+        ),
+        throwsA(
+          isA<InvalidPinException>().having((e) => e.pin, 'pin', 'not-a-pin'),
+        ),
+        reason: '${(decision as PinnedSsl).hashes}',
+      );
+    }
+  });
+
+  test('an empty pin list stops the boot, before any HttpClient is '
+      'built', () {
+    expect(
+      () => AppInitializer.debugPinningOverrides(const <String>[]),
+      throwsArgumentError,
+    );
+  });
+
+  test('is idempotent: a second call installs nothing', () {
+    final profile = _profile(decision: _pinned);
+    AppInitializer.initBeforeRunApp(
+      profile: profile,
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+    AppInitializer.initBeforeRunApp(
+      profile: profile,
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    expect(HttpOverrides.current, same(sentinel));
+  });
+
+  test('leaves HttpOverrides alone without a pin decision (logs instead)', () {
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: null),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    expect(HttpOverrides.current, same(sentinel));
+  });
+
+  test('installs nothing on the web, even with pins declared', () {
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: _pinned),
+      platform: AppPlatform.web,
+      flavor: Flavor.prod,
+    );
+
+    expect(HttpOverrides.current, same(sentinel));
+  });
+}

@@ -1,26 +1,39 @@
 name: Fastlane build and distribute
 
+# The signing secrets are restored below; nothing here writes to the repository.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
       build-on:
-        description: "Build on"
+        description: "Build on (iOS needs a Mac with signing set up)"
         required: true
         type: choice
         default: "self-hosted"
         options:
           - self-hosted
           - macos-latest
-      flutter_version:
-        description: "Flutter version"
+      platform:
+        description: "Platforms (both = `fastlane flutter`: iOS first, then Android)"
         required: true
-        default: "3.47.4"
+        type: choice
+        default: "both"
+        options:
+          - both
+          - android
+          - ios
+      flutter_version:
+        description: "Flutter version (installed on the runner; the lane checks it). Empty = the version pinned in .fvmrc"
+        required: false
+        type: string
       version:
         description: "App version"
         required: true
         default: "1.0.0"
       build_number:
-        description: "Build number (leave empty to auto-increment)"
+        description: "Build number. Empty = auto: latest on the store/Firebase + 1 (pubspec number when distributing nowhere)"
         required: false
       flavor:
         description: "Flavor"
@@ -36,7 +49,7 @@ on:
         required: true
         default: "Initial release"
       build_type:
-        description: "Build type (apk or aab)"
+        description: "Android build type (apk or aab)"
         required: true
         type: choice
         default: "apk"
@@ -44,12 +57,25 @@ on:
           - apk
           - aab
       distribute_store:
-        description: "Distribute to Play Store? (true/false)"
+        description: "Distribute to the stores (Play Store / TestFlight)?"
         required: true
         type: boolean
         default: false
+      # The Play Console's built-in tracks: internal testing, closed testing
+      # (`alpha`), open testing (`beta`), production. A custom closed-testing
+      # track is addressed by its own name — add it to this list to offer it.
+      track:
+        description: "Play Store track (used only when distributing to the store): internal, alpha = closed testing, beta = open testing, production"
+        required: true
+        type: choice
+        default: "internal"
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
       distribute_firebase:
-        description: "Distribute to Firebase? (true/false)"
+        description: "Distribute to Firebase App Distribution?"
         required: true
         type: boolean
         default: true
@@ -57,45 +83,271 @@ on:
 jobs:
   build:
     runs-on: ${{ inputs.build-on }}
+    env:
+      # fastlane requires a UTF-8 locale.
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      FLAVOR: ${{ inputs.flavor }}
+      PLATFORM: ${{ inputs.platform }}
+      DISTRIBUTE_STORE: ${{ inputs.distribute_store }}
+      DISTRIBUTE_FIREBASE: ${{ inputs.distribute_firebase }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Set Up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: "oracle"
           java-version: "17"
 
-      - name: Set up Ruby
+      # The root Gemfile lists fastlane + cocoapods and loads the plugins from
+      # apps/mobile/fastlane/Pluginfile (via fastlane/Pluginfile), so no
+      # `fastlane add_plugin` step is needed — that command is interactive and
+      # fails on a runner.
+      - name: Set up Ruby (bundle install at the repository root)
         if: ${{ inputs.build-on != 'self-hosted' }}
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
           bundler-cache: true
 
-      - name: Install Fastlane
-        run: gem install fastlane
+      - name: Install gems (self-hosted)
+        if: ${{ inputs.build-on == 'self-hosted' }}
+        run: bundle install
+
+      # The default is not a literal here: it is whatever .fvmrc pins, so a
+      # Flutter bump cannot leave this workflow behind. An explicit input still
+      # wins (the lane then checks it against .fvmrc and stops on a mismatch).
+      - name: Resolve the Flutter version
+        id: flutter
+        shell: bash
+        env:
+          REQUESTED: ${{ inputs.flutter_version }}
+        run: |
+          set -euo pipefail
+          version="${REQUESTED:-$(python3 -c 'import json; print(json.load(open(".fvmrc"))["flutter"])')}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
           channel: "stable"
           cache: true
 
-      - name: Install fastlane dependency
-        run: fastlane add_plugin firebase_app_distribution
-
-      - name: Build and distribute
+      # Everything below is gitignored, so a clean checkout has none of it.
+      # Each file comes from a base64 secret (`base64 -w0 <file>`); a missing
+      # secret fails the job here, naming the secret, instead of failing
+      # halfway through a build. Only the flavor being built is restored.
+      # The list and how to produce each secret: docs/en/operations/01_cicd.md §7.
+      - name: Restore gitignored build inputs from secrets
+        shell: bash
+        env:
+          FASTLANE_CONFIG_YAML_B64: ${{ secrets.FASTLANE_CONFIG_YAML_B64 }}
+          FIREBASE_OPTIONS_DEV_DART_B64: ${{ secrets.FIREBASE_OPTIONS_DEV_DART_B64 }}
+          FIREBASE_OPTIONS_STAGING_DART_B64: ${{ secrets.FIREBASE_OPTIONS_STAGING_DART_B64 }}
+          FIREBASE_OPTIONS_PROD_DART_B64: ${{ secrets.FIREBASE_OPTIONS_PROD_DART_B64 }}
+          GOOGLE_SERVICES_DEV_JSON_B64: ${{ secrets.GOOGLE_SERVICES_DEV_JSON_B64 }}
+          GOOGLE_SERVICES_STAGING_JSON_B64: ${{ secrets.GOOGLE_SERVICES_STAGING_JSON_B64 }}
+          GOOGLE_SERVICES_PROD_JSON_B64: ${{ secrets.GOOGLE_SERVICES_PROD_JSON_B64 }}
+          GOOGLE_SERVICE_INFO_DEV_PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_DEV_PLIST_B64 }}
+          GOOGLE_SERVICE_INFO_STAGING_PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_STAGING_PLIST_B64 }}
+          GOOGLE_SERVICE_INFO_PROD_PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PROD_PLIST_B64 }}
+          ENV_PROD_B64: ${{ secrets.ENV_PROD_B64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_PLAY_JSON_KEY_B64: ${{ secrets.GOOGLE_PLAY_JSON_KEY_B64 }}
+          APP_STORE_CONNECT_API_KEY_P8_B64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_B64 }}
         run: |
-          fastlane flutter \
-            flutter_version:${{ github.event.inputs.flutter_version }} \
-            version:${{ github.event.inputs.version }} \
-            flavor:${{ github.event.inputs.flavor }} \
-            change_log:"${{ github.event.inputs.change_log }}" \
-            build_type:${{ github.event.inputs.build_type }} \
-            distribute_store:${{ github.event.inputs.distribute_store }} \
-            auto_increment:${{ github.event.inputs.build_number == '' }} \
-            build_number:${{ github.event.inputs.build_number }} \
-            distribute_firebase:${{ github.event.inputs.distribute_firebase }}
+          set -euo pipefail
+          APP=apps/mobile
+          case "$FLAVOR" in
+            dev)     KEY=DEV;     ENV_FILE=env.dev ;;
+            staging) KEY=STAGING; ENV_FILE=env.stg ;;
+            prod)    KEY=PROD;    ENV_FILE=env.prod ;;
+            *) echo "::error::Unknown flavor '$FLAVOR'"; exit 1 ;;
+          esac
+          ANDROID=false; IOS=false
+          case "$PLATFORM" in
+            both) ANDROID=true; IOS=true ;;
+            android) ANDROID=true ;;
+            ios) IOS=true ;;
+          esac
+
+          missing=0
+          fail() { echo "::error title=$1::$2"; missing=1; }
+          # restore <secret> <target>: decode a base64 secret into a file.
+          restore() {
+            local name="$1" target="$2" value="${!1:-}"
+            if [ -z "$value" ]; then
+              fail "Missing secret $name" "$target is gitignored and required for this build (flavor=$FLAVOR, platform=$PLATFORM). Add it as the base64 secret $name - see docs/en/operations/01_cicd.md section 7."
+              return 0
+            fi
+            mkdir -p "$(dirname "$target")"
+            printf '%s' "$value" | base64 --decode > "$target"
+            echo "restored $target from $name"
+          }
+
+          # fastlane configuration (apps/mobile/fastlane/modules/helpers.rb aborts without it)
+          restore FASTLANE_CONFIG_YAML_B64 "$APP/fastlane/Config.yaml"
+
+          # Dart-define file. env.dev / env.stg are committed; env.prod is not.
+          if [ "$FLAVOR" = prod ]; then
+            restore ENV_PROD_B64 "$APP/env.prod"
+          elif [ ! -f "$APP/$ENV_FILE" ]; then
+            fail "Missing $APP/$ENV_FILE" "It is committed to git; restore it."
+          fi
+
+          # Firebase options. firebase_module.dart imports all three files, so
+          # the two flavors not being built get a compile-only stub; injectable
+          # registers only the built flavor's options at runtime.
+          restore "FIREBASE_OPTIONS_${KEY}_DART_B64" "$APP/lib/firebase/firebase_options_${FLAVOR}.dart"
+          for other in dev staging prod; do
+            [ "$other" = "$FLAVOR" ] && continue
+            file="$APP/lib/firebase/firebase_options_${other}.dart"
+            [ -f "$file" ] && continue
+            printf '%s\n' \
+              "// CI-only stub for a flavor this job does not build. Never used at runtime:" \
+              "// injectable registers only the built flavor's FirebaseOptions." \
+              "import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;" \
+              "" \
+              "class DefaultFirebaseOptions {" \
+              "  static FirebaseOptions get currentPlatform => const FirebaseOptions(" \
+              "        apiKey: 'ci-stub'," \
+              "        appId: 'ci-stub'," \
+              "        messagingSenderId: 'ci-stub'," \
+              "        projectId: 'ci-stub'," \
+              "      );" \
+              "}" > "$file"
+            echo "stubbed $file"
+          done
+
+          if [ "$ANDROID" = true ]; then
+            # Required by the com.google.gms.google-services Gradle plugin.
+            restore "GOOGLE_SERVICES_${KEY}_JSON_B64" "$APP/android/app/src/${FLAVOR}/google-services.json"
+            # Prod signing: Gradle refuses a prod release without key.properties
+            # (docs/en/operations/02_fastlane_release.md section 4), so it is
+            # required here. dev uses the dev keystore; staging opts in below.
+            if [ "$FLAVOR" = prod ]; then
+              restore KEYSTORE_BASE64 "$APP/android/keystore.jks"
+              for v in KEYSTORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
+                [ -n "${!v:-}" ] || fail "Missing secret $v" "Required to sign the prod build."
+              done
+              {
+                echo "storePassword=${KEYSTORE_PASSWORD:-}"
+                echo "keyPassword=${KEY_PASSWORD:-}"
+                echo "keyAlias=${KEY_ALIAS:-}"
+                echo "storeFile=../keystore.jks"
+              } > "$APP/android/key.properties"
+            elif [ "$FLAVOR" = staging ]; then
+              # Staging has no secrets of its own: it is signed with the committed
+              # dev keystore, which Gradle refuses for a release unless asked
+              # explicitly (docs/en/operations/02_fastlane_release.md section 4).
+              # Add key-stg.properties secrets here to sign staging properly.
+              echo "::warning::Signing the staging release with the public dev keystore."
+              echo "ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true" >> "$GITHUB_ENV"
+            fi
+          fi
+
+          if [ "$IOS" = true ]; then
+            # Copied into the app by an Xcode build phase, which only warns
+            # when it is missing, so this one is optional.
+            name="GOOGLE_SERVICE_INFO_${KEY}_PLIST_B64"
+            if [ -n "${!name:-}" ]; then
+              restore "$name" "$APP/ios/flavors/${FLAVOR}/GoogleService-Info.plist"
+            else
+              echo "::warning::$name is not set; the iOS build will have no GoogleService-Info.plist."
+            fi
+          fi
+
+          [ "$missing" -eq 0 ] || exit 1
+
+          # Credential files: written wherever Config.yaml points. Relative
+          # paths there are resolved against apps/mobile/, as helpers.rb does.
+          cfg() {
+            ruby -ryaml -e 'c = YAML.load_file(ARGV.shift); v = c.dig(*ARGV); puts(v.nil? ? "" : File.expand_path(v.to_s, "apps/mobile"))' \
+              "$APP/fastlane/Config.yaml" "$@"
+          }
+          if [ "$DISTRIBUTE_FIREBASE" = true ]; then
+            path="$(cfg firebase credentials_map "$FLAVOR")"
+            [ -n "$path" ] || path="$(cfg firebase credentials_map default)"
+            if [ -z "$path" ]; then
+              fail "Config.yaml" "firebase.credentials_map.$FLAVOR is not set."
+            elif [ -z "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ]; then
+              fail "Missing secret FIREBASE_SERVICE_ACCOUNT_KEY" "Firebase distribution needs the service-account JSON (raw, not base64)."
+            else
+              mkdir -p "$(dirname "$path")"
+              printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$path"
+              echo "restored $path from FIREBASE_SERVICE_ACCOUNT_KEY"
+            fi
+          fi
+          if [ "$DISTRIBUTE_STORE" = true ] && [ "$ANDROID" = true ]; then
+            path="$(cfg paths google_play_key_prod)"
+            if [ -z "$path" ]; then fail "Config.yaml" "paths.google_play_key_prod is not set."
+            else restore GOOGLE_PLAY_JSON_KEY_B64 "$path"; fi
+          fi
+          if [ "$DISTRIBUTE_STORE" = true ] && [ "$IOS" = true ]; then
+            # `xcrun altool --apiKey <id>` takes no key path: it finds the key
+            # only by the file name AuthKey_<id>.p8 (the lane points
+            # API_PRIVATE_KEYS_DIR at this file's directory). So the key is
+            # written under exactly that name, or not at all.
+            path="$(cfg paths app_store_connect_key_filepath)"
+            key_id="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).dig("app_store_connect", "api_key_id").to_s.strip' "$APP/fastlane/Config.yaml")"
+            if [ -z "$path" ]; then fail "Config.yaml" "paths.app_store_connect_key_filepath is not set."
+            elif [ -z "$key_id" ]; then fail "Config.yaml" "app_store_connect.api_key_id is not set."
+            elif [ "$(basename "$path")" != "AuthKey_${key_id}.p8" ]; then
+              fail "Config.yaml" "paths.app_store_connect_key_filepath must end in AuthKey_${key_id}.p8 (the name altool looks for), not $(basename "$path")."
+            else restore APP_STORE_CONNECT_API_KEY_P8_B64 "$path"; fi
+          fi
+
+          [ "$missing" -eq 0 ] || exit 1
+
+      # Runs from the repository root: the root fastlane/Fastfile imports the
+      # lanes from apps/mobile/fastlane/, which resolve every path absolutely.
+      # Inputs travel through env, never interpolated into the script.
+      - name: Build and distribute
+        shell: bash
+        env:
+          FLUTTER_VERSION: ${{ steps.flutter.outputs.version }}
+          VERSION: ${{ inputs.version }}
+          # Empty input = `auto` (see the input's description). Passing it
+          # through empty used to reach flutter as --build-number=0.
+          BUILD_NUMBER: ${{ inputs.build_number || 'auto' }}
+          CHANGE_LOG: ${{ inputs.change_log }}
+          BUILD_TYPE: ${{ inputs.build_type }}
+          TRACK: ${{ inputs.track }}
+        run: |
+          set -euo pipefail
+          case "$PLATFORM" in
+            both) lane=(flutter) ;;
+            android) lane=(android build) ;;
+            ios) lane=(ios build) ;;
+          esac
+          bundle exec fastlane "${lane[@]}" \
+            "flavor:$FLAVOR" \
+            "flutter_version:$FLUTTER_VERSION" \
+            "version:$VERSION" \
+            "build_number:${BUILD_NUMBER:-auto}" \
+            "change_log:$CHANGE_LOG" \
+            "build_type:$BUILD_TYPE" \
+            "distribute_store:$DISTRIBUTE_STORE" \
+            "distribute_firebase:$DISTRIBUTE_FIREBASE" \
+            "track:$TRACK"
+
+      # The lane builds with --obfuscate --split-debug-info=apps/mobile/obfuscate:
+      # without these files no crash stack trace from this build can be read,
+      # and they are not inside the APK/AAB/IPA. `always()`: a build that
+      # succeeded but failed to upload still produced them.
+      - name: Upload obfuscation symbols
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-symbols-${{ inputs.platform }}-${{ inputs.flavor }}-${{ inputs.version }}+${{ github.run_number }}
+          path: apps/mobile/obfuscate/
+          if-no-files-found: warn
+          retention-days: 90

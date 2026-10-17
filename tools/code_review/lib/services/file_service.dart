@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import '../utils/file_analyzer.dart';
 import '../utils/git_helper.dart';
 
@@ -13,8 +14,7 @@ class FileService {
       }
       return null;
     } catch (e) {
-      // ignore: avoid_print
-      print('Error reading file $filePath: $e');
+      stdout.writeln('Error reading file $filePath: $e');
       return null;
     }
   }
@@ -39,8 +39,7 @@ class FileService {
         if (await File(file).exists()) {
           files.add(file);
         } else {
-          // ignore: avoid_print
-          print('⚠️  File not found: $file');
+          stdout.writeln('⚠️  File not found: $file');
         }
       }
     }
@@ -59,7 +58,7 @@ class FileService {
 
     // Remove duplicates and filter
     final uniqueFiles = files.toSet().toList();
-    return FileAnalyzer.filterFiles(uniqueFiles, excludePatterns);
+    return await FileAnalyzer.filterFiles(uniqueFiles, excludePatterns);
   }
 
   /// Read multiple files content

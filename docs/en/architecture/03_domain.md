@@ -1,6 +1,6 @@
 # Domain Layer
 
-**What this answers:** what business rules live in `packages/domain/*`, why that code is forbidden from touching Flutter, and what `Result<T>` actually gives you.
+**What this answers:** what business rules live in `modules/*/domain`, why that code is forbidden from touching Flutter, and what `Result<T>` actually gives you.
 
 **After reading you can:** read any use case in the repo, know which types you may import inside a domain package, and add a new entity / params / use case without breaking the layer boundary.
 
@@ -8,13 +8,13 @@
 
 ## 1. What the Domain layer is for
 
-Domain is the centre of the dependency rule: it depends on nobody, and everybody depends on it through interfaces.
+Domain is the centre of the dependency rule: it depends on nothing but `domain_core`, and everybody depends on it through interfaces.
 
 ```
 Feature (UI) ──→ Domain ←── Data
 ```
 
-A domain package holds four things and nothing else:
+A domain package holds four things:
 
 | Component | Directory | Responsibility |
 |:---|:---|:---|
@@ -23,29 +23,34 @@ A domain package holds four things and nothing else:
 | **Repository interfaces** | `repositories/` | Contracts the Data layer must satisfy |
 | **Use cases** | `usecases/` | One business operation each, returns `Result<T>` |
 
-No widgets, no HTTP, no SQL, no `SharedPreferences`. If a use case needs any of that, it declares an *interface* and lets `packages/data/*` implement it.
+No widgets, no HTTP, no SQL, no `SharedPreferences`. If a use case needs any of that, it declares an *interface* and lets `modules/*/data` implement it.
 
 ---
 
 ## 2. The Pure-Dart mandate
 
-### Forbidden imports
+Registry: RULE-03 — `arch_check` R2 reads domain imports, `dependencies:`, `dev_dependencies:` and test imports, so the list below is checked, not a convention.
+
+### Forbidden
 
 ```dart
-import 'package:flutter/...';    // ❌
-import 'package:dio/...';        // ❌
-import 'package:retrofit/...';   // ❌
-import 'package:drift/...';      // ❌
+import 'package:flutter/...';    // ❌ Flutter, or any package that needs the Flutter SDK
+import 'package:dio/...';        // ❌ transport
+import 'package:retrofit/...';   // ❌ transport
+import 'package:drift/...';      // ❌ persistence
+import 'package:platform_kernel/...';  // ❌ any core_* / platform_* package
 ```
+
+Also out: `data_*`, `feature_*`, another module's domain, and engine-only `dart:` libraries such as `dart:ui`.
 
 ### Allowed imports
 
 | Package | Why it is allowed |
 |:---|:---|
 | `dart:core`, `dart:async` | Language basics |
-| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
-| `freezed_annotation`, `json_annotation` | Codegen annotations only |
-| `injectable`, `get_it` | DI annotations |
+| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams` |
+| `freezed_annotation` | Codegen annotation only |
+| `injectable` | DI annotations |
 
 ### Verification
 
@@ -53,25 +58,23 @@ The rule holds in the source. Run it yourself:
 
 ```bash
 grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit" \
-  --include="*.dart" packages/domain/
+  --include="*.dart" modules/*/domain/
 # → no output
 ```
 
 > [!NOTE]
-> **The package graph enforces this, not just review.** No domain pubspec lists `flutter` under `dependencies`, and none declares a `core_*` package:
+> **The package graph and `arch_check` enforce this, not just review.** No domain pubspec lists `flutter` under `dependencies`, and none declares a `core_*` package:
 >
 > ```yaml
-> # packages/domain/auth/pubspec.yaml
+> # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
->     path: ../core
->   get_it: ^9.2.1
+>     path: ../../../platform/layers/domain
 >   injectable: ^3.0.0
->   freezed_annotation: ^3.1.0
->   json_annotation: ^4.12.0
+>   freezed_annotation: "^3.1.0"
 > ```
 >
-> `domain_core` itself has **no** workspace dependency at all. An `import 'package:flutter/…'` added to a domain file therefore fails to resolve rather than quietly compiling. Keep it that way: never add `flutter` or a `core_*` package to a domain pubspec.
+> `domain_core` itself has **no** workspace dependency at all. An `import 'package:flutter/…'` added to a domain file therefore fails to resolve rather than quietly compiling, and a `core_*` dependency fails Gate 1. A domain test runs on `package:test`, not `flutter_test`.
 >
 > One caveat, so the claim is not oversold: every domain pubspec still carries a `flutter:` constraint under `environment:`. That is a minimum-SDK assertion, not a dependency — it pulls no Flutter code into the package graph, and the purity check above still passes. It does mean pub wants the Flutter SDK present to resolve these packages, so they are not consumable from a Dart-only runtime as they stand. Drop the `environment: flutter:` line if you ever need to share a domain package with a pure Dart server.
 
@@ -83,11 +86,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ## 3. `domain_core` — the shared vocabulary
 
-`packages/domain/core/` is depended on by every other domain package.
+`platform/layers/domain/` is depended on by every other domain package.
 
 ### `Result<T>` — the return type of every use case
 
-Defined in `packages/domain/core/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
+Defined in `platform/layers/domain/lib/src/result/result.dart`, with `AppFailure` in `src/failures/app_failure.dart`:
 
 ```dart
 @freezed
@@ -95,7 +98,7 @@ sealed class Result<T> with _$Result<T> {
   const Result._();
 
   const factory Result.success([T? data]) = Success<T>;
-  const factory Result.failure(AppFailure error) = Failure<T>;
+  const factory Result.failure(AppFailure<dynamic> error) = Failure<T>;
   const factory Result.none() = None<T>;
   const factory Result.cancel() = Cancel<T>;
 ```
@@ -112,7 +115,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — they appear only in `packages/core/provider_state_management/test/base_provider_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
+> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — outside `result.dart` they appear only in `platform/layers/domain/test/result_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
 
 #### API surface
 
@@ -133,27 +136,20 @@ switch (result) {
 ```dart
 Future<R> whenAsync<R>({
   required FutureOr<R> Function(T? data) success,
-  required FutureOr<R> Function(AppFailure error) failure,
+  required FutureOr<R> Function(AppFailure<dynamic> error) failure,
   required FutureOr<R> Function() none,
   required FutureOr<R> Function() cancel,
 }) async { ... }
 ```
 
-Two aliases are provided for wrapped server payloads:
-
-```dart
-typedef BaseResult<T> = Result<BaseEntity<T>>;
-typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
-```
-
 ### `BaseEntity<T>` — standard server envelope
 
-`packages/domain/core/lib/src/entities/base/base_entity.dart`:
+`platform/layers/domain/lib/src/entities/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
 abstract class BaseEntity<T> with _$BaseEntity<T> {
-  const BaseEntity._();
+  const BaseEntity._(); // private constructor for getters
 
   const factory BaseEntity({
     @JsonKey(name: 'statusCode') @Default(200) int statusCode,
@@ -161,29 +157,40 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
+  /// Whether the envelope reports success: any 2xx. A create answered `201`
+  /// or an action answered `204` is as successful as a `200`; only an
+  /// envelope reporting a 1xx, 3xx, 4xx or 5xx is [hasError].
+  bool get isSuccess =>
+      statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
+      statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
   bool get hasError => !isSuccess;
 ```
 
+`isSuccess` is any 2xx (`200` ≤ `statusCode` < `300`), so a `201` or a `204` envelope is a success.
+
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`packages/domain/core/lib/src/entities/base/paginate_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/layers/domain/lib/src/entities/paginated_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 
 ```dart
 abstract class BaseUseCase<RType, Params> {
+  /// Execute the use case with given parameters
+  ///
+  /// Parameters are expected to be already validated at construction time.
+  /// Returns Result<RType> containing either Success with data or Failure with error.
   FutureOr<Result<RType>> call(Params params);
 }
 ```
 
-`FutureOr` is deliberate: a use case reading local storage can be fully synchronous (see `GetLanguageUseCase` below) while a network one returns a `Future`.
+`FutureOr` is deliberate: a use case that only reads local state may return a plain `Result<T>`, while a network one returns a `Future`. The shipped use cases all return `Future`s.
 
 Use `NoParams()` when an operation takes no input.
 
 ### Cache sample
 
-`domain_core` also ships a working cache slice — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, and `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase`. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
+The second sample domain package, `domain_cache` (`modules/cache/domain`), is the smallest slice — `CacheEntryEntity` and `ICacheEntryRepository`, with no params class and no use case on top: the contract is all `data_cache` has to implement. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
 
 ---
 
@@ -191,30 +198,26 @@ Use `NoParams()` when an operation takes no input.
 
 | File | Contents |
 |:---|:---|
-| `entities/user/user_entity.dart` | `UserEntity` (Freezed) |
-| `entities/user/user_role.dart` | `UserRole` enum — `customer`, `owner`, `none`, `unknown` |
-| `params/auth_params/login_params.dart` | `LoginParams` |
-| `params/auth_params/complete_login_flow_params.dart` | `CompleteLoginFlowParams` |
-| `repositories/i_auth_repository.dart` | `IAuthRepository` |
-| `usecases/auth/` | `LoginUseCase`, `LogoutUseCase`, `RefreshTokenUseCase` |
+| `entities/user_entity.dart` | `UserEntity` (Freezed) — `id`, `email`, `name` |
+| `params/login_params.dart` | `LoginParams` |
+| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken` |
+| `usecases/` | `LoginUseCase` — the only one |
 
 ### A use case, in full
 
-`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`:
+`modules/auth/domain/lib/src/usecases/login_usecase.dart`:
 
 ```dart
+/// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    // Params are already validated at construction - no need to validate here
-    // Repository returns Result<UserEntity> directly - no unwrapping needed
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }
 ```
 
@@ -222,85 +225,28 @@ Three things to copy from this:
 
 1. **`@injectable`** — a use case is a factory, never a singleton.
 2. **Constructor injection** — the repository interface arrives through the constructor. Never call `getIt<T>()` inside a use case.
-3. **No re-validation, no unwrapping** — params validate themselves at construction; the repository already returns `Result<T>`.
+3. **No validation, no unwrapping** — a use case passes its params straight through. `LoginParams` does not validate itself either; it only carries the input, which the login page (`LoginPage` in `feature_auth`) checked — both fields filled — before building it. A rule that must hold whatever the caller is belongs in the use case, returned as a `Failure` — the repository already returns `Result<T>`, so there is nothing to unwrap.
 
-A synchronous use case looks the same minus the `Future`:
-
-```dart
-@injectable
-class LogoutUseCase extends BaseUseCase<void, NoParams> {
-  LogoutUseCase(this._authRepository);
-
-  final IAuthRepository _authRepository;
-
-  @override
-  Result<void> call(NoParams params) {
-    return _authRepository.logout();
-  }
-}
-```
-
-### `UserRole` has an `unknown` member on purpose
-
-```dart
-enum UserRole {
-  @JsonValue('customer') customer,
-  @JsonValue('owner') owner,
-  @JsonValue('none') none,
-  unknown,
-}
-```
-
-`unknown` carries no `@JsonValue`; it is the landing slot for `@JsonKey(unknownEnumValue: UserRole.unknown)` in `UserModel`, so a role the server adds later deserialises instead of throwing.
+A use case with no input takes `NoParams` and looks the same, apart from the parameter type: `BaseUseCase<List<ThingEntity>, NoParams>`, called as `_getThings(const NoParams())`. The sample ships none: `AuthProvider` calls `IAuthRepository.logout()` and `refreshToken()` itself, so `LoginUseCase` is the module's only use case and there is no wrapper that merely forwards a call.
 
 ---
 
-## 5. `domain_language` — a stub, and why it stays
-
-`domain_language` is complete but **not wired to any screen**:
-
-| File | Contents |
-|:---|:---|
-| `repositories/i_language_repository.dart` | `ILanguageRepository` — `getLanguage()`, `setLanguage()` |
-| `params/set_language_params.dart` | `SetLanguageParams` |
-| `usecases/get_language_usecase.dart` | `GetLanguageUseCase` |
-| `usecases/set_language_usecase.dart` | `SetLanguageUseCase` |
-
-```dart
-abstract class ILanguageRepository {
-  Result<void> setLanguage(String languageCode);
-  Result<String> getLanguage();
-}
-```
-
-> [!IMPORTANT]
-> **The Settings screen does not call these use cases.** Language switching goes through `LanguageProvider` in `core_base_ui`, which persists via `ILanguageStorage` — bypassing Domain entirely.
->
-> That is not an oversight. `Locale` is a Flutter type, so a pure-Dart domain package cannot express "the current locale" without inventing a parallel `String` representation and translating at every boundary. For a value that never leaves the UI, the ceremony buys nothing.
->
-> `domain_language` is kept as the template for the day locale becomes a *business* concern — user preference synced to a server, per-tenant defaults — at which point the use cases already exist. Until then, read it as reference, and do not add screens that depend on it.
-
-Note it has no entity: it exchanges a plain `String` language code.
-
----
-
-## 6. Package layout and naming
+## 5. Package layout and naming
 
 ```
-packages/domain/<name>/
+modules/<name>/domain/
 ├── lib/
-│   ├── domain_<name>.dart          # public barrel
+│   ├── domain_<name>.dart          # the package's one barrel (generated)
 │   ├── di/
 │   │   ├── module.dart             # @InjectableInit.microPackage()
-│   │   └── di.dart
+│   │   └── module.module.dart      # generated by injectable
 │   └── src/
 │       ├── entities/
 │       ├── params/
 │       ├── repositories/
 │       ├── usecases/
 │       ├── services/               # optional
-│       ├── utils/                  # package-owned constants (if any)
-│       └── src.dart
+│       └── utils/                  # package-owned constants (if any)
 └── pubspec.yaml
 ```
 
@@ -311,53 +257,47 @@ packages/domain/<name>/
 | Repository interface | `i_<name>_repository.dart` | prefix `I` | `IAuthRepository` |
 | Use case | `_usecase.dart` | `UseCase` | `LoginUseCase` |
 
-The `I` prefix is reserved for interfaces. Never name an implementation `IFoo`. Constants are `UPPER_SNAKE_CASE` and live in the package's own `utils/` — see [rules](../reference/01_rules.md).
+The `I` prefix marks interfaces only (RULE-78); constants live in the package's own `utils/` (RULE-09) — see [the rules](../reference/01_rules.md).
 
 ### Entities use Freezed with a private constructor
 
 ```dart
 @freezed
 abstract class UserEntity with _$UserEntity {
-  const UserEntity._();          // ← required to add getters/methods
+  const UserEntity._();
 
-  const factory UserEntity({
-    required String id,
-    String? email,
-    // …
-  }) = _UserEntity;
-
-  factory UserEntity.fromJson(Map<String, dynamic> json) =>
-      _$UserEntityFromJson(json);
+  const factory UserEntity({required String id, String? email, String? name}) =
+      _UserEntity;
 }
 ```
 
-The `const Class._()` line is mandatory. Without it Freezed cannot generate a class you can extend with custom getters (`BaseEntity.isSuccess` depends on this).
+Keep the `const Class._()` line: without it Freezed cannot generate a class you can extend with custom getters (`BaseEntity.isSuccess` depends on this).
 
 ---
 
-## 7. Adding to the Domain layer
+## 6. Adding to the Domain layer
 
 ```bash
-# 1. Scaffold the package (creates dirs + registers the workspace member)
+# 1. Scaffold the package (adds it to every app manifest, then runs `composer sync`)
 dart tools/module_generator/generate.dart 2 payment
 
 # 2. Write entity → params → repository interface → use case
 
-# 3. Refresh the barrel files
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
+# 3. Generate Freezed + injectable code
+dart run build_runner build --workspace
 
-# 4. Generate Freezed + injectable code
-dart run build_runner build -d --workspace
+# 4. Regenerate the package barrel — after codegen, since the barrel exports generated files too
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 ```
 
 Checklist before you open a PR:
 
-- [ ] No `flutter` / `dio` / `retrofit` / `drift` import anywhere in the package
+- [ ] No `flutter` / `dio` / `retrofit` / `drift` / `core_*` import or dependency in the package (`dart tools/arch_check/check.dart`)
 - [ ] Entities are Freezed with `const Class._()`
 - [ ] Use cases are `@injectable` (never singleton) and return `Result<T>`
 - [ ] Dependencies arrive by constructor — no `getIt<T>()` in the body
 - [ ] Constants sit in the package's own `utils/`
-- [ ] The package is declared in the root `pubspec.yaml` workspace list with `resolution: workspace`
+- [ ] An app composes the package (`app_manifest.yaml` → `composer sync`) and its pubspec has `resolution: workspace`
 
 ---
 

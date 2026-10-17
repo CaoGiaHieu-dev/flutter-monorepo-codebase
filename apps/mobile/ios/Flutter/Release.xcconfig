@@ -1,3 +1,6 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
-#include "Environment.xcconfig"
+// Written by the flavor schemes' build pre-action from --dart-define(-from-file)
+// (WEB_DOMAIN, APP_LINK_MODE, ...). Optional so the flavor-less Runner scheme,
+// which has no such pre-action, still builds.
+#include? "Environment.xcconfig"

@@ -1,0 +1,674 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:dynamic_logger/dynamic_logger.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
+
+import 'utils/notification_constants.dart';
+
+/// Builds a piece of text for the grouped (inbox-style) Android notification
+/// that summarises the [activeCount] notifications already on screen.
+///
+/// Returning `null` leaves that piece of text out.
+typedef NotificationInboxTextBuilder = String? Function(int activeCount);
+
+/// Android notification channel for app messages.
+const _initializationSettingsAndroid = AndroidInitializationSettings(
+  NotificationConstants.ANDROID_DEFAULT_ICON,
+);
+
+/// The notification channel for app messages.
+const _channel = AndroidNotificationChannel(
+  NotificationConstants.CHANNEL_ID,
+  NotificationConstants.CHANNEL_NAME,
+  description: NotificationConstants.CHANNEL_DESCRIPTION,
+  importance: Importance.max,
+);
+
+/// The notification channel group for app messages.
+const _channelGroup = AndroidNotificationChannelGroup(
+  NotificationConstants.CHANNEL_GROUP_ID,
+  NotificationConstants.CHANNEL_GROUP_NAME,
+  description: NotificationConstants.CHANNEL_GROUP_DESCRIPTION,
+);
+
+/// Handles a message received while the app is in the background or
+/// terminated.
+///
+/// It runs in a **separate background isolate** that has never run
+/// `configureDependencies()`: GetIt is empty there, so the app's
+/// `FirebaseOptions` cannot be resolved (a `getItOrNull` lookup is
+/// always `null`). Firebase is initialized from the platform's native
+/// configuration instead — `google-services.json` on Android,
+/// `GoogleService-Info.plist` on iOS, which every flavor ships (the same
+/// files FCM itself needs to deliver the message). An app without them
+/// cannot receive a background message in the first place.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+  } catch (e, s) {
+    DynamicLogger.log(
+      'Initializing Firebase in the background isolate failed: $e',
+      tag: 'PushNotificationService.firebaseMessagingBackgroundHandler',
+      level: LogLevel.ERROR,
+      stackTrace: s,
+    );
+  }
+  DynamicLogger.log(
+    message,
+    tag: 'PushNotificationService.firebaseMessagingBackgroundHandler',
+  );
+}
+
+/// Service class for managing push notifications.
+///
+/// Registered as a `@singleton` in DI. The [init] method is called
+/// automatically when the DI container starts up thanks to
+/// `@PostConstruct(preResolve: true)` — so everything it awaits delays
+/// `configureDependencies()`, and with it the first frame. It therefore awaits
+/// only what must exist by then (Firebase, the channels, the message handlers,
+/// the initial message); the FCM token fetch runs in the background. Read the
+/// token from [tokenStream], not [fcmToken], right after boot.
+///
+/// An app can switch push off for a platform (`platforms.<p>.push: false` in
+/// its manifest, handed over as [PlatformFacts.push]): [init] then logs one
+/// INFO line naming the key and initialises nothing — no Firebase, no
+/// channels, no listeners — and every other method does nothing. The service
+/// stays registered, so a caller needs no platform check of its own.
+///
+/// **It never asks for notification permission by itself.** A prompt at DI
+/// time — the first launch, before the user has seen a screen — is the one
+/// most users refuse. Call [requestPermission] where the app can explain why
+/// (after sign-in, from a settings toggle).
+@singleton
+class PushNotificationService {
+  /// Flutter local notifications plugin instance.
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  /// Instance of FirebaseMessaging.
+  late final FirebaseMessaging _firebaseMessaging;
+
+  /// Stream controller for broadcasting data received from notifications.
+  final _dataStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Stream controller for broadcasting notification titles.
+  final _titleStreamController = StreamController<String>.broadcast();
+
+  /// Stream controller for broadcasting notification bodies.
+  final _bodyStreamController = StreamController<String>.broadcast();
+
+  /// Stream controller for broadcasting FCM tokens.
+  final _tokenStreamController = StreamController<String>.broadcast();
+
+  /// Stream controller for broadcasting foreground messages.
+  final _foregroundMessageStreamController =
+      StreamController<RemoteMessage>.broadcast();
+
+  /// Blocked notification types, normalized by [_normalizeType].
+  final _blockedNotificationTypes = <String>{};
+
+  /// FCM token of the device.
+  String? _fcmToken;
+
+  /// Firebase Options for initialization.
+  final FirebaseOptions _firebaseOptions;
+
+  /// What the app declared for this platform; [PlatformFacts.push] switches
+  /// the whole service on or off.
+  final PlatformFacts _platform;
+
+  /// Whether the app switched push off for this platform.
+  bool get _off => !_platform.push;
+
+  /// The initial message received when the app is launched.
+  RemoteMessage? _initialMessage;
+
+  /// FCM subscriptions opened by [init], cancelled by [dispose].
+  final _subscriptions = <StreamSubscription<Object?>>[];
+
+  /// Constructor. Receives the app's [FirebaseOptions] and the facts of the
+  /// platform it runs on (`registerAppProfile` registers them before DI
+  /// starts) via DI. The initialization logic is handled automatically in
+  /// [init].
+  PushNotificationService(
+    this._firebaseOptions, [
+    this._platform = const PlatformFacts.today(),
+  ]);
+
+  /// Stream getter for the data stream.
+  Stream<Map<String, dynamic>> get dataStream => _dataStreamController.stream;
+
+  /// Stream getter for the title stream.
+  Stream<String> get titleStream => _titleStreamController.stream;
+
+  /// Stream getter for the body stream.
+  Stream<String> get bodyStream => _bodyStreamController.stream;
+
+  /// Stream getter for the token stream.
+  Stream<String> get tokenStream => _tokenStreamController.stream;
+
+  /// Stream getter for the foreground message stream.
+  Stream<RemoteMessage> get foregroundMessageStream =>
+      _foregroundMessageStreamController.stream;
+
+  /// Getter for the FCM token.
+  String? get fcmToken => _fcmToken;
+
+  /// Getter for the initial message.
+  RemoteMessage? get initialMessage => _initialMessage;
+
+  /// Builds the summary line of the grouped (inbox-style) Android
+  /// notification, e.g. "3 new messages".
+  ///
+  /// `null` by default: this package owns no translations, and a hardcoded
+  /// sentence would be English on every device. Set it from the app — which
+  /// has its localizations — to show a summary.
+  NotificationInboxTextBuilder? inboxSummaryBuilder;
+
+  /// Builds the title of the grouped (inbox-style) Android notification.
+  ///
+  /// `null` by default, in which case the notification keeps its own title.
+  NotificationInboxTextBuilder? inboxTitleBuilder;
+
+  /// Initializes the notification service.
+  ///
+  /// Awaits only what must be ready when DI finishes: Firebase, the Android
+  /// channels, the message handlers, the local notifications plugin and the
+  /// message that launched the app. The FCM token fetch is started but **not**
+  /// awaited — awaiting it held the whole boot on the network when offline.
+  /// Its failure is logged, never thrown. Asks for no permission (see
+  /// [requestPermission]). Automatically called during DI setup.
+  @PostConstruct(preResolve: true)
+  Future<void> init() async {
+    if (_off) {
+      DynamicLogger.log(
+        'Push notifications are off: ${platformSwitchKey('push')} is false, '
+        'so Firebase Messaging is not initialised.',
+        tag: 'PushNotificationService.init',
+        level: LogLevel.INFO,
+      );
+      return;
+    }
+    await _initializeFirebase();
+    await _setupFlutterNotifications();
+    _setNotificationListeners();
+    await _initializeFlutterLocalNotifications();
+
+    // Determines the initial message that opened the app, prioritizing local notifications.
+    // This is crucial for handling app launches from terminated state via a notification tap.
+    await _getInitialMessage();
+
+    unawaited(_registerTokenSafely());
+  }
+
+  /// Asks the user for notification permission (the system prompt), then
+  /// registers the FCM token again — on iOS a token is only issued once the
+  /// app may notify.
+  ///
+  /// Returns whether the user allows notifications now: `true` for an
+  /// authorized or provisional status, `false` when they refused, have not
+  /// decided, push is off for this platform, or the request failed. A settings
+  /// toggle reads it to show where the user stands.
+  ///
+  /// Call it from the app at a moment the user understands; nothing in the
+  /// platform calls it. Never throws: a failure is logged.
+  Future<bool> requestPermission() async {
+    if (_off) return false;
+    var granted = false;
+    try {
+      final status = await requestSystemPermission();
+      granted =
+          status == AuthorizationStatus.authorized ||
+          status == AuthorizationStatus.provisional;
+      DynamicLogger.log(
+        'Notification permission: $status',
+        tag: 'PushNotificationService.requestPermission',
+      );
+
+      if (!await requestLocalPermission()) granted = false;
+    } catch (e, s) {
+      granted = false;
+      DynamicLogger.log(
+        'Requesting notification permission failed: $e',
+        tag: 'PushNotificationService.requestPermission',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+    }
+    await _registerTokenSafely();
+    return granted;
+  }
+
+  /// Asks through the local notifications plugin as well — Android 13+ and
+  /// iOS show their prompt that way — and reports whether it was not refused.
+  ///
+  /// `resolvePlatformSpecificImplementation` yields the implementation of the
+  /// platform it runs on and `null` on every other one, the web included, so
+  /// no platform check is needed here; a platform with nothing to ask is
+  /// not a refusal. Its own method so a test can answer it.
+  @visibleForTesting
+  Future<bool> requestLocalPermission() async {
+    final android = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+    final ios = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
+    return android != false && ios != false;
+  }
+
+  /// Shows the system permission prompt through Firebase Messaging and
+  /// reports the status the user left it in.
+  ///
+  /// Its own method so a test can answer it without a Firebase app.
+  @visibleForTesting
+  Future<AuthorizationStatus> requestSystemPermission() async {
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: true,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+    return settings.authorizationStatus;
+  }
+
+  /// [registerToken], logging instead of throwing.
+  Future<void> _registerTokenSafely() async {
+    try {
+      await registerToken();
+      // Never the token itself: it addresses this device, and the console is
+      // shared (bug reports, CI logs).
+      DynamicLogger.log(
+        fcmToken == null
+            ? 'FCM token unavailable'
+            : 'FCM token registered (${fcmToken!.length} characters)',
+        tag: 'PushNotificationService.Fcm token',
+      );
+    } catch (e, s) {
+      DynamicLogger.log(
+        'Registering the FCM token failed: $e',
+        tag: 'PushNotificationService.init',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+    }
+  }
+
+  /// Fetches the initial [RemoteMessage] that caused the application to open.
+  Future<void> _getInitialMessage() async {
+    // Holder for the initial message.
+    RemoteMessage? initialMessage;
+
+    // 1. Attempt to get the message from local notification plugin.
+    final notificationAppLaunchDetails = await flutterLocalNotificationsPlugin
+        .getNotificationAppLaunchDetails();
+
+    // Check if the app was launched by a local notification and the payload is present.
+    if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
+      final payload =
+          notificationAppLaunchDetails!.notificationResponse?.payload;
+      if (payload != null && payload.isNotEmpty) {
+        DynamicLogger.log(
+          'App launched from local notification with payload.',
+          tag: 'PushNotificationService._getInitialMessage',
+        );
+        try {
+          // The payload is a JSON string containing the message data, so we decode it.
+          final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+          // Construct a RemoteMessage from the data payload.
+          initialMessage = RemoteMessage(data: data);
+        } catch (e, s) {
+          DynamicLogger.log(
+            'Error decoding local notification payload: $e',
+            tag: 'PushNotificationService._getInitialMessage',
+            level: LogLevel.ERROR,
+            stackTrace: s,
+          );
+        }
+      }
+    }
+
+    // 2. Fallback to FirebaseMessaging.getInitialMessage().
+    if (initialMessage == null) {
+      DynamicLogger.log(
+        'No local notification launch detected, checking Firebase for initial message.',
+        tag: 'PushNotificationService._getInitialMessage',
+      );
+      initialMessage = await _firebaseMessaging.getInitialMessage();
+    }
+
+    // Assign the final determined initial message.
+    _initialMessage = initialMessage;
+  }
+
+  /// Initializes Firebase.
+  Future<void> _initializeFirebase() async {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(options: _firebaseOptions);
+    }
+    _firebaseMessaging = FirebaseMessaging.instance;
+  }
+
+  /// Sets up Flutter notifications.
+  Future<void> _setupFlutterNotifications() async {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_channel);
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannelGroup(_channelGroup);
+    await _firebaseMessaging.setForegroundNotificationPresentationOptions(
+      alert: false,
+      badge: false,
+      sound: false,
+    );
+  }
+
+  /// Sets notification listeners.
+  ///
+  /// The token itself is fetched by [registerToken], in the background.
+  void _setNotificationListeners() {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    _subscriptions.addAll([
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage),
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedAppMessage),
+      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+        if (_fcmToken == newToken) return;
+        _fcmToken = newToken;
+        _tokenStreamController.sink.add(newToken);
+        DynamicLogger.log(
+          'FCM token refreshed (${newToken.length} characters)',
+          tag: 'PushNotificationService.Fcm onTokenRefresh',
+        );
+      }),
+    ]);
+  }
+
+  /// Initializes Flutter local notifications.
+  Future<void> _initializeFlutterLocalNotifications() async {
+    // No permission request here: on iOS it would make this awaited call wait
+    // for the user to answer the prompt. [requestPermission] asks, when the
+    // app calls it.
+    final initializationSettingsDarwin = const DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    // macOS shares the Darwin settings. The web needs none, and Linux and
+    // Windows never get here: push is off there (composer V8).
+    final initializationSettings = InitializationSettings(
+      android: _initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
+    );
+    await flutterLocalNotificationsPlugin.initialize(
+      settings: initializationSettings,
+      onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
+    );
+  }
+
+  /// Handles notification response.
+  void _onDidReceiveNotificationResponse(
+    NotificationResponse notificationResponse,
+  ) {
+    final payload = notificationResponse.payload;
+    // A tap can arrive with no payload at all (e.g. a notification posted
+    // without one). Decoding an empty string always throws, so bail out early
+    // instead of logging a bogus FormatException on every such tap.
+    if (payload == null || payload.isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) {
+        DynamicLogger.log(
+          'Notification payload is not a JSON object: $decoded',
+          tag: 'PushNotificationService.onDidReceiveNotificationResponse',
+          level: LogLevel.ERROR,
+        );
+        return;
+      }
+      _dataStreamController.sink.add(Map<String, dynamic>.from(decoded));
+    } catch (e, s) {
+      DynamicLogger.log(
+        e,
+        tag: 'PushNotificationService.onDidReceiveNotificationResponse',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+    }
+  }
+
+  /// Handles foreground messages received when the app is in the foreground.
+  void _handleForegroundMessage(RemoteMessage message) {
+    _foregroundMessageStreamController.sink.add(message);
+    showFlutterNotification(message);
+  }
+
+  /// Handles opened app messages.
+  void _handleOpenedAppMessage(RemoteMessage message) {
+    _handleMessageData(message);
+  }
+
+  /// Handles message data.
+  void _handleMessageData(RemoteMessage message) {
+    _dataStreamController.sink.add(message.data);
+
+    if (message.notification?.title != null) {
+      _titleStreamController.sink.add(message.notification!.title!);
+    }
+    if (message.notification?.body != null) {
+      _bodyStreamController.sink.add(message.notification!.body!);
+    }
+  }
+
+  /// Shows a Flutter notification.
+  Future<void> showFlutterNotification(
+    RemoteMessage message, {
+    bool force = false,
+  }) async {
+    if (_off) return;
+    RemoteNotification? notification = message.notification;
+    if (notification == null) return;
+
+    // Check if the notification type is blocked, unless forced.
+    if (!force && isTypeBlocked(message.data['type']?.toString())) {
+      return;
+    }
+
+    // Get the active notifications and use them to create an inbox style if more than one active notification.
+    final activeNotifications = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.getActiveNotifications();
+
+    InboxStyleInformation? inboxStyleInformation;
+    if (activeNotifications?.isNotEmpty ?? false) {
+      // Match on `groupKey`, not `channelId`: every notification posted below
+      // carries `groupKey: _channelGroup.id`, whereas its `channelId` is
+      // `_channel.id`. Comparing `channelId` against the *group* id never
+      // matches, which left the inbox style permanently empty.
+      final lines =
+          activeNotifications
+              ?.where((element) => element.groupKey == _channelGroup.id)
+              .map((element) => element.body ?? '')
+              .toList() ??
+          [];
+      final activeCount = activeNotifications?.length ?? 0;
+      inboxStyleInformation = InboxStyleInformation(
+        lines.take(min(3, lines.length)).toList(),
+        contentTitle: inboxTitleBuilder?.call(activeCount),
+        summaryText: inboxSummaryBuilder?.call(activeCount),
+      );
+    }
+
+    // Create Android notification details.
+    final androidNotifyDetail = AndroidNotificationDetails(
+      _channel.id,
+      _channel.name,
+      channelDescription: _channel.description,
+      styleInformation: inboxStyleInformation,
+      setAsGroupSummary: true,
+      groupKey: _channelGroup.id,
+      onlyAlertOnce: true,
+      priority: Priority.high,
+      importance: Importance.max,
+      icon: NotificationConstants.ANDROID_DEFAULT_ICON,
+    );
+
+    // Create iOS notification details.
+    const iOSNotifyDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    // Show the notification.
+    await _showMessage(
+      id: notification.hashCode,
+      title: notification.title,
+      body: notification.body,
+      android: androidNotifyDetail,
+      iOS: iOSNotifyDetails,
+      payload: jsonEncode(message.data),
+    );
+  }
+
+  /// Shows a notification.
+  ///
+  /// [android] and [iOS] are bundled into a [NotificationDetails] and handed to
+  /// the plugin, which selects the entry matching the current platform. Passing
+  /// them is what preserves the channel, group, inbox style, icon and priority
+  /// configured by [showFlutterNotification] — omitting them makes the OS fall
+  /// back to its defaults.
+  Future<void> _showMessage({
+    required int id,
+    String? title,
+    String? body,
+    AndroidNotificationDetails? android,
+    DarwinNotificationDetails? iOS,
+    String? payload,
+  }) async {
+    await flutterLocalNotificationsPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(android: android, iOS: iOS),
+      payload: payload,
+    );
+  }
+
+  /// Subscribes to a topic.
+  Future<void> subscribeToTopic(String topic) async {
+    if (_off) return;
+    await _firebaseMessaging.subscribeToTopic(topic);
+    DynamicLogger.log(
+      'Subscribed to topic: $topic',
+      tag: 'PushNotificationService.subscribeToTopic',
+    );
+  }
+
+  /// Unsubscribes from a topic.
+  Future<void> unsubscribeFromTopic(String topic) async {
+    if (_off) return;
+    await _firebaseMessaging.unsubscribeFromTopic(topic);
+    DynamicLogger.log(
+      'Unsubscribed from topic: $topic',
+      tag: 'PushNotificationService.unsubscribeFromTopic',
+    );
+  }
+
+  /// Normalizes a notification type for comparison: blocking is
+  /// case-insensitive and ignores surrounding whitespace.
+  static String _normalizeType(String type) => type.trim().toLowerCase();
+
+  /// Whether notifications of [type] are currently blocked.
+  ///
+  /// Case-insensitive: blocking `Promo` also blocks `promo` and `PROMO`.
+  bool isTypeBlocked(String? type) =>
+      type != null && _blockedNotificationTypes.contains(_normalizeType(type));
+
+  /// Adds notification types to the blocked list.
+  void addBlockedTypes(List<String> types) {
+    // Stored normalized, so add/remove/lookup all agree on one spelling.
+    _blockedNotificationTypes.addAll(types.map(_normalizeType));
+  }
+
+  /// Removes notification types from the blocked list.
+  void removeBlockedTypes(List<String> types) {
+    _blockedNotificationTypes.removeAll(types.map(_normalizeType));
+  }
+
+  /// Revokes the FCM token.
+  Future<void> revokeToken() async {
+    if (_off) return;
+    await _firebaseMessaging.deleteToken();
+    DynamicLogger.log(
+      'FCM token revoked',
+      tag: 'PushNotificationService.revokeToken',
+    );
+  }
+
+  /// Registers the FCM token.
+  Future<void> registerToken() async {
+    if (_off) return;
+    _fcmToken = await _firebaseMessaging.getToken().catchError((
+      Object e,
+      StackTrace s,
+    ) {
+      DynamicLogger.log(
+        e,
+        tag: 'PushNotificationService.registerToken',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+      return null;
+    });
+    if (_fcmToken != null) {
+      _tokenStreamController.sink.add(_fcmToken!);
+    }
+  }
+
+  /// Cancels the FCM subscriptions and closes every broadcast controller
+  /// owned by this service.
+  ///
+  /// Marked `@disposeMethod`, so GetIt calls it when the container is reset
+  /// (`getIt.reset()` between integration tests) — without it those tests
+  /// leak subscriptions and stream controllers across cases. In a running
+  /// app it never fires: the singleton lives for the whole process.
+  ///
+  /// After calling this the instance is unusable; resolve a fresh one from DI.
+  @disposeMethod
+  Future<void> dispose() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    _subscriptions.clear();
+    await Future.wait([
+      _dataStreamController.close(),
+      _bodyStreamController.close(),
+      _titleStreamController.close(),
+      _tokenStreamController.close(),
+      _foregroundMessageStreamController.close(),
+    ]);
+  }
+}

@@ -1,0 +1,18 @@
+import 'package:core_common/core_common.dart';
+import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../pages/settings_page.dart';
+import '../utils/settings_path.dart';
+
+part 'settings_route_module.g.dart';
+
+@TypedGoRoute<SettingsRoute>(path: SettingsPath.SETTINGS)
+class SettingsRoute extends GoRouteDataCustom with $SettingsRoute {
+  const SettingsRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const SettingsPage();
+  }
+}

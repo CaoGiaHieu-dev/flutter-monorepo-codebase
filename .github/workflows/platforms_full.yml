@@ -1,0 +1,337 @@
+name: Platforms (full matrix)
+
+# RULE-83 on the platforms a pull request does not boot: macOS and Windows
+# (boot test), iOS (simulator build, boot), Android (APK, emulator boot), and
+# the web in release and Wasm mode (compile only). The rows come from the
+# manifests (`composer describe --ci-matrix full`), never from this file, so a
+# new app or platform needs no edit here. pr_quality_check.yml's `platforms`
+# job boots the web and Linux on every PR.
+#
+# When it runs:
+#   - a push to main that touches shared code, the composer, an app, the
+#     version catalog or the Flutter pin (caught at the merge, not a week later);
+#   - the merge queue (merge_group);
+#   - weekly, Monday 03:17 UTC: dependency float (no lockfile is committed) and
+#     runner-image drift. A scheduled failure opens or updates an issue;
+#   - a pull request labelled `ci:platforms` (every push to it while the label
+#     is on);
+#   - by hand (workflow_dispatch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/**"
+      - "modules/**"
+      - "tools/composer/**"
+      # Every leg runs configure.dart: its steps, the barrels it regenerates
+      # and the toolchain it shells out through.
+      - "tools/workspace_setup/**"
+      - "tools/shared/**"
+      - "tools/barrel_generator/**"
+      - "apps/**"
+      - "pubspec_dependencies.yaml"
+      - ".fvmrc"
+      - ".github/workflows/platforms_full.yml"
+  merge_group:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+# Read-only token; the `report` job alone may write issues.
+permissions:
+  contents: read
+
+# A new push to a labelled PR cancels its older run. Adding some other label
+# runs nothing, so that run gets a group of its own and cancels nothing. The
+# event is in the group: GitHub cancels a *pending* run whenever a newer one
+# queues in its group, so a weekly run sharing main's group with pushes could
+# be dropped silently (a cancelled run is not a failure: no issue opens).
+concurrency:
+  group: platforms-full-${{ github.event_name }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:platforms') && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The matrix, from the manifests. On a pull request it runs only while the
+  # `ci:platforms` label is on (and, for a `labeled` event, only when that is
+  # the label just added); every other job needs it.
+  plan:
+    name: Plan the matrix
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'ci:platforms') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ci:platforms'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      rows: ${{ steps.matrix.outputs.rows }}
+      web_apps: ${{ steps.matrix.outputs.web_apps }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+          # No lockfile is committed, so the default key (it hashes
+          # **/pubspec.lock) never changes: key the pub cache on what decides
+          # the versions instead.
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # One row per (app, declared android / ios / windows / macos):
+      # {"app","platform","os","flavor","boot"}. `boot` is `firebase` where the
+      # derived push is on: that leg boots only when the real Firebase files
+      # can be restored (FIREBASE_CONFIG_ARCHIVE). `web_apps` is the apps that
+      # declare web, for `web-release`.
+      - name: Rows (from the manifests, RULE-83)
+        id: matrix
+        run: |
+          set -euo pipefail
+          rows=$(dart tools/composer/composer.dart describe --ci-matrix full)
+          web=$(dart tools/composer/composer.dart describe --ci-matrix pr \
+            | python3 -c 'import json,sys;print(" ".join(r["app"] for r in json.load(sys.stdin) if r["web"]))')
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          echo "web_apps=$web" >> "$GITHUB_OUTPUT"
+
+  boot:
+    name: ${{ matrix.app }} on ${{ matrix.platform }}
+    needs: plan
+    if: needs.plan.outputs.rows != '[]'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.rows) }}
+    env:
+      HAS_FIREBASE: ${{ secrets.FIREBASE_CONFIG_ARCHIVE != '' }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # AGP 9 / Gradle 9 need JDK 17+ (apps/mobile/android/app/build.gradle.kts).
+      - name: Set up Java
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v6
+        with:
+          distribution: "oracle"
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
+
+      # FIREBASE_CONFIG_ARCHIVE: a base64 tar.gz of the app's gitignored
+      # Firebase files (lib/firebase/firebase_options_*.dart,
+      # android/app/src/<flavor>/google-services.json,
+      # ios/flavors/<flavor>/GoogleService-Info.plist), relative to apps/<id>/. Restored
+      # before configure: --stub-firebase writes a stub only where a file is
+      # absent, so the real ones are kept.
+      - name: Real Firebase files (only where push is on and the secret exists)
+        if: matrix.boot == 'firebase' && env.HAS_FIREBASE == 'true'
+        env:
+          FIREBASE_CONFIG_ARCHIVE: ${{ secrets.FIREBASE_CONFIG_ARCHIVE }}
+        run: printf '%s' "$FIREBASE_CONFIG_ARCHIVE" | base64 --decode | tar -xz -C "apps/${{ matrix.app }}"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # Before configure: its last step (`composer runners`) is what reads
+      # this cache, and what fills it on a miss (saved when the job ends).
+      - name: The sqlite3.wasm cache (composer runners)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flutter_monorepo/sqlite3
+          key: sqlite3-wasm-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      # Exactly what an adopter runs on a fresh clone: codegen, the Firebase
+      # stubs, then `composer runners` (every gitignored scaffold runner).
+      - name: Set up the workspace (codegen, stubs) and generate the runners
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
+
+      # The other caches are restored after configure: its flutter clean
+      # wipes .dart_tool and build/.
+      - name: Native build-hook downloads (sqlite3)
+        uses: actions/cache@v6
+        with:
+          path: .dart_tool/hooks_runner/shared
+          key: hooks-runner-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      - name: CocoaPods
+        if: matrix.platform == 'ios'
+        uses: actions/cache@v6
+        with:
+          path: apps/${{ matrix.app }}/ios/Pods
+          key: pods-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/ios/Podfile', matrix.app), 'pubspec_dependencies.yaml') }}
+
+      # Plugins' native SDKs the Windows build downloads and extracts.
+      - name: Windows extracted SDKs
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v6
+        with:
+          path: apps/${{ matrix.app }}/build/windows/x64/extracted
+          key: windows-extracted-${{ matrix.app }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      - name: Boot on ${{ matrix.platform }}
+        if: matrix.platform == 'macos' || matrix.platform == 'windows'
+        working-directory: apps/${{ matrix.app }}
+        run: flutter test integration_test/boot_test.dart -d ${{ matrix.platform }} --dart-define-from-file=env.dev ${{ matrix.flavor }}
+
+      # The build always runs. The boot needs a simulator, and with push on
+      # (`boot: firebase`) the real Firebase files: the stubs only compile.
+      - name: iOS — build for the simulator, boot when it can
+        if: matrix.platform == 'ios'
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          flutter build ios --simulator --debug ${{ matrix.flavor }} --dart-define-from-file=env.dev
+          if [ "$HAS_FIREBASE" = true ] || [ "${{ matrix.boot }}" = test ]; then
+            UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys;d=json.load(sys.stdin)["devices"];print(next(x["udid"] for k in d for x in d[k] if "iPhone" in x["name"]))')
+            xcrun simctl boot "$UDID"
+            flutter test integration_test/boot_test.dart -d "$UDID" ${{ matrix.flavor }} --dart-define-from-file=env.dev
+          else
+            echo "::notice::${{ matrix.app }} on iOS: built, not booted — push is on and FIREBASE_CONFIG_ARCHIVE is not set."
+          fi
+
+      - name: Android — APK
+        if: matrix.platform == 'android'
+        working-directory: apps/${{ matrix.app }}
+        run: flutter build apk --debug ${{ matrix.flavor }} --dart-define-from-file=env.dev
+
+      - name: Android — no emulator boot without the real Firebase files
+        if: matrix.platform == 'android' && matrix.boot == 'firebase' && env.HAS_FIREBASE != 'true'
+        run: echo "::notice::${{ matrix.app }} on Android — built, not booted. Push is on and FIREBASE_CONFIG_ARCHIVE is not set."
+
+      # The emulator needs hardware acceleration: let the runner user open
+      # /dev/kvm.
+      - name: Android — enable KVM
+        if: matrix.platform == 'android' && (matrix.boot == 'test' || env.HAS_FIREBASE == 'true')
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # `script` is one line: the action runs each line of a multi-line
+      # script as its own command.
+      - name: Android — boot on the emulator
+        if: matrix.platform == 'android' && (matrix.boot == 'test' || env.HAS_FIREBASE == 'true')
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          working-directory: apps/${{ matrix.app }}
+          script: flutter test integration_test/boot_test.dart ${{ matrix.flavor }} --dart-define-from-file=env.dev
+
+  # A release-only regression (tree shaking, minification, dart2wasm) never
+  # shows in the PR's debug `flutter drive`. Compile only: the boot proof is
+  # the PR job's.
+  web-release:
+    name: Web release and Wasm builds
+    needs: plan
+    if: needs.plan.outputs.web_apps != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+          pub-cache-key: flutter-pub-:os:-:version:-${{ hashFiles('pubspec_dependencies.yaml', '**/pubspec.yaml') }}
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: The sqlite3.wasm cache (composer runners)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flutter_monorepo/sqlite3
+          key: sqlite3-wasm-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      - name: Set up the workspace (codegen, stubs) and generate the runners
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
+
+      - name: Native build-hook downloads (sqlite3)
+        uses: actions/cache@v6      # after configure: its flutter clean wipes .dart_tool
+        with:
+          path: .dart_tool/hooks_runner/shared
+          key: hooks-runner-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
+      - name: Build every web app (release, then Wasm)
+        env:
+          WEB_APPS: ${{ needs.plan.outputs.web_apps }}
+        run: |
+          set -euo pipefail
+          for app in $WEB_APPS; do
+            echo "::group::apps/$app"
+            (cd "apps/$app" \
+              && flutter build web --release --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev \
+              && flutter build web --release --wasm --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev)
+            echo "::endgroup::"
+          done
+
+  # Nobody watches a weekly run: a scheduled failure opens the issue
+  # "Platforms (full matrix) failing", or comments on it while it is open.
+  report:
+    name: Report a scheduled failure
+    needs: [plan, boot, web-release]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      issues: write
+      actions: read     # list this run's failed jobs
+
+    steps:
+      - name: Open or update the issue
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = 'Platforms (full matrix) failing';
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner, repo, run_id: context.runId, per_page: 100,
+            });
+            const failed = jobs
+              .filter((j) => j.conclusion === 'failure')
+              .map((j) => `- [${j.name}](${j.html_url})`);
+            const body = [
+              `The scheduled run of \`platforms_full.yml\` failed: ${runUrl}`,
+              '',
+              'Failed legs:',
+              ...(failed.length ? failed : ['- (none listed: see the run)']),
+            ].join('\n');
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const existing = open.find((i) => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+              core.info(`Commented on #${existing.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Opened #${created.data.number}`);
+            }

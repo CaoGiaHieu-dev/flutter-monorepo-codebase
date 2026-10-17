@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "welcomeBack": "Welcome Back",
+  "signIn": "Sign In",
+  "enterYourEmail": "Enter your email",
+  "enterYourPassword": "Enter your password",
+  "fieldRequired": "This field is required"
+}

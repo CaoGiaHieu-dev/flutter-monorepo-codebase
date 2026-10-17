@@ -1,0 +1,792 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
+
+import '../module_generator/src/common_helpers.dart';
+import '../module_generator/src/module_type.dart';
+import 'support/composer_fixture.dart';
+import 'support/tool_harness.dart';
+
+/// `composer new`: a third app by command.
+///
+/// Run in a throwaway workspace that carries the real `app_template/` next to
+/// the fixture packages, so the tests prove what the command is for:
+///
+/// - the app it writes passes `verify` at once, and `capabilities:` is derived
+///   from what the requested modules register — absent ones carry the
+///   catalog's `whenAbsent` text, never `TODO`;
+/// - it refuses an existing id, a platform a requested module blocks, an
+///   unknown module or platform, and in each case **writes nothing**;
+/// - it generates no runner: no runner folder appears, every platform is
+///   `runner: scaffold`, the `.gitignore` `runners` region lists them, and
+///   the next steps name `composer runners` and the boot test (RULE-83).
+void main() {
+  late CompiledTool composer;
+
+  setUpAll(() async {
+    composer = await CompiledTool.compile('tools/composer/composer.dart');
+  });
+  tearDownAll(() => composer.dispose());
+
+  /// The packages every new app composes, as empty pubspecs: `new` needs them
+  /// on disk, not their contents.
+  const shared = {
+    'platform/infra/network': 'core_network',
+    'platform/infra/storage': 'core_storage',
+    'platform/foundation/contracts': 'core_di',
+    'platform/shell/adapters': 'platform_shell_adapters',
+    'platform/ui/design_system': 'core_base_ui',
+    'platform/layers/domain': 'domain_core',
+    'platform/layers/data': 'data_core',
+    'platform/state/provider': 'provider_state_management',
+    'platform/state/bloc': 'bloc_state_management',
+  };
+
+  /// A `core_database` that still declares `platforms:` without web — the
+  /// repository's declares none any more (the web opens drift's wasm build),
+  /// but an adopter's package that wraps a native-only SDK does, and V7's
+  /// refusal must stay covered.
+  const databasePubspec =
+      'name: core_database\n'
+      'platforms:\n'
+      '  android:\n'
+      '  ios:\n'
+      '  macos:\n'
+      '  windows:\n'
+      '  linux:\n';
+
+  /// The real app template, copied into the workspace.
+  Map<String, String> template() {
+    final dir = Directory(
+      p.join(repoRoot, 'tools', 'composer', 'app_template'),
+    );
+    return {
+      for (final file in dir.listSync(recursive: true).whereType<File>())
+        p.posix.join(
+          'tools/composer/app_template',
+          p.posix.joinAll(p.split(p.relative(file.path, from: dir.path))),
+        ): file
+            .readAsStringSync(),
+    };
+  }
+
+  /// The `demo` app, composing `foo` (registers `session` and `routes`) and
+  /// `bar` (opens a database, so it links `core_database`), so that nothing in
+  /// the workspace is left uncomposed for `verify` to complain about.
+  String demoWithDatabase() =>
+      demoManifest(
+            modules:
+                '  - { id: foo, layers: [domain, feature] }\n'
+                '  - { id: bar, layers: [data] }\n',
+          )
+          .replaceFirst(
+            'packages: [core_common]',
+            'packages: [core_common, core_database]',
+          )
+          .replaceFirst(
+            '  - name: feature\n',
+            '  - name: data\n    phase: after\n    from_modules: data\n'
+                '    why: "implements the domain interfaces"\n'
+                '  - name: feature\n',
+          );
+
+  /// The `demo` workspace plus everything `new` composes — the shared
+  /// packages, the template, a module that opens a database and a pubspec
+  /// catalog — already synced, as a repository is.
+  Future<TempWorkspace> workspace() async {
+    final ws = TempWorkspace.create({
+      ...demoWorkspaceFiles(
+        manifest: demoWithDatabase(),
+        extra: {
+          for (final entry in shared.entries) ...{
+            '${entry.key}/pubspec.yaml': 'name: ${entry.value}\n',
+            '${entry.key}/lib/di/module.dart': diModule(),
+          },
+          'platform/infra/database/pubspec.yaml': databasePubspec,
+          'platform/infra/database/lib/di/module.dart': diModule(),
+          'modules/bar/data/pubspec.yaml':
+              'name: data_bar\n'
+              'dependencies:\n'
+              '  core_database:\n'
+              '    path: ../../../platform/infra/database\n',
+          'modules/bar/data/lib/di/module.dart': diModule(),
+          'pubspec_dependencies.yaml':
+              'dependencies:\n'
+              '  injectable: "^3.0.0"\n'
+              'dev_dependencies:\n'
+              '  flutter_secure_storage: "11.2.0"\n'
+              '  shared_preferences: "^2.5.5"\n'
+              '  build_runner: "^2.16.0"\n'
+              '  injectable_generator: "^3.1.3"\n'
+              '  flutter_lints: "^6.0.0"\n',
+        },
+      ),
+      ...template(),
+    });
+    expect(
+      await composer.run(['sync'], workingDirectory: ws.root),
+      exitsWith(0),
+    );
+    return ws;
+  }
+
+  Future<ToolRun> run(TempWorkspace ws, List<String> args) =>
+      composer.run(args, workingDirectory: ws.root);
+
+  /// Every file under the workspace with its content, so a refusal can be shown
+  /// to have changed nothing.
+  Map<String, String> snapshot(TempWorkspace ws) => {
+    for (final file in Directory(ws.root).listSync(recursive: true))
+      if (file is File)
+        p.relative(file.path, from: ws.root): file.readAsStringSync(),
+  };
+
+  group('a new app', () {
+    test('is written, composed and passes verify at once', () async {
+      final ws = await workspace();
+      final result = await run(ws, [
+        'new',
+        'reports',
+        '--name',
+        'Codebase Reports',
+        '--platforms',
+        'web,windows',
+        '--modules',
+        'foo',
+      ]);
+      expect(result, exitsWith(0));
+
+      for (final file in [
+        'app_manifest.yaml',
+        'pubspec.yaml',
+        'README.md',
+        'env.dev',
+        '.gitignore',
+        'lib/main.dart',
+        'lib/app/app_profile.dart',
+        'lib/app/app_hooks.dart',
+        'lib/di/injection.dart',
+        'test/di_smoke_test.dart',
+        'test/app_profile_test.dart',
+        'integration_test/boot_test.dart',
+        'test_driver/integration_test.dart',
+      ]) {
+        expect(ws.exists('apps/reports/$file'), isTrue, reason: file);
+      }
+
+      // The boot test waits until the first screen is drawn (RULE-83), and
+      // runs this app's own main().
+      final boot = ws.read('apps/reports/integration_test/boot_test.dart');
+      expect(boot, contains("import 'package:reports_app/main.dart' as app;"));
+      expect(boot, contains('stage = debugBootStage();'));
+      expect(boot, contains('IntegrationTestWidgetsFlutterBinding'));
+      // It restores FlutterError.onError, which flutter_test does not
+      // re-export: without the import the boot test does not compile.
+      expect(boot, contains('FlutterError.onError'));
+      expect(boot, contains("import 'package:flutter/foundation.dart';"));
+      expect(
+        ws.read('apps/reports/test_driver/integration_test.dart'),
+        contains('Future<void> main() => integrationDriver();'),
+      );
+      expect(
+        ws.read('apps/reports/pubspec.yaml'),
+        contains('  integration_test:\n    sdk: flutter\n'),
+      );
+
+      // The smoke test builds every @injectable factory, not only the lazy
+      // singletons (RULE-63): a factory with an unregistered dependency must
+      // fail it.
+      final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
+      expect(smoke, contains('instantiateLazySingletons: true'));
+      expect(smoke, contains('FactoryRecorder(getIt)'));
+      expect(smoke, contains('recorder.buildEvery('));
+      expect(smoke, contains('_factoriesNeedingArguments'));
+      expect(smoke, isNot(contains('callFactories')));
+
+      expect(await run(ws, ['verify']), exitsWith(0));
+      final describe = await run(ws, ['describe', '--app', 'reports']);
+      expect(describe, exitsWith(0));
+      expect(describe.stdout, contains('## reports — Codebase Reports'));
+    });
+
+    test('has its generated regions filled in', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'reports',
+          '--platforms',
+          'web,windows',
+          '--modules',
+          'foo',
+        ]),
+        exitsWith(0),
+      );
+
+      expect(
+        ws.read('apps/reports/lib/app/app_profile.dart'),
+        contains("const AppFacts appFacts = AppFacts(\n  id: 'reports',"),
+      );
+      expect(
+        ws.read('apps/reports/lib/di/injection.dart'),
+        contains('Future<void> configureDependencies'),
+      );
+      expect(
+        ws.read('apps/reports/pubspec.yaml'),
+        contains('feature_foo:'),
+        reason: 'the requested module is a dependency',
+      );
+      expect(
+        ws.read('pubspec.yaml'),
+        contains('apps/reports'),
+        reason: 'and the app joins the root workspace',
+      );
+      expect(
+        ws.read('apps/reports/README.md'),
+        contains('## reports — Reports'),
+        reason: 'the name defaults to the id, title-cased',
+      );
+    });
+
+    test('writes app.org: com.example by default, --org when given', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'plain', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/plain/app_manifest.yaml'),
+        contains('  org: com.example '),
+      );
+      expect(
+        await run(ws, [
+          'new',
+          'desk',
+          '--platforms',
+          'linux',
+          '--org',
+          'com.acme',
+        ]),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/desk/app_manifest.yaml'),
+        contains('  org: com.acme '),
+      );
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test(
+      'ignores its generated runners, filled in by the sync it runs',
+      () async {
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'reports', '--platforms', 'web,windows,linux']),
+          exitsWith(0),
+        );
+        expect(
+          ws.read('apps/reports/.gitignore'),
+          contains(
+            '# composer:managed:runners — generated from app_manifest.yaml\n'
+            '/web/\n'
+            '/windows/\n'
+            '/linux/\n'
+            '# composer:end:runners\n',
+          ),
+        );
+      },
+    );
+
+    test('ignores the Firebase project files an app may generate', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'reports',
+          '--platforms',
+          'windows',
+          '--modules',
+          'foo',
+        ]),
+        exitsWith(0),
+      );
+
+      final ignore = ws.read('apps/reports/.gitignore').split('\n');
+      // `tools/firebase/firebase_config.dart` writes
+      // lib/firebase/firebase_options_<flavor>.dart into any app that adopts
+      // push; it carries project identifiers and must not be committable.
+      for (final entry in [
+        'firebase_options_*.dart',
+        'google-services.json',
+        'env.prod',
+      ]) {
+        expect(ignore, contains(entry), reason: entry);
+      }
+    });
+
+    test('derives its capabilities from what the modules register', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'reports',
+          '--platforms',
+          'windows',
+          '--modules',
+          'foo',
+        ]),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/reports/app_manifest.yaml');
+
+      // `foo` registers the session bundle and `routes`.
+      expect(manifest, contains('  session: provided\n'));
+      expect(manifest, contains('  routes: provided\n'));
+      // Nothing registers a splash: absent, and the reason says what is true
+      // of the app — no module composes it — never what the shell does
+      // without it (the report's "If absent" column says that, once). Not a
+      // placeholder `TODO`, either: `verify` passes.
+      expect(
+        manifest,
+        contains(
+          '  splash: { state: absent, reason: '
+          '"not composed: no module this app composes registers '
+          '`IAppSplashScreen` — replace this with why the app goes without" }\n',
+        ),
+      );
+      expect(manifest, isNot(contains('the native splash is kept')));
+      expect(manifest, isNot(contains('TODO')));
+      expect(manifest, isNot(contains('TBD')));
+      // Every platform is a runner still to be created.
+      expect(manifest, contains('  windows: { runner: scaffold }\n'));
+    });
+
+    test('a bundle is described once, as a bundle, not by one member', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'bare', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/bare/app_manifest.yaml');
+
+      // The members of the `session` bundle share one key: the reason names
+      // them all, instead of copying the sentence of the first to the rest.
+      expect(
+        manifest,
+        contains(
+          'not composed: no module this app composes registers the '
+          '`session` contracts (ISessionState, ISessionGateway)',
+        ),
+      );
+      // And the report keeps what the shell does without it in its own column.
+      final report = ws.read('apps/bare/README.md');
+      expect(report, contains('### 6. Decisions to revisit before shipping'));
+      expect(
+        report,
+        contains('`capabilities.session`: **absent** — not composed:'),
+        reason: 'a placeholder reason is listed until its author decides',
+      );
+    });
+
+    test('with no modules, every optional contract is absent', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'bare', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/bare/app_manifest.yaml');
+      expect(manifest, contains('modules: []'));
+      expect(manifest, contains('  session: { state: absent'));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('says so when no module contributes a screen', () async {
+      final ws = await workspace();
+      final bare = await run(ws, ['new', 'bare', '--platforms', 'linux']);
+      expect(bare, exitsWith(0));
+      expect(bare.output, contains('No composed module contributes a screen'));
+      expect(bare.output, contains('C05'));
+
+      final withScreen = await run(ws, [
+        'new',
+        'shown',
+        '--platforms',
+        'linux',
+        '--modules',
+        'foo',
+      ]);
+      expect(withScreen, exitsWith(0));
+      expect(
+        withScreen.output,
+        isNot(contains('No composed module contributes a screen')),
+      );
+    });
+
+    test('composes core_database when a module links it', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'ledger',
+          '--platforms',
+          'windows',
+          '--modules',
+          'bar',
+        ]),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/ledger/app_manifest.yaml'),
+        contains('- core_database'),
+      );
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test(
+      'the smoke test asks the boot\'s own question, hooks included',
+      () async {
+        // A hand-rolled `validate(...)` call without `hasWindowHook` made P05
+        // fire forever for an app that declared a window and passed the hook.
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+          exitsWith(0),
+        );
+        final smoke = ws.read('apps/kiosk/test/di_smoke_test.dart');
+        expect(
+          smoke,
+          contains('checkDeclaredStarts(appProfile, appHooks)'),
+        );
+        expect(
+          smoke,
+          contains("import 'package:kiosk_app/app/app_hooks.dart';"),
+        );
+        expect(smoke, isNot(contains('appProfile.validate(')));
+      },
+    );
+
+    test('an app with no modules can be given one by the generator', () async {
+      // `modules: []` is what `new` writes for an app with none; the generator
+      // used to roll back with "no `modules:` list in the expected format".
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+        exitsWith(0),
+      );
+      CommonHelpers.registerInAppManifests(
+        'feature_panel',
+        ModuleType.feature,
+        'panel',
+        apps: const ['kiosk'],
+        root: ws.root,
+      );
+      expect(
+        ws.read('apps/kiosk/app_manifest.yaml'),
+        contains('modules:\n  - { id: panel, layers: [feature] }'),
+      );
+    });
+
+    test('says how to give the new app a module of its own', () async {
+      final ws = await workspace();
+      final result = await run(ws, ['new', 'bare', '--platforms', 'linux']);
+      expect(result, exitsWith(0));
+      expect(
+        result.output,
+        contains('--apps bare'),
+        reason: 'without --apps the generator adds the module to every app',
+      );
+    });
+
+    test('gives the smoke test of a database app its own doubles', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'ledger',
+          '--platforms',
+          'windows',
+          '--modules',
+          'bar',
+        ]),
+        exitsWith(0),
+      );
+      final smoke = ws.read('apps/ledger/test/di_smoke_test.dart');
+      expect(smoke, contains("import 'dart:io';"));
+      expect(smoke, contains("import 'package:flutter/services.dart';"));
+      expect(
+        smoke,
+        contains("import 'package:drift/drift.dart' show GeneratedDatabase;"),
+      );
+      expect(smoke, contains('plugins.flutter.io/path_provider'));
+      expect(smoke, contains('getIt.findAll<GeneratedDatabase>()'));
+      expect(ws.read('apps/ledger/pubspec.yaml'), contains('  drift: '));
+
+      // An app that links no database carries none of it.
+      expect(
+        await run(ws, ['new', 'plain', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      final plain = ws.read('apps/plain/test/di_smoke_test.dart');
+      expect(plain, isNot(contains('path_provider\')')));
+      expect(plain, isNot(contains('GeneratedDatabase')));
+      // `MethodChannel` is the path_provider double's; unused, it fails Gate 2.
+      expect(plain, isNot(contains('flutter/services.dart')));
+      expect(ws.read('apps/plain/pubspec.yaml'), isNot(contains('drift')));
+    });
+
+    test(
+      'decides the pin of staging and prod where a platform can pin',
+      () async {
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'phone', '--platforms', 'android,ios']),
+          exitsWith(0),
+        );
+        final manifest = ws.read('apps/phone/app_manifest.yaml');
+        expect(
+          manifest,
+          contains('ssl_pinning: { disabled: "no SPKI pins provisioned yet'),
+        );
+        expect(await run(ws, ['verify']), exitsWith(0));
+      },
+    );
+
+    test('decides the pin on a desktop-only app too', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/kiosk/app_manifest.yaml'),
+        contains('ssl_pinning: { disabled: "no SPKI pins provisioned yet'),
+      );
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('states no pin where the only platform is the web', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'web1', '--platforms', 'web']),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/web1/app_manifest.yaml');
+      // No `ssl_pinning:` key line (the comment beside `prod:` names the key).
+      expect(
+        manifest,
+        isNot(matches(RegExp(r'^\s+ssl_pinning:', multiLine: true))),
+      );
+      expect(manifest, contains('the only platform is the web'));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('sorts the smoke test imports for its own id', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'zeta', '--platforms', 'windows']),
+        exitsWith(0),
+      );
+      final smoke = ws.read('apps/zeta/test/di_smoke_test.dart');
+      final imports = [
+        for (final line in smoke.split('\n'))
+          if (line.startsWith('import ')) line,
+      ];
+      expect(imports, [...imports]..sort());
+      expect(
+        imports.indexOf("import 'package:zeta_app/di/injection.dart';"),
+        greaterThan(
+          imports.indexOf(
+            "import 'package:shared_preferences/shared_preferences.dart';",
+          ),
+        ),
+      );
+    });
+
+    test(
+      'boots every declared platform but the web in its smoke test',
+      () async {
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'reports', '--platforms', 'web,windows']),
+          exitsWith(0),
+        );
+        final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
+        expect(
+          smoke,
+          contains(
+            'for (final platform in _bootedOnTheVm(appFacts.platforms.keys))',
+          ),
+        );
+        expect(smoke, contains('(p) => p != AppPlatform.web'));
+        expect(smoke, contains('for (final flavor in appFacts.flavors)'));
+        expect(smoke, contains('debugAppPlatformOverride = platform;'));
+        expect(
+          smoke,
+          contains('debugDefaultTargetPlatformOverride = _targetOf(platform);'),
+        );
+        expect(
+          smoke,
+          contains('registerAppProfile(appProfile, platform: platform);'),
+        );
+        expect(smoke, contains("import 'package:flutter/foundation.dart';"));
+        expect(smoke, isNot(contains('const _platform')));
+      },
+    );
+
+    test('a web-only app still boots its graph on the VM, with the web\'s '
+        'facts, instead of running no boot at all', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'web']),
+        exitsWith(0),
+      );
+      final smoke = ws.read('apps/kiosk/test/di_smoke_test.dart');
+      // Every declared platform but the web — or, with none left, the web.
+      expect(
+        smoke,
+        contains('return native.isEmpty ? declared : native;'),
+      );
+      // The plugins then see the VM's default; nothing throws for the web.
+      expect(smoke, contains('AppPlatform.web => null,'));
+      expect(smoke, isNot(contains('throw StateError')));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+  });
+
+  group('generates no runner', () {
+    test('writes no runner folder and names composer runners next', () async {
+      final ws = await workspace();
+      final result = await run(ws, [
+        'new',
+        'reports',
+        '--platforms',
+        'web,windows',
+        '--modules',
+        'foo',
+      ]);
+      expect(result, exitsWith(0));
+
+      for (final folder in ['web', 'windows', 'android', 'ios', 'linux']) {
+        expect(ws.exists('apps/reports/$folder'), isFalse, reason: folder);
+      }
+      expect(result.output, contains('composer runners'));
+      expect(
+        result.output,
+        contains('  dart tools/composer/composer.dart runners --app reports'),
+      );
+      // The boot proof of each platform: flutter test on the desktop, flutter
+      // drive on the web.
+      expect(
+        result.output,
+        contains(
+          '  flutter test integration_test/boot_test.dart -d windows '
+          '--dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev',
+        ),
+      );
+      expect(
+        result.output,
+        contains(
+          'flutter drive --driver=test_driver/integration_test.dart '
+          '--target=integration_test/boot_test.dart -d web-server',
+        ),
+      );
+      expect(result.output, isNot(contains('flutter create')));
+      expect(result.output, contains('Only `env.dev` is written.'));
+    });
+  });
+
+  group('refuses, and writes nothing', () {
+    Future<void> refused(
+      List<String> args,
+      Matcher message, {
+      int exitCode = 1,
+    }) async {
+      final ws = await workspace();
+      final before = snapshot(ws);
+      final result = await run(ws, args);
+      expect(result, exitsWith(exitCode));
+      expect(result.output, message);
+      expect(snapshot(ws), before, reason: 'a refusal must leave no trace');
+    }
+
+    test('an id that is already an app', () async {
+      await refused(
+        ['new', 'demo', '--platforms', 'web'],
+        contains('app id `demo`: already the id of an app'),
+      );
+    });
+
+    test('a platform a requested module blocks', () async {
+      await refused(
+        ['new', 'ledger', '--platforms', 'web,windows', '--modules', 'bar'],
+        allOf(
+          contains('core_database does not support web'),
+          contains('module `bar` links it (data_bar -> core_database)'),
+        ),
+      );
+    });
+
+    test('an unknown module', () async {
+      await refused(
+        ['new', 'reports', '--platforms', 'web', '--modules', 'nope'],
+        contains('no module named `nope`'),
+      );
+    });
+
+    test('an unknown platform', () async {
+      await refused(
+        ['new', 'reports', '--platforms', 'amiga'],
+        contains('`amiga` is not a platform'),
+      );
+    });
+
+    test('an id that is not a package name', () async {
+      await refused(
+        ['new', 'Reports', '--platforms', 'web'],
+        contains('app id `Reports`'),
+      );
+    });
+
+    test('a name that would break the files it is written into', () async {
+      await refused(
+        ['new', 'reports', '--platforms', 'web', '--name', 'Bob\'s "Reports"'],
+        contains('--name: expected a display name without quotes'),
+      );
+    });
+
+    test('an org that is not a reverse domain', () async {
+      await refused(
+        ['new', 'reports', '--platforms', 'web', '--org', 'Acme'],
+        contains('--org: expected a reverse domain such as `com.acme`'),
+      );
+    });
+
+    test('a missing --platforms', () async {
+      await refused(
+        ['new', 'reports'],
+        contains('`new` needs `--platforms`'),
+        exitCode: 64,
+      );
+    });
+
+    test('a missing id', () async {
+      await refused(
+        ['new', '--platforms', 'web'],
+        contains('`new` needs an app id'),
+        exitCode: 64,
+      );
+    });
+
+    test('an app template that is not there', () async {
+      final ws = await workspace();
+      Directory(p.join(ws.root, 'tools', 'composer', 'app_template'))
+          .deleteSync(recursive: true);
+      final before = snapshot(ws);
+      final result = await run(ws, ['new', 'reports', '--platforms', 'web']);
+      expect(result, exitsWith(1));
+      expect(result.output, contains('the app template is not at'));
+      expect(snapshot(ws), before);
+    });
+  });
+}

@@ -1,0 +1,8 @@
+{
+  "@@locale": "vi",
+  "welcomeBack": "Chào mừng trở lại",
+  "signIn": "Đăng nhập",
+  "enterYourEmail": "Nhập email của bạn",
+  "enterYourPassword": "Nhập mật khẩu",
+  "fieldRequired": "Trường này là bắt buộc"
+}

@@ -1,0 +1,41 @@
+{{#bootTestImports}}
+{{{line}}}
+{{/bootTestImports}}
+
+/// RULE-83: on the device this runs on, `main()` reaches its first screen and
+/// that screen is drawn — not merely built. Run per platform:
+///   flutter test integration_test/boot_test.dart -d linux|macos|windows|<simulator> \
+///     --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+///   flutter drive --driver=test_driver/integration_test.dart \
+///     --target=integration_test/boot_test.dart -d web-server --headless \
+///     --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('boots to its first screen, and the screen is shown', (
+    tester,
+  ) async {
+    // runShellApp installs the shell's error hooks; the test binding needs
+    // its own back before the test ends.
+    final onError = FlutterError.onError;
+    app.main();
+    var stage = BootStage.starting;
+    for (var i = 0; i < 240 && stage == BootStage.starting; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+      stage = debugBootStage();
+    }
+    FlutterError.onError = onError;
+    expect(
+      stage,
+      BootStage.shown,
+      reason: switch (stage) {
+        BootStage.failed =>
+          'the boot stopped at its error screen (see the log above)',
+        BootStage.starting =>
+          'no first screen within 60 s: still booting, or built '
+              'with its frames deferred — a blank screen',
+        BootStage.shown => '',
+      },
+    );
+  });
+}

@@ -1,0 +1,167 @@
+import 'dart:async';
+
+import 'package:core_ui_kit/core_ui_kit.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
+
+/// Mirrors the app shell: a router app whose `builder` wraps the Router in
+/// an Overlay hosting [AppOverlayInitializer].
+Future<GoRouter> _pumpApp(WidgetTester tester) async {
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => const Scaffold(body: Text('first')),
+        routes: [
+          GoRoute(
+            path: 'second',
+            builder: (_, _) => const Scaffold(body: Text('second')),
+          ),
+        ],
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+
+  await tester.pumpWidget(
+    MaterialApp.router(
+      routerConfig: router,
+      builder: (context, child) =>
+          Overlay.wrap(child: AppOverlayInitializer(child: child!)),
+    ),
+  );
+  // The overlay is created at the end of the first frame.
+  await tester.pump();
+
+  // push completes only when /second pops — pumping drives the navigation.
+  unawaited(router.push('/second'));
+  await tester.pumpAndSettle();
+  expect(find.text('second'), findsOneWidget);
+  return router;
+}
+
+class _LabelDialog extends OverlayDialogWidget {
+  const _LabelDialog(this.label, this.states);
+
+  final String label;
+  final Map<String, OverlayDialogState<OverlayDialogWidget>> states;
+
+  @override
+  OverlayDialogState<OverlayDialogWidget> createState() => _LabelDialogState();
+}
+
+class _LabelDialogState extends OverlayDialogState<_LabelDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.states[widget.label] = this;
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(widget.label);
+}
+
+void main() {
+  group('OverlayDialogState.closeDialog', () {
+    testWidgets('closes its own dialog and never the one shown after it', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      final states = <String, OverlayDialogState<OverlayDialogWidget>>{};
+
+      String? firstResult;
+      var secondClosed = false;
+      unawaited(
+        AppOverlay.showDialog<String>(
+          builder: (_) => _LabelDialog('first dialog', states),
+        ).then((result) => firstResult = result),
+      );
+      unawaited(
+        AppOverlay.showDialog<void>(
+          builder: (_) => _LabelDialog('second dialog', states),
+        ).then((_) => secondClosed = true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('first dialog'), findsOneWidget);
+      expect(find.text('second dialog'), findsNothing);
+
+      final first = states['first dialog']!;
+      first.closeDialog('done');
+      await tester.pumpAndSettle();
+
+      expect(firstResult, 'done');
+      expect(find.text('first dialog'), findsNothing);
+      expect(find.text('second dialog'), findsOneWidget);
+
+      // A late call from the first dialog (a stale callback) must not close
+      // the dialog that replaced it.
+      first.closeDialog();
+      await tester.pumpAndSettle();
+
+      expect(find.text('second dialog'), findsOneWidget);
+      expect(secondClosed, isFalse);
+
+      states['second dialog']!.closeDialog();
+      await tester.pumpAndSettle();
+      expect(find.text('second dialog'), findsNothing);
+      expect(secondClosed, isTrue);
+    });
+  });
+
+  group('AppOverlay dialog system back', () {
+    testWidgets('a non-dismissible dialog swallows the back', (tester) async {
+      await _pumpApp(tester);
+
+      // show completes only when the dialog closes, which this test forbids.
+      unawaited(
+        AppOverlay.showDialog<void>(builder: (_) => const Text('dialog')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('dialog'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('dialog'), findsOneWidget);
+      expect(find.text('second'), findsOneWidget);
+    });
+
+    testWidgets('a barrierDismissible dialog is dismissed by the back', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+
+      var closed = false;
+      // Observed through `closed`; awaiting here would wait for the back.
+      unawaited(
+        AppOverlay.showDialog<void>(
+          barrierDismissible: true,
+          builder: (_) => const Text('dialog'),
+        ).then((_) => closed = true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('dialog'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('dialog'), findsNothing);
+      expect(closed, isTrue);
+      // The page behind the dialog was not popped.
+      expect(find.text('second'), findsOneWidget);
+    });
+
+    testWidgets('with no dialog visible the back pops the page', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('second'), findsNothing);
+      expect(find.text('first'), findsOneWidget);
+    });
+  });
+}

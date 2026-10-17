@@ -1,0 +1,213 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
+
+import 'manifest_v2.dart';
+
+/// What a composed package says about itself in its own `pubspec.yaml`, in two
+/// keys pub accepts and validates nothing about (so composer does):
+///
+/// ```yaml
+/// platforms: [android, ios, macos, web]    # where the package links (V7)
+/// composition:
+///   push_platforms: [android, ios, macos, web]  # where it delivers push (V8)
+///   app_provides:                          # what the app must register for it
+///     FirebaseOptions:
+///       per_flavor: true
+///       hint: "apps/<id>/lib/firebase/firebase_module.dart ..."
+/// ```
+///
+/// All are read by the app report. `platforms:` is also what the report names
+/// when it says what blocks a platform the app does not declare;
+/// `composition.push_platforms` is what the `push` derivation and check V8
+/// read — a package can link on a platform where it delivers no push.
+
+/// One thing a package needs the app to register.
+class AppProvides {
+  const AppProvides({
+    required this.type,
+    required this.perFlavor,
+    required this.hint,
+  });
+
+  /// The Dart type the app registers (`FirebaseOptions`).
+  final String type;
+
+  /// An `@Environment('<flavor>')` registration for every declared flavor.
+  final bool perFlavor;
+
+  /// Where and how, in a sentence. Not checked.
+  final String hint;
+}
+
+/// A package's facts.
+class PackageFacts {
+  const PackageFacts({
+    required this.name,
+    required this.platforms,
+    required this.appProvides,
+    this.pushPlatforms,
+    this.pubspec = '',
+    this.dependencies = const [],
+  });
+
+  final String name;
+
+  /// Repo-relative path of the package's `pubspec.yaml`.
+  final String pubspec;
+
+  /// The platforms the package works on, in canonical order; null when the
+  /// package declares no restriction.
+  final List<String>? platforms;
+
+  final List<AppProvides> appProvides;
+
+  /// Where the package delivers push (`composition.push_platforms`), in the
+  /// order the pubspec lists them (messages quote it as written); null when
+  /// it says nothing, and then it pushes wherever it links.
+  final List<String>? pushPlatforms;
+
+  /// The package names under `dependencies:` (not `dev_dependencies:`: those
+  /// are not linked into an app's build). V7 follows them so a package
+  /// reached only through another one is held to the same platforms.
+  final List<String> dependencies;
+
+  /// Whether the package works on [platform].
+  bool supports(String platform) =>
+      platforms == null || platforms!.contains(platform);
+
+  /// Whether the package delivers push on [p]: where `push_platforms` lists
+  /// it, or — without that key — wherever it links.
+  bool pushes(String p) => pushPlatforms?.contains(p) ?? supports(p);
+}
+
+/// The platform names of [raw] (a list, or a map keyed by name) — in
+/// canonical order, or as written when [canonical] is false — each problem
+/// added to [problems]. Null when [raw] is neither.
+List<String>? _platformNames(
+  Object? raw,
+  String key,
+  String rel,
+  List<String> problems, {
+  bool canonical = true,
+}) {
+  final items = switch (raw) {
+    YamlList() => raw.nodes.map((n) => n.value).toList(),
+    YamlMap() => raw.keys.toList(),
+    _ => null,
+  };
+  if (items == null) {
+    problems.add(
+      '$rel: $key: expected a list of platform names, got '
+      '${describeValue(raw)}',
+    );
+    return null;
+  }
+  final names = <String>[];
+  for (final item in items) {
+    if (item is String && kPlatformNames.contains(item)) {
+      if (!names.contains(item)) names.add(item);
+    } else {
+      problems.add(
+        '$rel: $key: expected one of ${kPlatformNames.join(', ')}, '
+        'got ${describeValue(item)}',
+      );
+    }
+  }
+  if (!canonical) return names;
+  return [
+    for (final platform in kPlatformNames)
+      if (names.contains(platform)) platform,
+  ];
+}
+
+/// Reads [packageDir]'s pubspec. [rel] is the pubspec's repo-relative path and
+/// each problem is added to [problems] as `<rel>: <key>: <problem>`.
+PackageFacts readPackageFacts(
+  String name,
+  String packageDir,
+  String rel,
+  List<String> problems,
+) {
+  final file = File(p.posix.join(packageDir, 'pubspec.yaml'));
+  Object? doc;
+  try {
+    doc = loadYaml(file.readAsStringSync());
+  } on YamlException {
+    doc = null; // reported by the caller as invalid YAML
+  }
+  if (doc is! YamlMap) {
+    return PackageFacts(
+      name: name,
+      platforms: null,
+      appProvides: const [],
+      pubspec: rel,
+    );
+  }
+
+  final deps = doc['dependencies'];
+  final dependencies = deps is YamlMap
+      ? [
+          for (final key in deps.keys)
+            if (key is String) key,
+        ]
+      : const <String>[];
+
+  final raw = doc['platforms'];
+  final platforms = raw == null
+      ? null
+      : _platformNames(raw, 'platforms', rel, problems);
+
+  List<String>? pushPlatforms;
+  final provides = <AppProvides>[];
+  final composition = doc['composition'];
+  if (composition is YamlMap) {
+    final rawPush = composition['push_platforms'];
+    if (rawPush != null) {
+      pushPlatforms = _platformNames(
+        rawPush,
+        'composition.push_platforms',
+        rel,
+        problems,
+        canonical: false,
+      );
+    }
+    final rawProvides = composition['app_provides'];
+    if (rawProvides is YamlMap) {
+      for (final entry in rawProvides.entries) {
+        final type = entry.key;
+        final value = entry.value;
+        if (type is! String || value is! YamlMap) {
+          problems.add(
+            '$rel: composition.app_provides: expected `<Type>: { per_flavor, '
+            'hint }`, got ${describeValue(value)}',
+          );
+          continue;
+        }
+        final hint = value['hint'];
+        provides.add(
+          AppProvides(
+            type: type,
+            perFlavor: value['per_flavor'] == true,
+            hint: hint is String ? hint : '',
+          ),
+        );
+      }
+    } else if (rawProvides != null) {
+      problems.add(
+        '$rel: composition.app_provides: expected a map, got '
+        '${describeValue(rawProvides)}',
+      );
+    }
+  }
+
+  return PackageFacts(
+    name: name,
+    platforms: platforms,
+    appProvides: provides,
+    pushPlatforms: pushPlatforms,
+    pubspec: rel,
+    dependencies: dependencies,
+  );
+}

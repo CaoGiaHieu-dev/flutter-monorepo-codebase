@@ -7,7 +7,9 @@ Chào mừng bạn đến với tài liệu kỹ thuật cốt lõi của **Code
 
 Dự án này sử dụng **Pub Workspaces** bản địa của Dart, cho phép tối ưu phụ thuộc, độc lập tính năng và tự động hóa CI/CD ngay tại thư mục gốc của dự án.
 
-> **Lưu ý template:** Các package feature / domain / data có sẵn (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language, …) là **mã mẫu tham chiếu** minh họa wiring Clean Architecture. Hãy coi chúng là pattern để copy hoặc xóa khi làm sản phẩm thật — không phải business logic production. Quy tắc cho AI Agent nằm ở [`.agents/AGENTS.md`](.agents/AGENTS.md).
+**Sáu nền tảng.** Android, iOS, web, macOS, Windows và Linux. `apps/mobile` chạy trên Android và iOS (runner được commit, kèm native flavor) và trên web và Linux; `apps/admin` trên web, macOS, Windows và Linux. Mọi runner web và desktop đều do `dart tools/composer/composer.dart runners` sinh — `configure.dart` chạy nó — và git bỏ qua, và mỗi nền tảng đã khai được chứng minh bằng `integration_test/boot_test.dart` của app, đợi đến khi màn hình đầu tiên được vẽ (RULE-83): web và Linux ở mọi pull request, các nền tảng còn lại trong `platforms_full.yml`. Thêm, eject hay gỡ một nền tảng: [`13_app_composition.md` § 7](docs/vi/guides/13_app_composition.md#7-công-thức).
+
+> **Lưu ý template:** Các package feature / domain / data có sẵn (Auth, Cache, Home, Settings, Onboarding, Splash, Dashboard) là **mã mẫu tham chiếu** minh họa wiring Clean Architecture. Hãy coi chúng là pattern để copy hoặc xóa khi làm sản phẩm thật — không phải business logic production. AI Agent bắt đầu từ [`CLAUDE.md`](CLAUDE.md) (Claude Code) hoặc [`.agents/AGENTS.md`](.agents/AGENTS.md) (công cụ khác).
 
 ---
 
@@ -22,42 +24,34 @@ graph TD
     classDef domain fill:#f4faee,stroke:#b5d4a6,stroke-width:2px,color:#333;
     classDef data fill:#fff3e6,stroke:#f5cb99,stroke-width:2px,color:#333;
     classDef app fill:#f0f0f0,stroke:#cccccc,stroke-width:2px,color:#333;
-    classDef serverpod fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#333;
 
-    subgraph AppsLayer ["📱 / 💻 Applications Layer (apps/*)"]
-        direction LR
-        Mobile["📱 Mobile App (apps/mobile/)<br/>Flutter iOS & Android"]:::app
-        Admin["🖥️ Admin Portal (apps/admin/)<br/>Flutter Web Dashboard"]:::app
-        Server["⚡ Backend Server (apps/server/)<br/>Serverpod 4.0 (Pure Dart)"]:::serverpod
-    end
+    App["🚀 Các app (apps/mobile/, apps/admin/)<br/>Mỗi app ghép một tập module riêng"]:::app
 
-    SharedClient["📦 Serverpod Client (packages/serverpod_client/)<br/>RPC & Models dùng chung (app_client)"]:::serverpod
-
-    subgraph FeatureLayer ["🎨 Feature Presentation Layer (packages/features/*)"]
+    subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
         FeatSplash["splash"]:::feature
         FeatAuth["auth"]:::feature
-        FeatHome["home"]:::feature
         FeatDash["dashboard"]:::feature
-        FeatSettings["settings"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (packages/data/*)"]
+    subgraph DataLayer ["🔌 Data Layer (platform/layers/data + modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
-        DataLang["data_language"]:::data
+        DataCache["data_cache"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (packages/domain/*)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (platform/layers/domain + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
-        DomLang["domain_language"]:::domain
+        DomCache["domain_cache"]:::domain
     end
 
-    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (packages/core/*)"]
+    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
         direction LR
+        CoreKern["platform_kernel"]:::core
+        CoreShell["platform_app_shell"]:::core
         CoreUI["core_base_ui"]:::core
         CoreCom["core_common"]:::core
         CoreNet["core_network"]:::core
@@ -66,18 +60,17 @@ graph TD
         CoreDI["core_di"]:::core
         CoreKit["core_ui_kit"]:::core
         CoreResp["core_responsive"]:::core
+        CoreAdapt["platform_shell_adapters"]:::core
         CoreNotif["core_notifications"]:::core
         CoreProv["provider_state_management"]:::core
         CoreBloc["bloc_state_management"]:::core
     end
 
-    %% Applications wiring
-    Mobile -->|"Lắp ráp"| FeatureLayer
-    Mobile -->|"Khởi tạo DI"| DataLayer
-    Mobile -->|"Khởi tạo DI"| CoreLayer
-    Mobile -.->|"Dùng RPC Client"| SharedClient
-    Admin -.->|"Dùng RPC Client"| SharedClient
-    SharedClient -.->|"RPC Protocols"| Server
+    %% Cross-layer Relationships
+    App -->|"Imports & Khởi tạo"| FeatureLayer
+    App -->|"Imports & Khởi tạo"| DataLayer
+    App -->|"Imports & Khởi tạo"| DomainLayer
+    App -->|"Imports & Khởi tạo"| CoreLayer
 
     FeatureLayer -->|"Kích hoạt UseCases & Entities"| DomainLayer
     DataLayer -->|"Triển khai Repository Contracts"| DomainLayer
@@ -87,92 +80,136 @@ graph TD
 
     %% Domain nằm ở tâm và KHÔNG phụ thuộc gì cả.
     %% Core được phép phụ thuộc Domain — không bao giờ ngược lại.
-    CoreCom -.->|"Dùng Result / AppFailure"| DomCore
+    CoreKern -.->|"ErrorHandler sinh ra AppFailure"| DomCore
     CoreProv -.->|"Dùng Result / AppFailure"| DomCore
     CoreBloc -.->|"Dùng AppFailure trong BlocViewState"| DomCore
-    CoreDI -.->|"Dùng UserEntity trong contract"| DomAuth
 ```
 
 > [!IMPORTANT]
 > **Domain không phụ thuộc bất cứ thứ gì.** `domain_core` khai báo **0** workspace dependency và
 > không package domain nào khai Flutter SDK — `AppFailure` nằm trong `domain_core` cạnh `Result<T>`.
 > Core được phép phụ thuộc Domain — Domain là vòng trong cùng nên hướng đó là đúng. Có đúng
-> **bốn** cạnh như vậy được duyệt: `core_common → domain_core`, `core_di → domain_auth`,
-> `provider_state_management → domain_core`, `bloc_state_management → domain_core`. Chúng được
-> hard-code trong `tools/arch_check/check.dart` và in ra ở mỗi lần chạy kèm lý do; cạnh thứ năm sẽ
-> làm fail build. Xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
+> **bốn** cạnh như vậy được duyệt: `platform_kernel → domain_core`,
+> `provider_state_management → domain_core`, `bloc_state_management → domain_core` và
+> `data_core → domain_core`. Chúng được hard-code trong `tools/arch_check/check.dart` và in ra ở
+> mỗi lần chạy kèm lý do; cạnh thứ năm sẽ làm fail build (RULE-01). Xem
+> [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
 
 ---
 
 ## 📂 2. Cấu Trúc Chi Tiết Thư Mục (Folder Tree)
 
-Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
+Dưới đây là mọi mục cấp cao nhất được git theo dõi trong Workspace, mỗi mục một dòng (output build
+bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 
 ```text
 / (Workspace Root)
-├── .github/                       # Luồng tích hợp liên tục (CI Workflows)
+├── .agents/                       # AGENTS.md — điểm vào cho các công cụ AI khác Claude Code
+├── .claude/                       # skills/ — công thức tác vụ cho agent (Claude Code tự tìm ở đây)
+├── .github/                       # CODEOWNERS, SETUP_GUIDE.md, dependabot.yml, issue form, mẫu PR, các workflow CI
 │   └── workflows/
-│       └── fastlane.yml           # CI Github Action chạy Fastlane tự động
-├── app/                           # Host Application (Vỏ ứng dụng chính)
-│   ├── android/                   # Dự án Android bản địa
-│   ├── ios/                       # Dự án iOS bản địa
-│   ├── lib/
-│   │   ├── config/                # Cấu hình môi trường (Flavors dev, staging, prod)
-│   │   ├── di/                    # Điểm đăng ký DI trung tâm (injection.dart)
-│   │   ├── presentation/
-│   │   │   ├── navigation/        # Lắp ráp GoRouter (app_router.dart) + shell widgets
-│   │   │   ├── providers/         # Global App Shell (AppProvider, DeeplinkProvider)
-│   │   │   └── widgets/           # NavigatorWrapperWidget, UndefineRouteWidget
-│   │   ├── main.dart              # Điểm chạy app chính (entrypoint)
-│   │   └── main_scope.dart        # Quản lý Boot Lifecycle (Splash → RootApp)
-│   └── pubspec.yaml               # Cấu hình Host App (liên kết tất cả packages con)
-├── packages/                      # Thư mục chứa các Micro-packages
-│   ├── core/                      # Hạ tầng dùng chung — CHỈ CƠ CHẾ, không chứa dữ liệu feature
-│   │   ├── base_ui/               # Theme, LanguageProvider, design token & l10n (0 widget)
-│   │   ├── bloc_state_management/ # BaseBloc, BaseCubit, BlocViewState<T>
-│   │   ├── common/                # Enums, ErrorHandler, AppConfig, extensions, src/utils/
-│   │   ├── database/              # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
-│   │   ├── di/                    # DI Hub — mọi contract xuyên package nằm ở đây
-│   │   ├── network/               # Dio + Retrofit factory, chuỗi interceptor, SSL pinning
-│   │   ├── notifications/         # Module quản lý thông báo đẩy (Push Notification)
-│   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   │   ├── responsive/            # Scale theo design size, gắn với BuildContext
-│   │   ├── storage/               # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
-│   │   └── ui_kit/                # core_ui_kit — widget dùng chung cho mọi feature
-│   ├── domain/                    # Micro-packages nghiệp vụ Pure Dart — 0 phụ thuộc
-│   │   ├── core/                  # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   ├── auth/                  # Entities, UseCases, Repository interfaces cho Auth
-│   │   └── language/              # Entities, UseCases cho đa ngôn ngữ
-│   ├── data/                      # Micro-packages triển khai tích hợp
-│   │   ├── core/                  # IBaseRepository + CacheDatabase (tự sở hữu bảng/DAO)
-│   │   ├── auth/                  # Models, DataSources, RepositoryImpl cho Auth
-│   │   └── language/              # RepositoryImpl cho đa ngôn ngữ
-│   └── features/                  # Các gói tính năng độc lập (Feature Packages)
-│       ├── splash/                # Feature Splash (mẫu): Màn hình chờ khởi động
-│       ├── onboarding/            # Feature Onboarding (mẫu): Hướng dẫn người dùng mới
-│       ├── auth/                  # Feature Auth (mẫu): Login, Register, Forgot Password
-│       ├── dashboard/             # Feature Dashboard (mẫu): Chrome shell Bottom Tab only
-│       ├── home/                  # Feature Home (mẫu): Tab Trang chủ
-│       └── settings/              # Feature Settings (mẫu): Tab Cài đặt (tách khỏi Home)
-├── tools/                         # Bộ công cụ dòng lệnh dành cho lập trình viên
-│   ├── android_compliance/        # Kiểm tra tính tương thích 16KB Page Size (Android 15+)
-│   ├── barrel_generator/          # Script tự động tạo barrel files cho packages
-│   ├── code_review/               # Công cụ review mã nguồn tự động tích hợp Gemini AI
-│   ├── firebase/                  # Cấu hình môi trường Firebase tự động
-│   ├── module_generator/          # CLI tạo Feature/Domain/Data/Core package mới
-│   ├── theme_generator/           # Tự động sinh Splash Screen & App Icons
-│   ├── unused_checker/            # Phân tích & dọn dẹp tệp, tài nguyên, bản dịch dư thừa
-│   ├── workspace_setup/           # Script thiết lập workspace (pub get, build_runner, l10n)
-│   ├── dependency_sync.dart       # Đồng bộ phiên bản thư viện từ catalog tập trung
-│   └── check_outdated.dart        # Kiểm tra phiên bản thư viện đã lỗi thời trên pub.dev
-├── pubspec.yaml                   # File cấu hình Pub Workspace (workspace: [...])
+│       ├── pr_quality_check.yml   # Cổng PR 0–5 (composer, arch_check, analyze, test, catalog, docs_check), barrel drift, kiểm tra package thừa, debug APK, boot web và Linux, hai generator smoke test
+│       ├── platforms_full.yml     # Boot macOS, Windows, iOS, Android và build web release: main, merge queue, hằng tuần, label `ci:platforms`
+│       ├── flutter_build.yml      # Build & phân phối thủ công bằng Flutter CLI
+│       ├── fastlane.yml           # Build & phân phối thủ công qua Fastlane
+│       ├── code_review.yml        # Review bằng Gemini AI trên pull request (chỉ tham khảo)
+│       └── README.md              # Mỗi workflow làm gì và cần secret nào
+├── .vscode/                       # launch.json (App Dev/Staging/Prod, Admin Web/Desktop, Mobile Web/Linux), settings, tasks
+├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
+│   ├── admin/                     # App thứ hai: auth + settings, trên web và desktop — xem apps/admin/README.md
+│   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
+│       ├── app_manifest.yaml      # App là gì (flavor, env, platform, capability) và nó ghép gì
+│       ├── README.md              # Lộ trình đọc + báo cáo được sinh về những gì app khai báo
+│       ├── lib/
+│       │   ├── main.dart          # Một lời gọi: runShellApp(profile:, hooks:, configureDependencies:)
+│       │   ├── app/               # app_profile.dart (facts được sinh + tinh chỉnh có kiểu), app_hooks.dart
+│       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
+│       ├── android/  ios/         # Project native đã commit — chạy và build từ apps/mobile/
+│       ├── web/  linux/           # Do `composer runners` sinh, bị git-ignore (RULE-83)
+│       ├── test/                  # DI smoke test (checkAppContract cho từng platform và flavor, dựng mọi factory), profile test và test kiểm tra boot
+│       ├── integration_test/      # boot_test.dart — main() trên thiết bị cho đến khi màn hình đầu tiên được vẽ
+│       ├── test_driver/           # integration_test.dart — driver của boot web (`flutter drive`)
+│       ├── env.dev  env.stg       # File env theo flavor (env.prod: tự tạo)
+│       ├── fastlane/              # Lane phát hành
+│       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
+├── assets/                        # branding/ — ảnh nguồn của icon launcher (theme_generator đọc)
+├── docs/                          # Trung tâm tài liệu — cặp en/ và vi/ (bắt đầu từ docs/vi/README.md), history/
+├── fastlane/                      # Fastfile/Pluginfile ở root: import apps/mobile/fastlane để chạy lane từ root
+├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng (domain, data, feature) + api (auth_api)
+│   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
+│   ├── home/{api,feature}/        # Mẫu: BLoC, Freezed event private, một nav destination; home_api
+│   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
+│   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
+├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
+│   ├── foundation/                # Nền thuần mà mọi thứ dựng lên: getIt/lỗi, hợp đồng DI, helper Flutter
+│   │   ├── kernel/                # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
+│   │   ├── contracts/             # core_di: DI Hub — hợp đồng trung lập với sản phẩm (session, location, routing)
+│   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
+│   ├── layers/                    # Hợp đồng nền của tầng domain và data
+│   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   │   └── data/                  # data_core: BaseRepository, BaseModel, request model
+│   ├── infra/                     # Cơ chế I/O: mạng, lưu trữ, database, push
+│   │   ├── network/               # core_network: Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
+│   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   │   ├── database/              # core_database: Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   │   └── notifications/         # core_notifications: Module quản lý Push Notification
+│   ├── ui/                        # Scale, design system, widget dùng chung
+│   │   ├── responsive/            # core_responsive: Scale theo design-size, gắn với BuildContext
+│   │   ├── design_system/         # core_base_ui: Theme, LanguageProvider, design token & l10n (không có widget)
+│   │   └── ui_kit/                # core_ui_kit — widget tái sử dụng cho mọi module
+│   ├── state/                     # Nền quản lý state (Provider, BLoC)
+│   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
+│   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
+│   └── shell/                     # App shell mà mọi app compose
+│       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, storage adapter, AppBootStorage
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
+├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
+│   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
+│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R22 — Cổng PR 1
+│   ├── barrel_generator/          # Sinh lại barrel duy nhất của package, lib/<package>.dart
+│   ├── code_review/               # Review mã nguồn bằng Gemini AI
+│   ├── composer/                  # sync/verify/describe/new/list/runners app từ app_manifest.yaml — Cổng PR 0
+│   ├── coverage_report/           # Tóm tắt coverage (chỉ tham khảo) từ lcov.info
+│   ├── docs_check/                # Đường dẫn trong docs tồn tại, cân bằng en↔vi, trích dẫn RULE-ID — Cổng PR 5
+│   ├── firebase/                  # Cấu hình Firebase theo flavor cho một app
+│   ├── module_generator/          # Sinh package Feature/Domain/Data/Core/Custom/API
+│   ├── sample_cleanup/            # Liệt kê và gỡ các module mẫu an toàn
+│   ├── shared/                    # Helper dùng chung giữa các tool (dò toolchain/FVM, tìm app, workspace, quét contract)
+│   ├── test/                      # Test của chính các tool cổng — `cd tools && dart test`, Cổng PR 1
+│   ├── theme_generator/           # Splash screen & app icon
+│   ├── unused_checker/            # File, asset, bản dịch, package không dùng tới
+│   ├── workspace_setup/           # configure.dart — script setup cho bản clone mới
+│   ├── check_outdated.dart        # Thư viện lỗi thời trên pub.dev
+│   ├── dependency_sync.dart       # Đồng bộ version từ catalog — Cổng PR 4
+│   └── sample_manifest.yaml       # Package nào là code mẫu (sample_cleanup đọc file này)
+├── .editorconfig                  # Cấu hình editor dùng chung cho mọi IDE
+├── .fvmrc                         # Phiên bản Flutter được ghim (FVM là tuỳ chọn)
+├── .gitattributes                 # Line ending LF, xử lý file nhị phân
+├── .gitignore                     # Code sinh tự động, secret, output build
+├── analysis_options.yaml          # Lint cho cả workspace — file duy nhất (RULE-71)
+├── azure-ci-cd.yml                # Pipeline Azure DevOps
+├── CLAUDE.md                      # Bản tóm lược cho Claude Code — luật nằm ở docs/vi/reference/01_rules.md
+├── CODE_OF_CONDUCT.md             # Contributor Covenant 2.1
+├── CONTRIBUTING.md                # Cài đặt, commit, các bước kiểm tra trước PR, hợp đồng tài liệu
+├── devtools_options.yaml          # Cấu hình Flutter DevTools
+├── flutter_native_splash-{dev,staging,prod}.yaml  # Cấu hình splash theo flavor (theme_generator)
+├── icons_launcher-{dev,staging,prod}.yaml         # Cấu hình icon app theo flavor (theme_generator)
+├── Gemfile                        # Ruby gem cho Fastlane (Gemfile.lock được sinh ra, không commit)
+├── LICENSE                        # Giấy phép BSD 3-Clause
+├── pubspec.yaml                   # File cấu hình Pub Workspace (workspace: [...]) — node workspace duy nhất
 ├── pubspec_dependencies.yaml      # Nguồn chân lý phiên bản thư viện (Version Catalog)
-└── README.md                      # Cẩm nang kỹ thuật Master này
+├── README.md                      # Bản tiếng Anh
+├── README.vi.md                   # Cẩm nang kỹ thuật Master này
+└── SECURITY.md                    # Phiên bản được hỗ trợ và báo cáo lỗ hổng riêng tư
 ```
 
 > [!NOTE]
-> **Mọi package đều có thư mục `utils/`** chứa hằng số của **chính nó** — storage key, route path,
-> timeout. Không có gì mang tính domain được phép nằm ở `core_common`. Ngoại lệ duy nhất được duyệt
+> **Hằng số của một package nằm trong thư mục `utils/` của chính nó** — storage key, route path,
+> timeout; package không có hằng số nào thì không cần `utils/`. Không có gì mang tính domain được phép nằm ở `core_common`. Ngoại lệ duy nhất được duyệt
 > là bộ design token trong `core_base_ui/src/styles/`, giữ nguyên vị trí vì đó là bề mặt công khai
 > của design system.
 
@@ -184,8 +221,9 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 
 1.  **Module Generator (`tools/module_generator/`)**:
     ```bash
-    # Tạo Feature package 'profile' sử dụng Provider:
-    dart tools/module_generator/generate.dart 1 profile "" 1
+    # Tạo Feature package 'profile' dùng Provider + route stack. Với feature luôn truyền <SM> và
+    # <route>: thiếu cái nào thì tool hỏi, còn không có terminal thì thoát với mã 64.
+    dart tools/module_generator/generate.dart 1 profile "" 1 1
     # Tạo Domain micro-package 'payment':
     dart tools/module_generator/generate.dart 2 payment
     # Tạo Data micro-package 'payment':
@@ -200,13 +238,14 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```bash
     dart tools/check_outdated.dart   # Kiểm tra thư viện lỗi thời trên pub.dev
     ```
-4.  **Barrel Generator (`tools/barrel_generator/`)**:
+4.  **Barrel Generator (`tools/barrel_generator/`)** — ghi lại barrel duy nhất, `lib/<package>.dart`:
     ```bash
-    dart tools/barrel_generator/generate.dart packages/features/profile/lib
+    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
-    dart tools/workspace_setup/configure.dart  # đa nền tảng
+    dart tools/workspace_setup/configure.dart                  # đa nền tảng; sinh runner web/desktop ở bước cuối
+    dart tools/workspace_setup/configure.dart --stub-firebase  # + stub Firebase chỉ để biên dịch (CI chạy cái này)
     ```
 6.  **Code Review AI (`tools/code_review/`)**:
     ```bash
@@ -218,54 +257,67 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    dart tools/theme_generator/theme_setting.dart
-    dart tools/firebase/firebase_config.dart
+    dart tools/theme_generator/theme_setting.dart --app mobile   # cần android/ + ios/ trong app
+    dart tools/firebase/firebase_config.dart --app mobile        # tương tác; cần Firebase CLI đã đăng nhập
     ```
+9.  **Kiểm tra 16 KB page-size cho Android (`tools/android_compliance/`)**:
+    ```bash
+    ./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
+    ```
+10. **Composer (`tools/composer/`)** — mỗi app ghép gì, từ `apps/<id>/app_manifest.yaml`:
+    ```bash
+    dart tools/composer/composer.dart sync                      # sinh lại các vùng composer:managed
+    dart tools/composer/composer.dart verify                    # Cổng PR 0: fail khi lệch
+    dart tools/composer/composer.dart describe --app mobile     # app khai báo gì và shell resolve gì
+    dart tools/composer/composer.dart new kiosk --platforms android,web   # một app hoàn toàn mới
+    dart tools/composer/composer.dart runners --app admin       # sinh runner web/desktop của nó (git-ignore)
+    ```
+11. **Các cổng (`tools/arch_check/`, `tools/docs_check/`, `tools/sample_cleanup/`)**:
+    ```bash
+    dart tools/arch_check/check.dart                            # Cổng PR 1 — luật R1–R22
+    dart tools/docs_check/check.dart                            # Cổng PR 5 — đường dẫn, cân bằng en↔vi, RULE-ID
+    dart tools/sample_cleanup/remove_sample.dart --list         # các bundle mẫu có thể gỡ
+    ```
+
+Mọi tool, tham số và mã thoát: [`reference/03_tooling.md`](docs/vi/reference/03_tooling.md).
 
 ---
 
 ## 🏛️ 4. Quy Tắc Vàng của Clean Architecture & SOLID
 
 ### Tách Biệt Mối Quan Tâm (Separation of Concerns)
-1. **Tầng Domain (`packages/domain/*`)**:
-   - **Pure Dart, được bảo đảm bởi package graph** — không chỉ bằng quy ước. `domain_core` có
-     **0** workspace dependency và không package domain nào khai Flutter SDK.
-   - Không import `flutter/material.dart`, `dio`, `retrofit`, hay bất kỳ thư viện UI/Network nào.
-   - Định nghĩa `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
-2. **Tầng Data (`packages/data/*`)**:
-   - Triển khai các hợp đồng (contracts) từ `domain`.
-   - Dùng `core_network` (API), `core_storage` (key-value) và `core_database` (SQL) như *cơ chế* —
-     mỗi package data tự khai storage key và tự sở hữu database riêng.
-   - DataSource trả về **Model**, không bao giờ trả Entity, và không phơi class do Drift sinh.
-   - Biến đổi Models → Entities qua hàm `.toEntity()`.
-3. **Tầng Presentation (`packages/features/*`)**:
-   - Hiển thị UI và quản lý trạng thái (Provider hoặc BLoC).
-   - **Chỉ giao tiếp với Domain thông qua UseCases**, tuyệt đối không gọi trực tiếp API.
-   - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
-4. **Tầng Core (`packages/core/*`)**:
-   - Chỉ cung cấp cơ chế. **CẤM phụ thuộc bất kỳ package `feature_*` hoặc `data_*` nào.**
-   - Được phép phụ thuộc `domain_*` (Domain là tâm): `core_common → domain_core`,
-     `core_di → domain_auth`, `provider_state_management → domain_core`.
+Mọi luật dưới đây được phát biểu một lần, kèm lý do và thứ thực thi nó, trong
+[bảng đăng ký luật](docs/vi/reference/01_rules.md#bảng-đăng-ký-luật); đây là bản đồ, không phải luật.
+
+1. **Tầng Domain (`modules/*/domain`)** — Dart thuần, được `arch_check` R2 thực thi (RULE-03):
+   `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
+2. **Tầng Data (`modules/*/data`)** — triển khai contract của domain trên `core_network` (API),
+   `core_storage` (key-value) và `core_database` (SQL) như *cơ chế*; mỗi package data sở hữu khoá và
+   database của riêng mình (RULE-44, RULE-46). DataSource trả về **Model**, ánh xạ bằng `.toEntity()`
+   (RULE-41).
+3. **Tầng Presentation (`modules/*/feature`)** — UI và state (Provider hoặc BLoC), chỉ nói chuyện
+   với Domain qua UseCase; không bao giờ qua package `data` hay feature khác (RULE-04).
+4. **Tầng Core (`platform/*`)** — chỉ cơ chế; không bao giờ phụ thuộc module, trừ bốn cạnh
+   `→ domain_core` đã duyệt (RULE-01) và theo chiều giữa các nhóm (RULE-02).
 
 > [!IMPORTANT]
-> **Gỡ bất kỳ feature nào app vẫn khởi động bình thường.** Mọi thứ app shell tiêu thụ lúc runtime
-> đều đi qua contract ở `core_di` sau `getItOrNull` / `getAllOrEmpty` kèm fallback an toàn.
-> `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký — luôn ưu tiên `getAllOrEmpty<T>()`.
+> **Gỡ bất kỳ feature nào app vẫn khởi động bình thường** (RULE-05): shell chỉ tiêu thụ module qua
+> contract ở `core_di` sau `getItOrNull` / `getAllOrEmpty` kèm fallback an toàn (RULE-12).
 
 ### Nguyên Lý Đảo Ngược Phụ Thuộc (DIP)
-Features giao tiếp chéo hoàn toàn qua giao diện trung gian trong `core_di`:
+Features giao tiếp chéo hoàn toàn qua giao diện trung gian — trong package API của module sở hữu (`modules/<id>/api`, `<id>_api`) với hợp đồng riêng của module, trong `core_di` với hợp đồng trung lập với sản phẩm (session, vị trí đăng nhập / sau đăng nhập mà app shell dùng):
 
 ```text
-[Feature Auth]
+[Feature Onboarding]
    │
    ▼ (Yêu cầu chuyển hướng đến Home)
-[Interface HomeNavigator (core_di)]  ◄── (Định nghĩa hợp đồng)
+[Interface HomeNavigator (home_api)]  ◄── (Định nghĩa hợp đồng)
    ▲
    │ (Triển khai cụ thể trong feature sở hữu route)
-[HomeNavigatorImpl (packages/features/home/lib/src/routing/)]
+[HomeNavigatorImpl (modules/home/feature/lib/src/routing/)]
 ```
 
-Hành động UI xuyên feature (ví dụ logout) dùng cùng mô hình DIP với `I*ActionHandler` trong `core_di` và `*ActionHandlerImpl` trong feature sở hữu (`feature_auth/handlers/`).
+Hành động UI xuyên feature (ví dụ logout) dùng cùng mô hình DIP với `I*ActionHandler` trong package API của module sở hữu (`auth_api`) và `*ActionHandlerImpl` trong feature sở hữu (`feature_auth/handlers/`).
 
 ---
 
@@ -281,20 +333,31 @@ import 'package:injectable/injectable.dart';
 void initMicroPackage() {}
 ```
 
-### Tổng hợp tại Host App (`app/lib/di/injection.dart`):
+### Tổng hợp tại Host App (`apps/mobile/lib/di/injection.dart`):
+Các vùng `imports` và `modules` được **sinh tự động** từ `apps/mobile/app_manifest.yaml` bởi
+`dart tools/composer/composer.dart sync --app mobile` — sửa manifest, đừng sửa file này, và
+ngoài các vùng đó chỉ được viết comment; `composer verify` (Cổng PR 0) fail nếu có bất kỳ khác biệt
+nào hoặc có code nằm ngoài chúng. Vùng `modules` của nó, nguyên văn:
+
 ```dart
+// composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
-  ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
-  // Không đăng ký gì: `core_database` chỉ là cơ chế, không sở hữu database nào.
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
-// CoreBaseUiPackageModule phụ thuộc ILanguageStorage / IThemeStorage
-// (singleton đăng ký tại App Shell). Đặt trong externalPackageModulesAfter.
+const _notificationsModules = [
+  ExternalModule(CoreNotificationsPackageModule),
+];
+
+const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
 const _uiModules = [
   ExternalModule(CoreBaseUiPackageModule),
 ];
@@ -302,24 +365,22 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
-  ExternalModule(DomainLanguagePackageModule),
+  ExternalModule(DomainCachePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
-  ExternalModule(DataLanguagePackageModule),
+  ExternalModule(DataCachePackageModule),
 ];
 
-// Tham chiếu cứng DUY NHẤT có chủ đích của app shell tới feature package —
-// là composition root, nó buộc phải gọi tên những gì nó lắp ráp.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
-  ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
-  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSettingsPackageModule),
+  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSplashPackageModule),
+  ExternalModule(FeatureDashboardPackageModule),
 ];
 
 const _otherModules = [
@@ -327,33 +388,67 @@ const _otherModules = [
   ExternalModule(BlocStateManagementPackageModule),
 ];
 
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+  ..._notificationsModules,
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
+];
+
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
+///
+/// A class the graph builds injects the profile sections it reads
+/// (`NetworkProfile`, `LocaleProfile`, ...). `runShellApp` registers the app's
+/// own before this runs; `registerProfileDefaults` then adds the template's
+/// default for any section still missing, so a graph booted without a profile
+/// completes instead of throwing `"<Section> is not registered"`.
+///
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
 @InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
-  ],
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
 )
-Future<void> configureDependencies({String? environment}) async {
-  getIt.enableRegisteringMultipleInstancesOfOneType();
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
   final env = environment ?? AppConfig.appFlavor.toValue();
-  await getIt.init(environment: env);
+  await target.init(environment: env);
 }
+
+/// Reset all dependencies (useful for testing)
+Future<void> resetDependencies() async {
+  await getIt.reset();
+}
+// composer:end:modules
 ```
+
+`configureDependencies` khởi tạo các module `before`, rồi các nhóm `after` theo thứ tự `di_groups` của
+manifest khai báo; `runShellApp` đã đăng ký profile của app từ trước, nên class ở bất kỳ nhóm nào cũng
+có thể nhận một section của profile qua constructor. Trình tự boot và lý do mỗi nhóm đứng đúng chỗ của
+nó: [`architecture/06_app_shell.md`](docs/vi/architecture/06_app_shell.md) § 3.
 
 ### Hai quy tắc thứ tự dễ gây lỗi
 
 > [!CAUTION]
-> **`@Singleton` eager KHÔNG được phụ thuộc type đăng ký ở module chạy sau** — sẽ ném
-> *"not registered"* ngay lúc boot. `flutter analyze` không bắt được lỗi này; phải kiểm chứng ở file
-> sinh ra `app/lib/di/injection.config.dart`. Dùng `@LazySingleton` khi phụ thuộc nằm ở module sau.
+> **RULE-13** — `@Singleton` eager không được phụ thuộc type do module chạy sau đăng ký; nó ném
+> *"not registered"* lúc boot, và `flutter analyze` không thấy. `test/di_smoke_test.dart` của mỗi app
+> boot đồ thị thật trong CI (Gate 3), dựng mọi lazy singleton và mọi factory `@injectable`, và nêu
+> tên type bị lỗi.
 >
-> **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
-> không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `app/lib/di/network_binding_module.dart`).
+> **RULE-14** — GetIt không resolve theo supertype: bind interface thứ hai qua `@module`
+> (xem `modules/auth/feature/lib/di/module.dart`).
 
 ---
 
@@ -363,30 +458,37 @@ Chúng ta sử dụng `go_router` kết hợp với `go_router_builder` để đ
 
 ### Quyền Sở Hữu Tuyến Đường (Route Ownership)
 Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến của riêng mình:
-- `SplashPage` được `MainScope` host lúc boot và **không** đăng ký trong GoRouter.
-- Gói `feature_auth` sở hữu nhóm tuyến `AuthShellRoute`, `LoginRoute`, `RegisterRoute`, `ForgotPasswordRoute`.
+- `SplashPage` (`feature_splash`, cung cấp qua `IAppSplashScreen`) được `MainScope` hiển thị trong lúc app khởi tạo và **không** đăng ký trong GoRouter.
+- Package `feature_auth` sở hữu `LoginRoute`, đóng góp qua `IFeatureRouteModule` của nó.
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
-`app/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
+`platform/shell/app_shell/lib/src/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeRoute`. Nó thu thập:
 
-- `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
-- `getAllOrEmpty<IDashboardTabModule>()` sort theo `order` → list `StatefulShellBranch`
-- `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
-- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì tab đầu / `/`)
-- `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
+- `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, …) — **không có `order`**
+- `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
+- `getItOrNull<IDashboardRouteModule>()` → chrome dashboard (tùy chọn; không có thì các destination hiển thị không có chrome)
+- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation`, theo `RouterProfile.entry` của app (mặc định: chỉ ở lần chạy đầu tiên; các lần sau, hoặc khi không đăng ký: `RouterProfile.fallbackPath`, rồi path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
+- `getItOrNull<ISessionRefreshListenable>()` → `refreshListenable`
+- `getItOrNull<ShellHooks>()` → guard `redirect` và `navigatorObservers` của app
 
 Chú ý dòng cuối: router phụ thuộc vào **contract ở `core_di`**, không phải `AuthProvider`. App shell
 không giữ kiểu dữ liệu nào của feature — đó chính là điều khiến `feature_auth` gỡ được.
 
 ### Gỡ một feature
 
-1. Xóa `ExternalModule(...)` và dòng import tương ứng trong `app/lib/di/injection.dart`.
-2. Xóa `feature_x:` trong `app/pubspec.yaml`.
-3. Xóa đường dẫn của nó khỏi danh sách `workspace:` trong `pubspec.yaml` gốc.
-4. `flutter pub get && dart run build_runner build -d --workspace`.
+1. Xóa dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó.
+2. Nếu một capability mất nơi cung cấp cuối cùng (splash duy nhất, tab duy nhất), `dart tools/composer/composer.dart
+   reconcile --reason "<why>"` khai nó `absent` trong các manifest — `composer verify` từ chối `provided`
+   cho contract không còn gì đăng ký. Sau đó `dart tools/composer/composer.dart sync` — sinh lại
+   `injection.dart`, path dependency của app và danh sách `workspace:` ở root, tất cả nằm giữa
+   marker `composer:managed`.
+3. Xóa thư mục `modules/<id>/` còn sót lại — `composer verify` fail khi có package mà không app nào ghép.
+4. `flutter pub get && dart run build_runner build --workspace`.
 
-Không cần sửa file nào khác — mọi lookup lúc runtime đều có fallback an toàn. Xem
+Hoặc để `dart tools/sample_cleanup/remove_sample.dart <bundle>` làm (chạy dry-run trước; `--apply`
+mới ghi và xóa các thư mục). Không cần sửa file nào khác — mọi lookup lúc runtime đều có fallback
+an toàn. Xem
 [`guides/04_routing.md`](docs/vi/guides/04_routing.md).
 
 ---
@@ -395,17 +497,28 @@ Không cần sửa file nào khác — mọi lookup lúc runtime đều có fall
 
 Hệ thống CI/CD sử dụng **Fastlane** với kiến trúc **Workspace-Root Delegation**:
 
+Mỗi pull request chạy `.github/workflows/pr_quality_check.yml`: job quality (`composer verify`,
+`arch_check`, test của chính các tool cổng, setup + codegen, kiểm tra barrel drift, `flutter analyze`,
+test từng package, kiểm tra catalog, `docs_check`, kiểm tra dependency thừa), rồi build debug APK, boot
+web và Linux của mọi app khai chúng, và hai generator smoke test; `platforms_full.yml` boot macOS,
+Windows, iOS và Android trên `main`, trong merge queue, hằng tuần và khi có label `ci:platforms`. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; mô tả
+đầy đủ: [`operations/01_cicd.md`](docs/vi/operations/01_cicd.md).
+
 ### Lệnh Biên Dịch Android APK từ Root:
-```powershell
-fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
+```bash
+bundle install                                                                  # một lần
+cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml    # một lần — thiếu nó các lane sẽ dừng
+bundle exec fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
 ```
+
+`Config.yaml` bị gitignore. Khi cả hai cờ distribute đều `false`, bản mẫu giữ nguyên là đủ để build; hãy điền nó đầy đủ trước khi phát hành: [`operations/02_fastlane_release.md`](docs/vi/operations/02_fastlane_release.md) § 2. Bản build nằm trong `apps/mobile/build/app/outputs/flutter-apk/`.
 
 ---
 
 ## 🛠️ 8. Quy Tắc Lập Trình Công Cụ Phát Triển (DevTools CLI Policy)
 
-1. **Cấm Sử Dụng Lệnh `print`**: Tất cả các CLI Tools trong `tools/` bắt buộc dùng `stdout.writeln(...)` và `stderr.writeln(...)`.
-2. **Cấm Tắt Cảnh Báo Linter**: Không sử dụng `// ignore_for_file: avoid_print`.
+1. **Không `print`** — CLI tool ghi bằng `stdout.writeln(...)` / `stderr.writeln(...)` (RULE-65).
+2. **Không tắt lint, không `.ps1`, không hardcode `fvm`** — RULE-71, RULE-72, RULE-73.
 
 ---
 
@@ -414,41 +527,74 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ### 1. Chuẩn Bị Môi Trường
 - **Flutter**: >= 3.47.4 (Stable)
 - **Dart SDK**: >= 3.13.3
-- **JDK**: 17
-- **Ruby**: >= 3.0 (cho Fastlane)
+- **JDK**: 17 trở lên (CI build với 17; `apps/mobile/android/app/build.gradle.kts` nhắm bytecode Java 17, đó không phải mức trần)
+- **Ruby**: >= 3.2 (cho Fastlane)
+- **Node.js + npm, tài khoản Google và một Firebase project**: chỉ cần cho cấu hình Firebase thật (bước 3)
 
-### 2. Cài Đặt Tất Cả Gói Phụ Thuộc
+### 2. Dựng Workspace — một lệnh
 ```bash
-flutter pub get
+dart tools/workspace_setup/configure.dart
 ```
-*Nhờ Pub Workspaces, toàn bộ phụ thuộc của Host App và tất cả packages con được tải đồng thời và tạo duy nhất một `pubspec.lock`.*
+Đây **chính là** bước setup: nó activate `flutterfire_cli` (không với `--stub-firebase`), rồi chạy `flutter clean` →
+`flutter pub get` → `gen-l10n` trong mọi package có `l10n.yaml` →
+`dart run build_runner build --workspace` → barrel generator cho từng package → `composer runners`
+(các runner web và desktop được sinh; `--no-runners` bỏ qua nó). Trình tự làm tay là
+`pub get`, `gen-l10n`, `build_runner` — đúng thứ tự đó, vì barrel được commit của mỗi package
+(`lib/<package>.dart`) export các file sinh tự động bị gitignore, và các export đó treo cho tới khi
+codegen ghi xong file. Lượt barrel chỉ cần khi bạn thêm, đổi tên hoặc xóa một file trong `lib/`.
+Trình tự làm tay đầy đủ nằm ở [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 2.
 
-### 3. Sinh Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
-`packages/core/common/lib/src/firebase/firebase_module.dart` import cả ba file
-`firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Phải
-chạy `flutterfire configure` một lần cho mỗi flavor trước lần build đầu tiên — xem
-[`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md).
+*File lock (`pubspec.lock`, `Gemfile.lock`, `Podfile.lock`) do `flutter pub get` và `bundle install` sinh ra, bị git bỏ qua và không bao giờ commit: version chỉ được ghim trong `pubspec_dependencies.yaml` (RULE-74) và `.fvmrc`.*
 
-### 4. Khởi Chạy Sinh Mã Đồng Loạt
+### 3. Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
+`apps/mobile/lib/firebase/firebase_module.dart` import cả ba file
+`firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Bạn có
+hai cách:
+- **Đã có Firebase project:** cài Firebase CLI (`npm install -g firebase-tools`), chạy
+  `firebase login`, rồi chạy `dart tools/firebase/firebase_config.dart --app mobile`. Script đặt mọi
+  flavor vào cùng một project ID mà bạn nhập.
+- **Chưa có:** chạy `dart tools/workspace_setup/configure.dart --stub-firebase`, lệnh này ghi stub chỉ
+  để biên dịch — ba file Dart cùng một `google-services.json` cho mỗi flavor — và không đụng tới file
+  đã có. App build được, nhưng push và các tính năng Firebase khác không hoạt động.
+
+Cả hai cách đều có trong [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 3.
+
+### 4. Chạy Ứng Dụng — từ `apps/mobile/`
 ```bash
-dart run build_runner build -d --workspace
+cd apps/mobile   # bắt buộc — thư mục gốc workspace không có project android/ hay ios/
+flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-### 5. Chạy Ứng Dụng
-```bash
-flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
-```
+> [!NOTE]
+> **Hãy chờ một màn hình đăng nhập không đăng nhập được.** App sample hiện splash, rồi onboarding,
+> rồi form đăng nhập. `env.dev` đã commit để `BASE_URL` rỗng và repository không kèm backend nào, nên
+> gửi form sẽ kết thúc bằng toast "A network error occurred". Muốn đi tiếp, đặt `BASE_URL` trong
+> `apps/mobile/env.dev` thành một server trả lời lời gọi đăng nhập của sample, hoặc thay data source
+> của sample bằng của bạn. Mỗi màn hình hiện gì, cùng request và response mà sample mong đợi:
+> [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 6 và
+> [`guides/08_networking.md`](docs/vi/guides/08_networking.md#hợp-đồng-đăng-nhập-của-sample).
 
-### 6. Build APK
+### 5. Build APK
 ```bash
-cd app   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
+cd apps/mobile   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+### 6. Sau Khi Đổi Annotation
+```bash
+dart run build_runner build --workspace   # không dùng -d: build_runner đã gỡ cờ đó và bỏ qua nó
+dart tools/barrel_generator/generate.dart <package>/lib   # sau khi thêm, đổi tên hoặc xóa một file trong lib/ (barrel)
 ```
 
 > [!WARNING]
 > `flutter analyze` **loại trừ các file sinh tự động** (`**.freezed.dart`, `**.g.dart`,
 > `**.config.dart`, `**.module.dart` — xem `analysis_options.yaml`). Analyze sạch **không** chứng
 > minh app biên dịch được. Luôn build thật trước khi tin vào một đợt refactor lớn.
+
+### 7. Biến Nó Thành Của Bạn
+Template được phát hành với các tên giữ chỗ — `com.example.codebase`, Apple team ID của tác giả,
+địa chỉ `your-domain.example`, handle `@your-org` trong CODEOWNERS, link tới repo gốc. Danh sách đầy
+đủ, từng file một, cùng những tên nên để nguyên: [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 8.
 
 ---
 
@@ -461,19 +607,20 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 ### 🚀 Bắt Đầu — *mới vào repo? đọc theo thứ tự này*
 | Tài liệu | Trả lời câu hỏi |
 | :--- | :--- |
-| [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, và làm sao chạy được app? |
+| [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, làm sao chạy được app, và phải đổi tên những gì để nó thành của tôi? |
 | [02. Dạo quanh dự án](docs/vi/getting-started/02_project_tour.md) | Mỗi package làm gì, muốn sửa X thì vào đâu? |
 | [03. Quy trình hàng ngày](docs/vi/getting-started/03_daily_workflow.md) | Gõ lệnh nào, khi nào? |
+| [04. Tutorial feature đầu tiên](docs/vi/getting-started/04_first_feature_tutorial.md) | Dựng, test và gỡ một module nhỏ từ đầu tới cuối, trong 30 phút |
 
 ### 🏛️ Kiến Trúc — *hiểu hệ thống*
 | Tài liệu | Nội dung |
 | :--- | :--- |
 | [01. Tổng quan](docs/vi/architecture/01_overview.md) | Clean Architecture, luật phụ thuộc, các đánh đổi chính |
-| [02. Tầng Core](docs/vi/architecture/02_core.md) | Cả chín package `core_*` và những gì **không** thuộc về chúng |
+| [02. Tầng Core](docs/vi/architecture/02_core.md) | Bên trong `platform/*` có gì, nên dùng package nào, và những gì **không** thuộc về nó |
 | [03. Tầng Domain](docs/vi/architecture/03_domain.md) | Pure Dart, `Result<T>`, entity, use case |
 | [04. Tầng Data](docs/vi/architecture/04_data.md) | Model, data source, repository, chuyển đổi lỗi |
 | [05. Tầng Feature](docs/vi/architecture/05_features.md) | Ranh giới feature, cấu trúc, vòng đời controller |
-| [06. App Shell](docs/vi/architecture/06_app_shell.md) | Vòng đời khởi động, lắp ráp DI, router động |
+| [06. App Shell](docs/vi/architecture/06_app_shell.md) | Vòng đời khởi động, profile và hook của app, lắp ráp DI, router động |
 
 ### 🧭 Hướng Dẫn — *bắt tay vào làm*
 | Tài liệu | Việc |
@@ -482,29 +629,45 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [02. Tạo domain + data](docs/vi/guides/02_new_domain_data.md) | Thêm một nghiệp vụ mới |
 | [03. Quản lý trạng thái](docs/vi/guides/03_state_management.md) | Chọn và dùng Provider hay BLoC |
 | [04. Định tuyến](docs/vi/guides/04_routing.md) | Đăng ký route, điều hướng xuyên feature |
-| [05. Dependency Injection](docs/vi/guides/05_di.md) | Scope, thứ tự module, các bẫy thường gặp |
+| [05. Dependency Injection](docs/vi/guides/05_di.md) | Dùng annotation nào, module đăng ký ở đâu, vì sao có lỗi "not registered" |
 | [06. Lưu trữ](docs/vi/guides/06_storage.md) | Lưu một giá trị mà package của bạn sở hữu |
 | [07. Database](docs/vi/guides/07_database.md) | Bảng, DAO, migration (Drift) |
 | [08. Networking](docs/vi/guides/08_networking.md) | API client, interceptor, refresh token, SSL pinning |
 | [09. Đa ngôn ngữ & Theming](docs/vi/guides/09_localization_theming.md) | Bản dịch, design token, responsive |
-| [10. Giao tiếp xuyên feature](docs/vi/guides/10_cross_feature.md) | Sáu mô hình được cho phép |
+| [10. Giao tiếp xuyên feature](docs/vi/guides/10_cross_feature.md) | Sáu mô hình được cho phép (RULE-25) |
+| [11. Design System](docs/vi/guides/11_design_system.md) | Màu, font, spacing, bo góc; scale và layout thích ứng |
+| [12. Cô lập module](docs/vi/guides/12_module_isolation.md) | Tách một module ra repository riêng; checkout một phần |
+| [13. Ghép app](docs/vi/guides/13_app_composition.md) | Một app khai báo gì theo từng platform, cấu hình nó ra sao, app thứ ba bằng một lệnh |
 
 ### 📐 Tra Cứu — *tìm nhanh*
 | Tài liệu | Chứa |
 | :--- | :--- |
-| [01. Luật kiến trúc](docs/vi/reference/01_rules.md) | Mọi luật kèm lý do đằng sau |
+| [01. Luật kiến trúc](docs/vi/reference/01_rules.md) | Bảng đăng ký luật — mỗi luật một lần dưới dạng `RULE-NN`, kèm lý do, thứ thực thi và cách kiểm chứng |
 | [02. Quy ước đặt tên](docs/vi/reference/02_naming.md) | Hậu tố file/class, quy ước thư mục |
-| [03. Công cụ](docs/vi/reference/03_tooling.md) | Mọi script trong `tools/` |
-| [04. Checklist review](docs/vi/reference/04_review_checklist.md) | Cổng kiểm tra PR |
+| [03. Công cụ](docs/vi/reference/03_tooling.md) | Mọi script trong `tools/`, tham số và mã thoát |
+| [04. Checklist review](docs/vi/reference/04_review_checklist.md) | Điều phải đúng trước khi PR được merge |
 
 ### 🚢 Vận Hành — *đưa lên production*
 | Tài liệu | Chứa |
 | :--- | :--- |
-| [01. CI/CD](docs/vi/operations/01_cicd.md) | Pipeline GitHub Actions & Azure, secrets cần thiết |
+| [01. CI/CD](docs/vi/operations/01_cicd.md) | Các workflow, các cổng, secrets cần thiết |
 | [02. Fastlane & phát hành](docs/vi/operations/02_fastlane_release.md) | Lane, ký ứng dụng, phân phối store |
 
-> Luật dành cho AI Agent nằm riêng ở [`.agents/AGENTS.md`](.agents/AGENTS.md) và
-> [`.agents/skills/`](.agents/skills/).
+> AI agent bắt đầu từ [`CLAUDE.md`](CLAUDE.md) (Claude Code) hoặc [`.agents/AGENTS.md`](.agents/AGENTS.md)
+> (công cụ khác); công thức tác vụ nằm ở [`.claude/skills/`](.claude/skills/). Chúng trích
+> [bảng đăng ký luật](docs/vi/reference/01_rules.md) thay vì phát biểu lại. Repo đi tới hình dạng
+> hiện tại thế nào (chỉ tiếng Anh): [`docs/history/`](docs/history/restructure-log.md).
 
 ---
-*Bản quyền sở hữu trí tuệ thuộc về CaoGiaHieu-dev. Mọi quyền được bảo lưu.*
+
+## 🤝 Đóng Góp, Bảo Mật & Giấy Phép
+
+| Tệp | Nội dung |
+| :--- | :--- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Cài đặt, quy ước nhánh/commit, các bước kiểm tra trước khi mở PR (tiếng Anh) |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 và cách báo cáo vi phạm quy tắc ứng xử |
+| [SECURITY.md](SECURITY.md) | Phiên bản được hỗ trợ và cách báo cáo lỗ hổng bảo mật một cách riêng tư |
+| [LICENSE](LICENSE) | Giấy phép BSD 3-Clause |
+
+---
+*© CaoGiaHieu-dev. Phát hành theo [Giấy phép BSD 3-Clause](LICENSE).*

@@ -1,0 +1,109 @@
+# Declaration + composition for the `admin` app. See apps/mobile/app_manifest.yaml for how the file is organised.
+#
+# A second app composing a *different subset* of the same modules — the test
+# the composition design has to pass. It takes auth and settings, and none of
+# dashboard, splash, onboarding or home, so every `getItOrNull` /
+# `getAllOrEmpty` fallback in `platform_app_shell` has a real composition
+# relying on it: the `capabilities` below say which, and why.
+
+app:
+  id: admin
+  name: Codebase Admin
+  org: com.example # your reverse domain: every generated runner's application / bundle id starts with it
+  entrypoint: lib/main.dart
+
+flavors:
+  dev: # ssl_pinning default: disabled — local servers use self-signed certificates
+  staging:
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
+  prod:
+    # A real decision:  ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+    # Windows, macOS and Linux see the leaf certificate only: pin the leaf's key and a backup LEAF key. The web cannot pin.
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
+
+env:
+  BASE_URL: { required_in: [prod] }
+  APP_NAME: { } # optional: AppConfig.titleFor falls back to `app.name`
+
+platforms: # generated runners: `dart tools/composer/composer.dart runners --app admin` writes them, git ignores them (RULE-83)
+  windows: { runner: scaffold }
+  macos: { runner: scaffold }
+  linux: { runner: scaffold }
+  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links off (a generated runner registers no URL scheme; on the web the address bar is the link), secure_storage required (memory_fallback on linux), orientation phones_portrait, no window (a desktop platform may set `window: { initial: [w, h], min: [w, h] }` and pass ShellHooks.configureWindow)
+
+capabilities:
+  session: provided
+  routes: provided
+  tabs: provided
+  tree_wrappers: provided
+  localization: provided
+  dashboard: { state: absent, reason: "one tab: destinations render without chrome" }
+  entry: { state: absent, reason: "no onboarding: boot goes straight to the sign-in check" }
+  post_sign_in:
+    { state: absent, reason: "no home module: after sign-in the router's first tab (settings) opens" }
+  splash:
+    {
+      state: absent,
+      reason: "no splash module: the first frame is held until boot ends — the page or window stays empty, at most NetworkProfile.connectTimeout while the session restores",
+    }
+  error_reporter:
+    {
+      state: absent,
+      reason: "no crash backend chosen: errors are printed and sent nowhere (RULE-67)",
+    }
+  analytics: { state: absent, reason: "no analytics backend chosen: no screen events" }
+
+di_groups:
+  - name: core
+    phase: before
+    packages:
+      - core_common
+      - core_network
+      - core_storage
+      - core_di
+    why: "no core_database / core_notifications: this app opens no SQLite file and sends no push, so it needs no `notifications` group and no lib/firebase/"
+
+  - name: shell
+    phase: after
+    packages: [platform_shell_adapters, platform_app_shell]
+    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig), then the shell itself; ui injects the storage adapters"
+
+  - name: ui
+    phase: after
+    packages: [core_base_ui]
+    why: "ThemeProvider and LanguageProvider inject IThemeStorage / ILanguageStorage, which shell registers. They are lazy, so only an eager singleton added here would fail on another order (RULE-13); composer verify holds the order (V16)"
+
+  - name: domain
+    phase: after
+    packages: [domain_core]
+    from_modules: domain
+    why: "pure-Dart use cases and repository interfaces: data implements them and features inject them, so domain comes first of the three"
+
+  - name: data
+    phase: after
+    packages: [data_core]
+    from_modules: data
+    why: "implements the repository interfaces the domain group declares, so it follows domain and precedes the features that inject them"
+
+  - name: feature
+    phase: after
+    from_modules: feature
+    why: "screens, routes and controllers inject the use cases the domain and data groups register, so features come after both"
+
+  - name: other
+    phase: after
+    packages:
+      - provider_state_management
+      - bloc_state_management
+    why: "no ordering constraint: the state-management bases register nothing, so they go last by convention"
+
+modules:
+  - { id: auth, layers: [api, domain, data, feature] }
+  - { id: settings, layers: [feature] }
+
+# `extra_dependencies:` (optional) — a workspace package this app's own lib/
+# imports that registers no DI module. Packages reached only through another
+# package (core_responsive, core_ui_kit, platform_kernel, ...) need no entry:
+# composer walks the pubspecs and adds them to the root `workspace:` list.

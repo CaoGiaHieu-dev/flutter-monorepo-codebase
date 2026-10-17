@@ -8,7 +8,7 @@ resources:
   repositories:
     - repository: self
       type: git
-      ref: master
+      ref: main
 
 pool:
   name: codebase
@@ -28,7 +28,6 @@ stages:
             displayName: Get source version
             inputs:
               targetType: inline
-              filePath: SourceVersion=$(git rev-parse HEAD) echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion" COMMAND="$(echo $SourceVersion | cut -c-7)" echo $COMMAND echo "##vso[task.setvariable variable=commitTag]$COMMAND"
               script: >-
                 SourceVersion=$(git rev-parse HEAD)
 
@@ -39,6 +38,65 @@ stages:
                 echo $COMMAND
 
                 echo "##vso[task.setvariable variable=commitTag]$COMMAND"
+
+          # Gitignored build inputs, restored from Pipelines -> Library ->
+          # Secure files BEFORE any code generation: firebase_module.dart
+          # imports all three firebase_options_*.dart files, and the
+          # google-services Gradle plugin needs the flavor's JSON. This
+          # pipeline builds prod only, so only prod's files are real; dev and
+          # staging get a compile-only stub. DownloadSecureFile fails the run
+          # when a secure file is missing from the library.
+          # See docs/en/operations/01_cicd.md section 7.
+          - task: DownloadSecureFile@1
+            name: envProd
+            displayName: "Download env.prod"
+            inputs:
+              secureFile: "env.prod"
+              retryCount: 3
+
+          - task: DownloadSecureFile@1
+            name: firebaseOptionsProd
+            displayName: "Download firebase_options_prod.dart"
+            inputs:
+              secureFile: "firebase_options_prod.dart"
+              retryCount: 3
+
+          - task: DownloadSecureFile@1
+            name: googleServicesProd
+            displayName: "Download google-services.prod.json"
+            inputs:
+              secureFile: "google-services.prod.json"
+              retryCount: 3
+
+          - task: Bash@3
+            displayName: Restore gitignored build inputs
+            inputs:
+              targetType: inline
+              script: |
+                set -euo pipefail
+                APP="$(Build.SourcesDirectory)/apps/mobile"
+                cp "$(envProd.secureFilePath)" "$APP/env.prod"
+                cp "$(firebaseOptionsProd.secureFilePath)" "$APP/lib/firebase/firebase_options_prod.dart"
+                mkdir -p "$APP/android/app/src/prod"
+                cp "$(googleServicesProd.secureFilePath)" "$APP/android/app/src/prod/google-services.json"
+                for other in dev staging; do
+                  file="$APP/lib/firebase/firebase_options_${other}.dart"
+                  [ -f "$file" ] && continue
+                  printf '%s\n' \
+                    "// CI-only stub for a flavor this pipeline does not build. Never used at runtime:" \
+                    "// injectable registers only the prod FirebaseOptions." \
+                    "import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;" \
+                    "" \
+                    "class DefaultFirebaseOptions {" \
+                    "  static FirebaseOptions get currentPlatform => const FirebaseOptions(" \
+                    "        apiKey: 'ci-stub'," \
+                    "        appId: 'ci-stub'," \
+                    "        messagingSenderId: 'ci-stub'," \
+                    "        projectId: 'ci-stub'," \
+                    "      );" \
+                    "}" > "$file"
+                  echo "stubbed $file"
+                done
 
           - task: Hey24sheep.flutter.flutter-install.FlutterInstall@0
             displayName: Flutter Install
@@ -62,7 +120,6 @@ stages:
             displayName: Flutter Config
             inputs:
               targetType: inline
-              filePath: SourceVersion=$(git rev-parse HEAD) echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion" COMMAND="$(echo $SourceVersion | cut -c-7)" echo $COMMAND echo "##vso[task.setvariable variable=commitTag]$COMMAND"
               script: |
                 dart tools/workspace_setup/configure.dart
 
@@ -77,7 +134,7 @@ stages:
             inputs:
               SourceFolder: "$(Agent.TempDirectory)"
               Contents: key.properties
-              TargetFolder: "$(Build.SourcesDirectory)/app/android/"
+              TargetFolder: "$(Build.SourcesDirectory)/apps/mobile/android/"
 
           - task: DownloadSecureFile@1
             name: keystore
@@ -90,40 +147,34 @@ stages:
             inputs:
               SourceFolder: "$(Agent.TempDirectory)"
               Contents: keystore.jks
-              TargetFolder: "$(Build.SourcesDirectory)/app/android/"
+              TargetFolder: "$(Build.SourcesDirectory)/apps/mobile/android/"
 
           - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
             displayName: Flutter Build Android
             inputs:
               target: apk
-              projectDirectory: $(Build.SourcesDirectory)/app
+              projectDirectory: $(Build.SourcesDirectory)/apps/mobile
               flutterDirectory: $(flutterPath)
               verboseMode: true
               buildNumber: $(numberBuild)
               buildName: $(version)
-              extraArgs: --flavor=prod --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ --no-tree-shake-icons
+              extraArgs: --flavor=prod --dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod --obfuscate --split-debug-info=$(Build.SourcesDirectory)/obfuscate/ --no-tree-shake-icons
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Android
             inputs:
-              targetPath: $(Build.SourcesDirectory)/app/build/app/outputs/flutter-apk/app-prod-release.apk
+              targetPath: $(Build.SourcesDirectory)/apps/mobile/build/app/outputs/flutter-apk/app-prod-release.apk
               artifact: android
-          # - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
-          #   displayName: Flutter Build Ios
-          #   inputs:
-          #     target: ipa
-          #     projectDirectory: $(Build.SourcesDirectory)
-          #     flutterDirectory: $(flutterPath)
-          #     verboseMode: true
-          #     buildNumber: $(numberBuild)
-          #     buildName: $(version)
-          #     exportOptionsPlist: $(Build.SourcesDirectory)/ExportOptions.plist
-          #     extraArgs: --flavor=prod --dart-define-from-file=.env --obfuscate --split-debug-info=./obfuscate/ --no-tree-shake-icons
-          # - task: PublishPipelineArtifact@1
-          #   displayName: Publish Ios
-          #   inputs:
-          #     targetPath: $(Build.SourcesDirectory)/build/ios/ipa/codebase.ipa
-          #     artifact: ios
+
+          # --obfuscate makes this build's stack traces unreadable without the
+          # symbol files --split-debug-info wrote to obfuscate/, and they are
+          # not inside the APK. Keep them with the build:
+          #   flutter symbolize -i <stack-trace> -d <artifact>/app.android-arm64.symbols
+          - task: PublishPipelineArtifact@1
+            displayName: Publish obfuscation symbols
+            inputs:
+              targetPath: $(Build.SourcesDirectory)/obfuscate
+              artifact: debug-symbols
 
   - stage: Distribute
     dependsOn: Build
@@ -139,26 +190,42 @@ stages:
               artifact: android
               patterns: "**/*.apk"
               targetPath: $(Build.SourcesDirectory)/android-download
-          - task: CmdLine@2
+          # The Firebase CLI is not on the agent, and it authenticates through
+          # GOOGLE_APPLICATION_CREDENTIALS: a Firebase service-account JSON
+          # uploaded as the secure file `firebase-service-account.json` (the
+          # same JSON as GitHub's FIREBASE_SERVICE_ACCOUNT_KEY secret). Node
+          # comes from UseNode, the CLI through npx — nothing is installed
+          # globally on the self-hosted agent. See docs/en/operations/01_cicd.md
+          # sections 5 and 7.
+          - task: UseNode@1
+            displayName: Use Node.js 22 (Firebase CLI)
+            inputs:
+              version: "22.x"
+
+          - task: DownloadSecureFile@1
+            name: firebaseServiceAccount
+            displayName: "Download firebase-service-account.json"
+            inputs:
+              secureFile: "firebase-service-account.json"
+              retryCount: 3
+
+          # Values reach the script through env, not macro-expanded into it,
+          # so quotes in the release note cannot break the command. `test` is
+          # the tester group alias; it must exist in Firebase App
+          # Distribution — change it here to invite another group.
+          - task: Bash@3
             displayName: "Deploy Android to Firebase"
             inputs:
-              script: |
-                firebase appdistribution:distribute app-prod-release.apk  \
-                --app $(FIREBASE-ANDROID-ID)  \
-                --release-notes "$(note)" \
-                --groups "test"
+              targetType: inline
               workingDirectory: $(Build.SourcesDirectory)/android-download
-          # - task: DownloadPipelineArtifact@2
-          #   displayName: Download Ios
-          #   inputs:
-          #     artifact: ios
-          #     patterns: "**/*.ipa"
-          #     targetPath: $(Build.SourcesDirectory)/ios-download
-          # - task: CmdLine@2
-          #   displayName: "Deploy Ios to Firebase"
-          #   inputs:
-          #     script: |
-          #       firebase appdistribution:distribute codebase.ipa  \
-          #       --app $(FIREBASE-IOS-ID)  \
-          #       --release-notes "$(note)" --groups "test"
-          #     workingDirectory: $(Build.SourcesDirectory)/ios-download
+              script: |
+                set -euo pipefail
+                printf '%s\n' "$RELEASE_NOTES" > "$(Agent.TempDirectory)/release-notes.txt"
+                npx --yes firebase-tools@15 appdistribution:distribute app-prod-release.apk \
+                  --app "$FIREBASE_APP_ID" \
+                  --release-notes-file "$(Agent.TempDirectory)/release-notes.txt" \
+                  --groups "test"
+            env:
+              GOOGLE_APPLICATION_CREDENTIALS: $(firebaseServiceAccount.secureFilePath)
+              FIREBASE_APP_ID: $(FIREBASE-ANDROID-ID)
+              RELEASE_NOTES: $(note)

@@ -1,6 +1,59 @@
 import 'dart:io';
 
-void main() async {
+import '../shared/app_locator.dart';
+import '../shared/toolchain.dart';
+
+/// Generates one app's per-flavor Firebase configuration.
+///
+/// ```bash
+/// dart tools/firebase/firebase_config.dart              # the only app
+/// dart tools/firebase/firebase_config.dart --app mobile # one of several
+/// ```
+///
+/// Everything it writes belongs to that app — Firebase options identify one
+/// bundle ID — so it all lands inside the app's directory:
+///
+/// - `lib/firebase/firebase_options_<flavor>.dart`, imported by the app's
+///   own `lib/firebase/firebase_module.dart`
+/// - `ios/flavors/<flavor>/GoogleService-Info.plist`
+/// - `android/app/src/<flavor>/google-services.json`
+const _usage = '''
+Usage: dart tools/firebase/firebase_config.dart [--app <id>]
+
+Generates one app's per-flavor Firebase configuration with the FlutterFire CLI:
+  <app>/lib/firebase/firebase_options_<flavor>.dart
+  <app>/ios/flavors/<flavor>/GoogleService-Info.plist
+  <app>/android/app/src/<flavor>/google-services.json
+
+Options:
+  --app <id>   The app to configure (its app_manifest.yaml `app.id`). Required
+               when the workspace holds more than one app.
+  -h, --help   Show this help.
+
+Interactive: it prompts for the Firebase project ID, the base bundle ID and the
+flavors. Requires the Firebase CLI, logged in (`firebase login`), and installs
+the FlutterFire CLI through `dart pub global activate` when it is missing.''';
+
+/// How many times an unauthenticated run offers `firebase login` before it
+/// gives up. `firebase login` exits 0 without logging in when it cannot open
+/// a prompt, so an unbounded retry loop never ended.
+const _maxLoginAttempts = 2;
+
+void main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    return;
+  }
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] == '--app') {
+      i++; // its value; selectApp validates it
+      continue;
+    }
+    stderr.writeln('[ERROR] Unknown argument: ${args[i]}');
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
   stdout.writeln('==========================================');
   stdout.writeln('    FlutterFire Config Setup Script');
   stdout.writeln('==========================================');
@@ -14,36 +67,67 @@ void main() async {
     exit(1);
   }
 
-  // Detect FVM: Only use it if .fvm/fvm_config.json exists
-  final hasFvmConfig = File('.fvm/fvm_config.json').existsSync();
-  final dartCmd = hasFvmConfig ? 'fvm' : 'dart';
-  final dartArgs = hasFvmConfig ? ['dart'] : <String>[];
-
-  if (hasFvmConfig) {
-    stdout.writeln('[INFO] Detected FVM config. Using FVM CLI.');
-  } else {
+  final app = selectApp(args);
+  stdout.writeln('[INFO] Configuring app "${app.id}" in ${app.dir}/');
+  if (!File('${app.dir}/lib/firebase/firebase_module.dart').existsSync()) {
     stdout.writeln(
-      '[INFO] FVM config not detected. Using global Flutter/Dart SDK.',
+      '[!] ${app.dir}/lib/firebase/firebase_module.dart does not exist, so '
+      'nothing will import the generated options. Copy the one from '
+      'apps/mobile/lib/firebase/ if this app should use Firebase.',
     );
   }
 
-  // 1. Check if Firebase CLI is installed
+  // The project ID, bundle ID and flavors are prompted for — there is no
+  // flag form — so a run without a terminal could only fail later.
+  //
+  // `stdin.hasTerminal` alone is not the check: Dart reports true for
+  // `</dev/null` (a character device), the usual way an agent or harness
+  // starts a process, and such a run used to go on to `firebase login`.
+  // `stdioType` tells a real terminal from any other device or a pipe, and
+  // both ends are needed — the prompts are written to stdout and read from
+  // stdin.
+  if (stdioType(stdin) != StdioType.terminal ||
+      stdioType(stdout) != StdioType.terminal) {
+    stderr.writeln(
+      '[X] This script is interactive and needs a terminal on both stdin and '
+      'stdout; at least one is redirected, piped or /dev/null. Run it from '
+      'a terminal, after `firebase login`.',
+    );
+    exit(1);
+  }
+
+  reportToolchain();
+  final dartCmd = dartExecutable;
+
+  // 1. The Firebase CLI is a global npm package. Installing it is the
+  // user's call, not this script's.
   if (!_isCommandAvailable('firebase')) {
-    stdout.writeln('[!] Firebase CLI not found. Installing via npm...');
-    await _runCommand('npm', ['install', '-g', 'firebase-tools']);
+    stderr.writeln('[X] Firebase CLI (`firebase`) not found in PATH.');
+    stderr.writeln('    Install it, then log in and re-run this script:');
+    stderr.writeln('      npm install -g firebase-tools');
+    stderr.writeln(
+      '      (or see https://firebase.google.com/docs/cli#install_the_firebase_cli)',
+    );
+    stderr.writeln('      firebase login');
+    exit(1);
   }
 
   // Check login status
   stdout.writeln('Checking Firebase login status...');
-  while (true) {
-    final loginCheck = await Process.run('firebase', [
-      'projects:list',
-    ], runInShell: true);
-    if (loginCheck.exitCode == 0) {
-      break;
+  var attempts = 0;
+  while (!await _isLoggedIn()) {
+    if (attempts == _maxLoginAttempts) {
+      stderr.writeln(
+        '[X] Still not logged in to Firebase after $attempts '
+        '`firebase login` attempt(s). Run `firebase login` yourself, check '
+        '`firebase projects:list` works, then re-run this script.',
+      );
+      exit(1);
     }
+    attempts++;
     stdout.writeln(
-      '[!] Firebase is not logged in or session expired. Running \'firebase login\'...',
+      '[!] Firebase is not logged in or session expired. Running '
+      '\'firebase login\' (attempt $attempts of $_maxLoginAttempts)...',
     );
     await _runCommand('firebase', ['login']);
   }
@@ -109,9 +193,13 @@ void main() async {
     stdout.writeln('Configuring $flavor environment...');
     stdout.writeln('----------------------------------------');
 
-    final bundleId = (flavor == 'prod' || flavor == 'production')
-        ? baseBundleId
-        : '$baseBundleId.$flavor';
+    // The two platforms suffix staging differently: Gradle's
+    // `applicationIdSuffix` is `.stg`, the Xcode bundle id `.staging`. Each
+    // Firebase client must match the id its platform actually builds, or
+    // Gradle fails with "No matching client found".
+    final ids = flavorBundleIds(baseBundleId, flavor);
+    final iosBundleId = ids.ios;
+    final androidPackage = ids.android;
 
     for (final buildMode in ['Debug', 'Profile', 'Release']) {
       stdout.writeln('=> Setting up $buildMode-$flavor');
@@ -119,19 +207,27 @@ void main() async {
         'config',
         '--yes',
         '--project=$projectId',
-        '--out=../packages/core/common/lib/src/firebase/firebase_options_$flavor.dart',
-        '--ios-bundle-id=$bundleId',
+        '--out=lib/firebase/firebase_options_$flavor.dart',
+        '--ios-bundle-id=$iosBundleId',
         '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
         '--ios-build-config=$buildMode-$flavor',
-        '--android-package-name=$bundleId',
+        '--android-package-name=$androidPackage',
         '--android-out=android/app/src/$flavor/google-services.json',
-      ], workingDirectory: 'app');
+      ], workingDirectory: app.dir);
     }
   }
 
   stdout.writeln('==========================================');
   stdout.writeln('[V] All configurations completed successfully!');
   stdout.writeln('==========================================');
+}
+
+/// `firebase projects:list` succeeds only with a valid session.
+Future<bool> _isLoggedIn() async {
+  final result = await Process.run('firebase', [
+    'projects:list',
+  ], runInShell: true);
+  return result.exitCode == 0;
 }
 
 bool _isCommandAvailable(String command) {
@@ -171,3 +267,24 @@ Future<void> _runCommand(
     exit(exitCode);
   }
 }
+
+/// The bundle id each platform builds for [flavor] from [baseBundleId]: prod
+/// (`prod` or `production`) is the base id itself, every other flavor adds
+/// `.<flavor>` on iOS and `.<suffix>` on Android, where the suffix is the
+/// flavor name unless [_androidSuffix] says otherwise (`staging` -> `stg`).
+({String ios, String android}) flavorBundleIds(
+  String baseBundleId,
+  String flavor,
+) {
+  final isProd = flavor == 'prod' || flavor == 'production';
+  return (
+    ios: isProd ? baseBundleId : '$baseBundleId.$flavor',
+    android: isProd
+        ? baseBundleId
+        : '$baseBundleId.${_androidSuffix[flavor] ?? flavor}',
+  );
+}
+
+/// Android `applicationIdSuffix` per flavor where it differs from the flavor
+/// name — see `productFlavors` in `apps/<id>/android/app/build.gradle.kts`.
+const _androidSuffix = {'staging': 'stg'};

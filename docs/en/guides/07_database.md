@@ -1,93 +1,72 @@
 # Guide: Relational Database (Drift + SQLite)
 
-**What this answers:** how to store relational data — rows, relations, queries, migrations — and how to do it so that deleting your package deletes its database with it, without breaking anyone else.
+## Goal
 
-**After reading you can:** give a package its own database from scratch, contribute a schema migration without editing another package's file, and explain why there is no single `AppDatabase` in this project.
+You give a package its own relational database: tables, a DAO, a data source that returns models, and versioned migrations. Deleting the package deletes its database with it, without breaking anyone else. The worked example is the real `data_cache` wiring; substitute your package name throughout.
 
----
+## Prerequisites
 
-## 1. The rule: `core_database` owns no database
-
-`core_database` provides the **mechanism** only. It declares no database, no table and no DAO — its DI module registers literally nothing:
-
-```dart
-// packages/core/database/lib/di/module.dart
-/// `core_database` registers nothing on its own.
-///
-/// It provides the persistence MECHANISM — [DriftDatabaseOpener],
-/// [driftMigrationStrategy], [IDatabaseMigration], [IDatabaseHandle] — and
-/// deliberately owns no database, no table and no DAO. Registering a database
-/// here would mean this package had to name the tables of whichever package
-/// owns them.
-@InjectableInit.microPackage()
-void initMicroPackage() {}
-```
-
-**Each package that owns persisted data declares its own database**, next to its own tables, DAO and data source. `data_core`'s `CacheDatabase` is the reference wiring.
-
-### Why — this is forced by Drift, not a preference
-
-Two Drift facts drive the whole design:
-
-1. `@DriftDatabase(tables: [...])` is resolved at **compile time**. There is no runtime table registration.
-2. A DAO must be a **`part of`** its database library — Drift generates `_$XDaoMixin` and `$XTable` into that same library.
-
-Put together: whichever package declares the database must name every table on it, and every DAO must live in that same library. A single shared `AppDatabase` would therefore force one package to know the tables of all the others — the same "one object knows everything" coupling the storage and constants ownership rules exist to prevent.
+- A data package — [`02_new_domain_data.md`](02_new_domain_data.md).
+- **Why there is no shared `AppDatabase`**, what `core_database` exports, how the migration runner replays, the `PRAGMA`s it applies and how a corrupt file is quarantined — [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--relational-storage-drift--sqlite). The rules: RULE-46, RULE-47.
 
 > [!NOTE]
-> Moving a shared `AppDatabase` up into `app/` does not solve this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
-
-### What you gain, and what you pay
-
-| | |
-|---|---|
-| **Gain** | Deleting a package deletes its database with it. No other package references it, so nothing else breaks. |
-| **Gain** | No package can reach another's rows — there is no shared object to reach through. |
-| **Cost** | **SQL cannot join across package boundaries.** |
-
-That cost is deliberate. Crossing a bounded context belongs at the repository layer — compose two repositories in a use case — not inside a single query.
+> The chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` — is the `cache` module (`modules/cache/domain` + `modules/cache/data`), wired up to the repository contract, but **no feature and no use case in this template consumes it**: `domain_cache` is an entity and a repository interface, nothing more. It exists as a working reference for the shape below, and as the fixture the database tests run against.
+>
+> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply` (without `--apply` it only previews). The two database tests go with it; `core_database`'s own tests keep covering `DatabaseHandle` and the migration runner.
 
 ---
 
-## 2. What `core_database` actually gives you
+## 1. Decide: key-value storage or a database
 
-| Export | Kind | What it does |
+| You need | Use | Why |
 |---|---|---|
-| `DriftDatabaseOpener` | `abstract final class` | Opens any `GeneratedDatabase` on a background isolate, **verifies** the connection, quarantines a corrupt file |
-| `DatabaseConnectionFactory` | `abstract final class` | Resolves the file path in app documents, builds the background executor, quarantines files |
-| `IDatabaseMigration` | abstract class | Contract a package implements to contribute **one** schema step |
-| `DatabaseMigrationRunner` | class | Sorts, validates and replays those steps |
-| `driftMigrationStrategy(...)` | function | The shared `MigrationStrategy`: migration dispatch + the per-connection `PRAGMA`s |
-| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | How a data source reaches its database without holding every DAO |
-| `DatabaseConstants` | class | Read-pool size, busy timeout, corruption/environment error markers, `.corrupt` suffix |
+| A token, a flag, a theme mode, a locale | [`core_storage`](06_storage.md) | One value per key; encrypted; reactive via `ChangeNotifier` / `Stream` |
+| A list of rows you query, filter or sort | `core_database` | SQL, indexes, ordering |
+| Relations between records | `core_database` | Foreign keys (enforced because the shared migration strategy runs `PRAGMA foreign_keys = ON` when the database opens) |
+| Data whose shape will change over releases | `core_database` | Versioned migrations |
+| Something small, read on every frame | `core_storage` | In-memory cache; no async round-trip |
 
-Notice every one of these is generic over `GeneratedDatabase`. `core_database` never names a concrete database class — that is the whole point.
+Rule of thumb: if you would reach for `WHERE`, `ORDER BY` or `JOIN`, you want a database.
 
----
+## 2. Declare the dependencies
 
-## 3. How to: give your package its own database
+The package's `pubspec.yaml` needs what the real `modules/cache/data/pubspec.yaml` declares for its database. Write the third-party entries without a version:
 
-Worked end-to-end from the real `data_core` wiring. Substitute your package name throughout.
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter              # `visibleForTesting` in the database class
+  core_database:
+    path: ../../../platform/infra/database
+  platform_kernel:
+    path: ../../../platform/foundation/kernel   # getAllOrEmpty, for the DI module
+  drift:
+  injectable:
 
-### Step 1 — Define the table
+dev_dependencies:
+  build_runner:
+  drift_dev:                  # generates `<name>_database.g.dart`
+  injectable_generator:
+  flutter_test:
+    sdk: flutter              # for the in-memory database tests (step 12)
+```
+
+Add the rest of a data package as usual (`domain_core`, `data_core`, your `domain_*`, `freezed_annotation` / `freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies — do not repeat them, and never import them, `package:drift/native.dart` or `dart:ffi` from your `lib/`: the package then breaks every web build of an app that links it, while `flutter analyze` stays clean. `arch_check` R22 refuses it (RULE-82); `core_database`'s configurable import is the one place they are reached ([§ 13](#13-the-web)). Versions live only in the catalog `pubspec_dependencies.yaml` (RULE-74): `dart tools/dependency_sync.dart` fills in an entry written with no version (`drift:`) and rewrites a mismatched one. Then `flutter pub get`.
+
+## 3. Define the table
 
 A `Table` subclass is standalone: it references no database, so it lives in your package.
 
 ```dart
-// packages/data/core/lib/src/database/tables/cache_entries_table.dart
+// modules/cache/data/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
-/// Example table — stores arbitrary string payloads keyed by a unique id.
-///
-/// Use this as a template when adding feature-specific tables.
+/// Example table — string payloads keyed by a unique id.
 class CacheEntries extends Table {
-  /// Unique cache key (e.g. `home_feed`, `user_profile_draft`).
   TextColumn get key => text()();
 
-  /// Serialized payload (JSON string, plain text, etc.).
   TextColumn get value => text()();
 
-  /// Last write timestamp for TTL / eviction policies.
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -95,10 +74,10 @@ class CacheEntries extends Table {
 }
 ```
 
-### Step 2 — Define the DAO as a `part of` your database
+## 4. Define the DAO as a `part of` your database
 
 ```dart
-// packages/data/core/lib/src/database/dao/cache_entries_dao.dart
+// modules/cache/data/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
 /// Data access object for [CacheEntries].
@@ -118,81 +97,94 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
     );
   }
 
-  /// Reads the full row for [key], or `null` when missing.
+  /// Reads the row for [key], or `null` when missing.
   Future<CacheEntry?> getEntry(String key) {
     return (select(
       cacheEntries,
     )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
-
-  /// Clears the entire cache table.
-  Future<int> clearAll() => delete(cacheEntries).go();
 }
 ```
 
 The `part of` is mandatory — that is Drift's requirement, and the reason the DAO cannot live in another package.
 
-### Step 3 — Name the file in your own `utils/`
+## 5. Name the database file in your own `utils/`
 
 Per the repo-wide rule, constants live in the owning package's `utils/`:
 
 ```dart
-// packages/data/core/lib/src/utils/data_core_constants.dart
-class DataCoreConstants {
-  DataCoreConstants._();
+// modules/cache/data/lib/src/utils/cache_constants.dart
+/// Constants owned exclusively by `data_cache`.
+class CacheConstants {
+  CacheConstants._();
 
-  /// On-disk SQLite file for this package's [CacheDatabase], resolved inside
-  /// the app documents directory.
-  ///
-  /// Named after its owner rather than the app, because each package that
-  /// persists data opens its own file. Changing this value points the package
-  /// at a different database and makes existing on-device rows unreachable.
-  static const String CACHE_DATABASE_FILE_NAME = 'data_core_cache.sqlite';
+  /// SQLite file of this package's [CacheDatabase], named after its owner:
+  /// each package that persists data opens its own file.
+  static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }
 ```
 
 > [!CAUTION]
-> Name the file after its **owning package**, not after the app. Several databases coexist in the documents directory; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
+> Name the file after its **owning package**, not after the app. Several databases coexist in the app's private directory — the documents directory on Android and iOS, the application-support directory on macOS, Windows and Linux (on the desktop "documents" is the user's shared folder), the browser's storage for the origin on the web; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
 
-### Step 4 — Declare the database class
+## 6. Declare the database class
 
 ```dart
-// packages/data/core/lib/src/database/cache_database.dart
+// modules/cache/data/lib/src/database/cache_database.dart
+import 'package:core_database/core_database.dart';
+import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
+import '../utils/cache_constants.dart';
+import 'tables/cache_entries_table.dart';
+
+part 'cache_database.g.dart';
+part 'dao/cache_entries_dao.dart';
+
+/// SAMPLE — the database owned by `data_cache`, holding only its own tables.
+///
+/// Drift binds tables at compile time and a DAO must be a `part of` its
+/// database, so each package that persists data declares its own database
+/// next to its tables, DAO and data source; deleting the package deletes the
+/// database with it. `core_database` supplies only the mechanism
+/// ([DriftDatabaseOpener], [driftMigrationStrategy], [IDatabaseMigration],
+/// [IDatabaseHandle]).
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
-    : _migrations = migrations;
+  CacheDatabase._(super.e, this._migrations, [this.schemaVersion = 1]);
 
-  /// Schema steps contributed for this database.
-  ///
-  /// Passed in rather than looked up here so the database stays testable and
-  /// free of service-locator calls; the DI module does the collection.
+  /// Schema steps contributed for this database, collected by the DI module.
   final Iterable<IDatabaseMigration> _migrations;
 
-  /// Opens the cache database on a background isolate.
+  /// Bump it together with a new [IDatabaseMigration] whose `version` is the
+  /// new number; nothing else in this file changes.
+  @override
+  final int schemaVersion;
+
+  /// Opens the database — on a background isolate natively, in drift's wasm
+  /// worker on the web — with corruption recovery ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
-    String fileName = DataCoreConstants.CACHE_DATABASE_FILE_NAME,
-    int readPool = DatabaseConstants.DEFAULT_READ_POOL,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
     return DriftDatabaseOpener.open(
       (executor) => CacheDatabase._(executor, migrations),
-      fileName: fileName,
-      readPool: readPool,
+      fileName: CacheConstants.DATABASE_FILE_NAME,
     );
   }
 
-  /// In-memory database for unit tests (runs on the current isolate).
+  /// A database over [executor], for tests — `NativeDatabase.memory()` for
+  /// an in-memory one. The test passes the executor, so this library never
+  /// imports `drift/native` (`dart:ffi`), which no web build can compile.
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file so
+  /// the [migrations] run.
   @visibleForTesting
-  factory CacheDatabase.forTesting([
-    QueryExecutor? executor,
+  factory CacheDatabase.forTesting(
+    QueryExecutor executor, [
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
+    int schemaVersion = 1,
   ]) {
-    return CacheDatabase._(executor ?? NativeDatabase.memory(), migrations);
+    return CacheDatabase._(executor, migrations, schemaVersion);
   }
-
-  @override
-  int get schemaVersion => 1;
 
   @override
   MigrationStrategy get migration =>
@@ -200,48 +192,58 @@ class CacheDatabase extends _$CacheDatabase {
 }
 ```
 
+The imports matter as much as the class: the **table** is an ordinary `import` (it is standalone), while the **DAO** is a `part` — Drift requires an accessor to live in its database's library — next to `part '<name>_database.g.dart';`, which `build_runner` writes.
+
 Two things to copy exactly:
 
 - **Migrations are passed in, never looked up inside the class.** That keeps the database free of service-locator calls and directly constructible in tests.
 - **`migration` delegates to `driftMigrationStrategy`.** Writing your own `MigrationStrategy` means re-deriving the `PRAGMA` settings — and a package that forgets `foreign_keys = ON` silently loses referential integrity.
+- **`forTesting` takes the executor; the library never imports `drift/native`.** The test passes `NativeDatabase.memory()` (or a file) from `test/`, so the database class compiles for the web too (R22).
 
-### Step 5 — Register it in your DI module
+## 7. Register the database in your DI module
 
 ```dart
-// packages/data/core/lib/di/module.dart
+// modules/cache/data/lib/di/module.dart
 @module
-abstract class DataCoreDiModule {
+abstract class DataCacheDiModule {
+  /// Opens [CacheDatabase] while the module initialises, which runs the
+  /// collected migrations — so every step must be registered by then.
+  /// `@Order(1)` makes a step declared in this package (default order 0)
+  /// register before the open; a step from another package needs an earlier
+  /// DI group. The collection is typed to [CacheDatabase], so another
+  /// package's steps never reach it.
+  @Order(1)
   @preResolve
   @lazySingleton
-  Future<CacheDatabase> cacheDatabase() =>
-      CacheDatabase.open(migrations: _registeredMigrations());
+  Future<CacheDatabase> cacheDatabase() => CacheDatabase.open(
+    migrations: getAllOrEmpty<IDatabaseMigration<CacheDatabase>>(),
+  );
 
-  /// Narrow accessor handle for this package's data sources.
+  /// Data sources take this handle instead of [CacheDatabase], so each gets
+  /// only the DAO it asks for.
   @lazySingleton
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
-
-  /// Reads contributed migrations without throwing when none are registered,
-  /// matching the `getAllOrEmpty` behaviour the app shell uses for routes.
-  static Iterable<IDatabaseMigration> _registeredMigrations() {
-    final getIt = GetIt.instance;
-    if (!getIt.isRegistered<IDatabaseMigration>()) {
-      return const <IDatabaseMigration>[];
-    }
-    return getIt.getAll<IDatabaseMigration>();
-  }
 }
 ```
 
-The `isRegistered` guard matters: `getAll<T>()` **throws** when nothing is registered for `T`. Without the guard, a build with no contributed migration would crash during `configureDependencies()`.
+`getAllOrEmpty` (from `platform_kernel`, [`05_di.md`](05_di.md#5-resolve-optional-contributions-safely)) is the guard: a bare `getAll<T>()` **throws** when nothing is registered for `T`, so a build with no contributed migration would crash during `configureDependencies()`. Pass it `IDatabaseMigration<YourDatabase>` — the exact type the steps register as.
 
 > [!WARNING]
-> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — while this module initialises. An `IDatabaseMigration` registered by a module that initialises *later* is invisible at that moment. A package contributing a step for this database must be wired **ahead of** `DataCorePackageModule` in the host's `configureDependencies()`. Nothing in the template hits this yet, but it will bite the first feature that adds a migration for someone else's database. See [`05_di.md`](05_di.md) for module ordering.
+> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — at the moment injectable reaches that registration, so every step must already be registered by then. A step that is not is skipped without an error: `schemaVersion` moves and the schema does not.
+>
+> - **A step in the owning package** (here `data_cache`) is collected **as long as the open keeps `@Order(1)`**. Injectable registers a package's entries in ascending `@Order`, and a migration annotated `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)` has the default order 0 — so it lands before the open.
+> - Remove `@Order(1)` and the open may be registered first; that is the bug `@Order(1)` was added to fix.
+> - **A step from another package** must sit in an **earlier DI group** than the owning package in the app's `app_manifest.yaml`. `@Order` sorts only within one package's module; it cannot move a registration across modules. Nothing in the template does this yet, but it will bite the first feature that adds a migration for someone else's database.
+>
+> **Copying this pattern for your own database? Put `@Order(1)` on your `@preResolve` open as well** (RULE-47) — without it, a step written exactly as step 11 shows is never collected. See [`05_di.md`](05_di.md) for module ordering and [`../architecture/06_app_shell.md` § 3](../architecture/06_app_shell.md#a-database-opens-after-its-migrations-register) for why it cannot reach across groups.
 
-### Step 6 — Consume it through `IDatabaseHandle`, not the database
+## 8. Consume it through `IDatabaseHandle`, not the database
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
+/// SAMPLE — takes [IDatabaseHandle] rather than [CacheDatabase] (only the one
+/// DAO it asks for) and converts Drift rows to models here.
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -250,11 +252,13 @@ class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   final CacheEntriesDao _dao;
 
   @override
+  Future<void> save(String key, String value) => _dao.upsert(key, value);
+
+  @override
   Future<CacheEntryModel?> getEntry(String key) async {
     final row = await _dao.getEntry(key);
     return row == null ? null : CacheEntryModel.fromRow(row);
   }
-  // ...
 }
 ```
 
@@ -270,25 +274,28 @@ await _handle.transaction(() async {
 ```
 
 > [!NOTE]
-> This is **API-surface narrowing, not enforced isolation** — Drift's `DatabaseAccessor` requires the database, so the factory callback still receives it and a determined caller could capture it. The real isolation comes from the layer above: separate databases per package. The doc comment in `i_database_handle.dart` states this rather than overclaiming.
+> This is **API-surface narrowing, not enforced isolation** — Drift's `DatabaseAccessor` requires the database, so the factory callback still receives it and a determined caller could capture it. The real isolation comes from the layer above: separate databases per package (RULE-46). The doc comment in `i_database_handle.dart` states this rather than overclaiming.
 
-### Step 7 — Return a Model, never a Drift row
+## 9. Return a model, never a Drift row
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
+/// Signatures speak in [CacheEntryModel], never in Drift's generated row
+/// class, so Drift stays an implementation detail of `data_cache`.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
-  Future<String?> get(String key);
+
   Future<CacheEntryModel?> getEntry(String key);
-  Future<void> delete(String key);
-  Future<List<CacheEntryModel>> getAll();
 }
 ```
 
 `CacheEntry` — the class Drift generates for a row — never appears in a signature. The conversion happens at the boundary:
 
 ```dart
-// packages/data/core/lib/src/models/cache_entry_model.dart
+// modules/cache/data/lib/src/models/cache_entry_model.dart
+/// Data-layer form of a `cache_entries` row. The generated Drift [CacheEntry]
+/// is converted here, at the boundary, so Drift never leaks past `data_cache`.
+/// Not `json_serializable`: rows come from SQLite, not an API payload.
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -301,7 +308,6 @@ abstract class CacheEntryModel
     required DateTime updatedAt,
   }) = _CacheEntryModel;
 
-  /// Maps a Drift row into the data-layer model.
   factory CacheEntryModel.fromRow(CacheEntry row) {
     return CacheEntryModel(
       key: row.key,
@@ -319,23 +325,26 @@ abstract class CacheEntryModel
 
 It is deliberately **not** `json_serializable`: rows come from SQLite, not from an API payload, so there is no JSON contract to honour.
 
-### Step 8 — Run codegen and barrels
+## 10. Generate the code and the barrels
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/data/core/lib
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/cache/data/lib
 ```
 
----
+`build_runner` writes `<name>_database.g.dart` (the database, the DAO mixin, the row and companion classes) and the package's `module.module.dart`. Run the barrel generator after it, and again whenever you add, rename or delete a file under `lib/` (RULE-75); it exports the generated files that exist on disk.
 
-## 4. Decentralised migrations
+## 11. Add a schema migration
 
 You never edit another package's database file to change your schema. You implement one contract and register it.
 
 ```dart
-// packages/core/database/lib/src/migration/i_database_migration.dart
-abstract class IDatabaseMigration {
+// platform/infra/database/lib/src/migration/i_database_migration.dart
+abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
+  ///
+  /// Version 1 is the initial schema created by `Migrator.createAll()`, so
+  /// there is nothing to migrate *to* it.
   int get version;
 
   /// Moves the schema from `version - 1` to [version].
@@ -343,236 +352,157 @@ abstract class IDatabaseMigration {
 
   /// Reverses [upgrade], moving the schema from [version] back to
   /// `version - 1`.
+  ///
+  /// Drift has no dedicated downgrade callback — it routes both directions
+  /// through `onUpgrade` — so this is invoked when a user installs an older
+  /// build over a newer one. Implement it whenever the change is reversible;
+  /// throw a descriptive error when it is not, so the failure is explicit
+  /// instead of leaving a schema that no longer matches the running code.
   Future<void> downgrade(Migrator m);
 }
 ```
 
-Registered exactly like a route module:
+A schema change is **three edits made together** — miss one and the upgrade silently does nothing, or a fresh install and an upgraded one end up with different schemas:
+
+1. **Add the column to the table class** — Drift generates the schema from it, and `Migrator.createAll()` builds fresh installs from it. A column added to an existing table must be `nullable()` or have a `withDefault(...)`: SQLite cannot add a `NOT NULL` column without a default to rows that already exist.
+
+   ```dart
+   // tables/cache_entries_table.dart — inside `CacheEntries`
+   DateTimeColumn get expiresAt => dateTime().nullable()();
+   ```
+
+2. **Bump the schema version** in your database class (the sample's private constructor defaults it, `[this.schemaVersion = 1]` → `2`; it is what `schemaVersion` returns). It must equal the highest `version` among your steps: Drift calls `onUpgrade` only when the stored `user_version` is below `schemaVersion`, so without the bump no step ever runs on an existing install, and its queries fail with *"no such column"*. `forTesting` takes the version as an argument instead — the upgrade test passes `2` along with its hand-written old file.
+
+   ```dart
+   CacheDatabase._(super.e, this._migrations, [this.schemaVersion = 2]);
+   ```
+
+3. **Register the step** — below. Then `dart run build_runner build --workspace` (the generated table class gains the column).
+
+Registered like a route module, typed to the database it belongs to — GetIt keys a registration by its exact type, so `CacheDatabase` collects only `IDatabaseMigration<CacheDatabase>` and another package's steps never reach it. Declared in the owning package, it is collected because the open carries `@Order(1)` ([step 7](#7-register-the-database-in-your-di-module)):
 
 ```dart
-@LazySingleton(as: IDatabaseMigration)
-class AddExpiresAtToCacheEntries implements IDatabaseMigration {
+@LazySingleton(as: IDatabaseMigration<CacheDatabase>)
+class AddExpiresAtToCacheEntries
+    implements IDatabaseMigration<CacheDatabase> {
   @override
   int get version => 2;
 
   @override
-  Future<void> upgrade(Migrator m) =>
-      m.addColumn(cacheEntries, cacheEntries.expiresAt);
+  Future<void> upgrade(Migrator m) {
+    // `Migrator.database` is the database being migrated; the cast reaches
+    // its generated table getters. `expiresAt` is the column this step adds.
+    final db = m.database as CacheDatabase;
+    return m.addColumn(db.cacheEntries, db.cacheEntries.expiresAt);
+  }
 
   @override
-  Future<void> downgrade(Migrator m) =>
-      m.alterTable(TableMigration(cacheEntries));
+  Future<void> downgrade(Migrator m) {
+    final db = m.database as CacheDatabase;
+    return m.alterTable(TableMigration(db.cacheEntries));
+  }
 }
 ```
 
-### The contract
+### Honour the contract
 
 - **`version` is the version this step *produces*.** `version == 2` means "take a database at version 1 and make it version 2". So `upgrade` must run against `version - 1`, and `downgrade` must return it to that same shape.
 - **Version 1 is not migratable** — it is what `Migrator.createAll()` creates. The runner rejects `version < 2` at construction.
 - **Duplicate versions are rejected**, not silently resolved to one of them.
+- **The whole upgrade is one transaction.** `driftMigrationStrategy` runs every step inside `database.transaction`, so a step that throws rolls back the earlier steps too: the file keeps its old version and schema, and the next launch retries the upgrade from the start. Write a step that is safe to run again from the old schema, and never one that depends on a half-applied state.
 
-### How the runner replays
+## 12. Test the database
 
-```dart
-// packages/core/database/lib/src/migration/database_migration_runner.dart
-Future<void> run(Migrator m, int from, int to) async {
-  if (from == to) return;
-
-  if (to > from) {
-    for (final migration in _migrations) {
-      if (migration.version > from && migration.version <= to) {
-        await migration.upgrade(m);
-      }
-    }
-    return;
-  }
-
-  for (final migration in _migrations.reversed) {
-    if (migration.version > to && migration.version <= from) {
-      await migration.downgrade(m);
-    }
-  }
-}
-```
-
-Three properties worth naming:
-
-1. **A plain `if`, not `else if`.** A device that skipped several releases replays *every* intermediate step instead of jumping straight to the newest shape.
-2. **Upgrades ascend, downgrades descend.** Order matters in both directions.
-3. **Gaps are legal.** A release may ship no schema change, leaving that version number unused.
-
-Validation happens once, at construction — not mid-migration. Discovering a wiring mistake halfway through would leave the schema partially migrated.
-
-> [!WARNING]
-> **Drift 2.34.3 has no `onDowngrade`.** `MigrationStrategy` exposes only `onCreate`, `onUpgrade` and `beforeOpen`; Drift's own documentation notes that "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` is real and tested, but it rides on that single entry point via a `from`/`to` comparison. Implement it when the change is reversible; **throw a descriptive error when it is not**, so the failure is explicit instead of leaving a schema that no longer matches the running code.
-
----
-
-## 5. The `PRAGMA` settings, and why they are centralised
-
-`PRAGMA` settings are **per-connection and are not stored in the file**, so they must be reapplied on every open. That is why they live in `beforeOpen`:
+`CacheDatabase.forTesting(NativeDatabase.memory())` gives an in-memory database on the current isolate — no `path_provider`, no isolate, no file. The test imports `package:drift/native.dart` itself; `test/` is the one place a web-capable package may:
 
 ```dart
-// packages/core/database/lib/src/migration/drift_migration_strategy.dart
-beforeOpen: (OpeningDetails details) async {
-  // SQLite ships with foreign key enforcement OFF. Without this any
-  // `references()` declared on a table is silently ignored, so broken
-  // relations are only discovered as corrupt data much later.
-  await database.customStatement('PRAGMA foreign_keys = ON');
-
-  // Write-Ahead Logging lets readers run concurrently with a writer,
-  // which is required once readPool > 1 and avoids "database is locked"
-  // under contention.
-  await database.customStatement('PRAGMA journal_mode = WAL');
-
-  // Wait for a held lock instead of failing instantly with SQLITE_BUSY.
-  await database.customStatement('PRAGMA busy_timeout = $busyTimeoutMs');
-},
-```
-
-| Pragma | Why it matters |
-|---|---|
-| `foreign_keys = ON` | **SQLite defaults this OFF.** Every `references()` you declare is silently ignored without it — a silent trap that surfaces much later as corrupt relations. |
-| `journal_mode = WAL` | Readers run concurrently with a writer. Required once `readPool > 1`; avoids "database is locked" under contention. |
-| `busy_timeout = 5000` | Waits for a held lock instead of failing instantly with `SQLITE_BUSY`. Default is `0`. |
-
-WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — which is exactly why the WAL test in `data_core` runs against a **real file**.
-
-This is centralised for one reason: a package that wrote its own `MigrationStrategy` and forgot `foreign_keys = ON` would lose referential integrity without any error.
-
----
-
-## 6. Corruption recovery: quarantine, never delete
-
-Opening is registered with `@preResolve`, so anything thrown there aborts `configureDependencies()` and the app cannot start. A damaged file would mean a permanent crash loop.
-
-`DriftDatabaseOpener.open` handles this — and the design leans hard towards *not* touching user data:
-
-```dart
-// packages/core/database/lib/src/opening/drift_database_opener.dart
-static Future<T> open<T extends GeneratedDatabase>(
-  DriftDatabaseBuilder<T> build, {
-  required String fileName,
-  int readPool = DatabaseConstants.DEFAULT_READ_POOL,
-}) async {
-  try {
-    return await _openVerified(build, fileName: fileName, readPool: readPool);
-  } catch (error, stackTrace) {
-    if (!isCorruptionError(error)) rethrow;
-    // ... quarantine, then reopen empty
-  }
-}
-```
-
-Three deliberate decisions:
-
-**The connection is verified, not assumed.** `createBackgroundExecutor` is lazy — it does not touch the file until the first statement. `_openVerified` runs a `SELECT 1` probe so a broken database fails *here* rather than at some unrelated call site later.
-
-**The file is renamed, never deleted.**
-
-```dart
-// packages/core/database/lib/src/connection/database_connection_factory.dart
-/// The file is **renamed, never deleted** — if the corruption check ever
-/// misfires the user's bytes are still recoverable from
-/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
-/// an older one is replaced so repeated failures cannot fill the disk.
-```
-
-The `-wal` / `-shm` sidecars are removed too — they belong to the quarantined database and would otherwise be applied to the new one.
-
-**An environment marker vetoes a corruption match.**
-
-```dart
-@visibleForTesting
-static bool isCorruptionError(Object error) {
-  final message = error.toString().toLowerCase();
-
-  final looksLikeEnvironment = DatabaseConstants.ENVIRONMENT_ERROR_MARKERS
-      .any(message.contains);
-  if (looksLikeEnvironment) return false;
-
-  return DatabaseConstants.CORRUPTION_ERROR_MARKERS.any(message.contains);
-}
-```
-
-| Treated as corruption → quarantine | Treated as environment → rethrow untouched |
-|---|---|
-| `database disk image is malformed` | `unable to open database file` |
-| `file is not a database` | `disk i/o error` |
-| `file is encrypted or is not a database` | `database or disk is full` |
-| `malformed database schema` | `attempt to write a readonly database` |
-| | `access denied` / `permission denied` / `operation not permitted` |
-
-The predicate matches on message strings rather than a typed `SqliteException` because `sqlite3` is not a declared dependency of `core_database` — importing it would add a dependency the package does not otherwise need, and every import must be declared. Because string matching is fragile, the predicate is **biased towards not recovering**: if an environment marker appears, the database is left alone even when a corruption marker also matched.
-
-Losing user data is worse than surfacing a startup error.
-
----
-
-## 7. `core_storage` or `core_database`?
-
-| You need | Use | Why |
-|---|---|---|
-| A token, a flag, a theme mode, a locale | [`core_storage`](06_storage.md) | One value per key; encrypted; reactive via `ChangeNotifier` / `Stream` |
-| A list of rows you query, filter or sort | `core_database` | SQL, indexes, ordering |
-| Relations between records | `core_database` | Foreign keys (remember: enabled by the `PRAGMA` above) |
-| Data whose shape will change over releases | `core_database` | Versioned migrations |
-| Something small, read on every frame | `core_storage` | In-memory cache; no async round-trip |
-
-Rule of thumb: if you would reach for `WHERE`, `ORDER BY` or `JOIN`, you want a database.
-
----
-
-## 8. Testing
-
-`CacheDatabase.forTesting()` gives an in-memory database on the current isolate — no `path_provider`, no isolate, no file:
-
-```dart
-final database = CacheDatabase.forTesting();
+    final database = CacheDatabase.forTesting(NativeDatabase.memory());
 ```
 
 The existing tests are split to follow the code:
 
 | Package | File | Covers |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, empty registry |
-| `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
-| `data_core` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen) |
-| `data_core` | `database_handle_test.dart` | Accessor reads/writes, shared connection, transaction commit / rollback / return value |
+| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry, and the upgrade against a real file: every step replays and keeps the rows, a failing step rolls the earlier ones back, and the opened file has `foreign_keys` on and the WAL journal |
+| `core_database` | `drift_database_opener_test.dart` | Corruption recovery — a quarantined file is reopened empty; when nothing could be moved, the original error stands with no reopen — and the corruption predicate directly, including the case where an environment marker vetoes a corruption match |
+| `core_database` | `database_connection_factory_test.dart` | Read-pool connections carry the busy timeout, which `beforeOpen` sets on the writer only; the database directory per platform (documents on Android and iOS, application support on the desktop); the quarantine of a file and its sidecars, and `false` when there is nothing to move |
+| `core_database` | `database_handle_test.dart` | `DatabaseHandle.transaction` commits its block and returns its value; a block that throws rolls back what it wrote |
+| `data_cache` | `cache_database_test.dart` | One **real-file** upgrade: a hand-written old-version file (`user_version = 1`) reopened as version 2 replays its step and keeps its rows |
+| `data_cache` | `cache_entry_repository_test.dart` | The repository over a real in-memory database (`DatabaseHandle` → DAO → model → entity): a saved value comes back as an entity and a missing key as `null`; a throwing data source becomes a `Failure`, never an exception |
 
 Two habits worth copying:
 
 - **Test the corruption predicate directly.** It decides whether a user's database may be moved aside — verifying it only through a real corrupt file is not enough.
-- **Test pragmas on a real file.** An in-memory database reports `journal_mode = memory`, so it cannot prove WAL is on.
+- **Test pragmas on a real file.** An in-memory database reports `journal_mode = memory`, so it cannot prove WAL is on. `migration_test.dart` opens a real file for that reason.
+
+## 13. The web
+
+Nothing in your package changes for the web: `DriftDatabaseOpener.open` and `CacheDatabase.open` are the same calls. `core_database` picks the connection through a configurable import in `database_connection_factory.dart` (allow-listed for R17, the reference for R22):
+
+```dart
+import 'connection/native_connection.dart'
+    if (dart.library.js_interop) 'connection/web_connection.dart'
+    as connection;
+```
+
+Natively, `connection/native_connection.dart` opens the file on background drift isolates. On the web, `connection/web_connection.dart` opens drift's wasm build of SQLite in a worker (`WasmDatabase.open`), stored in whichever of the browser's storages it offers — the boot logs which, at `INFO`, with the browser features it missed. The barrel exports neither target, only the factory (RULE-75).
+
+**Two assets** must sit next to the app's `index.html`: `sqlite3.wasm` and `drift_worker.js`. They are opened by relative URIs, so the browser resolves them against `<base href>` and an app served under a sub-path still finds them. `dart tools/composer/composer.dart runners` writes both into the app's generated web runner when the app links `core_database` — composed, or reached through a composed package's `dependencies:`:
+
+- **`sqlite3.wasm`** is the binary of the release the *resolved* `sqlite3` package names, checked against the sha256 that package ships in its `lib/src/hook/asset_hashes.dart`. It is downloaded once from the `sqlite3.dart` GitHub release and cached under `$XDG_CACHE_HOME` (else `~/.cache`; `%LOCALAPPDATA%` on Windows), then `flutter_monorepo/sqlite3/<tag>/`. Every copy is held to the hash: a download that differs is refused, a cache that differs is deleted, and a file already in place that matches is never rewritten. Offline (or with `--offline`, and no cached copy), the run warns and the web build has no database: run `dart tools/composer/composer.dart runners --app <id> --platform web` online, or place the matching file by hand. If the resolved `sqlite3` ships no hash table, nothing can be verified: place the `sqlite3.wasm` released for that version in the web runner by hand, and `runners` uses it with a *not verified* warning on every run.
+- **`drift_worker.js`** is compiled with `dart compile js -O4` from `platform/infra/database/web/drift_worker.dart` (`WasmDatabase.workerMainForOpen()`), in a temporary directory, and copied in only when its bytes differ. The source sits outside `lib/`, so the package barrel never exports it.
+
+**No quarantine on the web.** A database there is not a file that can be moved aside: `DatabaseConnectionFactory.quarantineDatabaseFile` returns `false`, and the opener rethrows the original error — no reopen, no "data is lost" log — until the site's data is cleared.
+
+**Proven on Chromium only.** The web boot test runs headless Chrome; other browsers are not exercised here.
 
 ---
 
-## 9. The cache stack is sample code
+## Verify
 
-> [!NOTE]
-> The cache chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase` — is wired end to end and fully registered in DI, but **no feature in this template consumes it**. It exists as a working reference for the shape above, and as the fixture the database tests run against.
->
-> Copy the shape for real tables. Delete the whole chain if you do not need a cache — nothing else references it.
+```bash
+dart run build_runner build --workspace   # <name>_database.g.dart, the DAO mixin, module.module.dart
+flutter analyze                           # No issues found!
+cd modules/cache/data && flutter test     # the reference tests: the old-file upgrade and the repository round trip
+cd platform/infra/database && flutter test
+cd apps/mobile && flutter test test/di_smoke_test.dart   # the @preResolve open succeeds in the real graph
+```
 
----
+Run your own package's tests the same way. A new migration needs a test that opens the old schema, runs the step and reads the new column back.
 
-## 10. Checklist
+Review checklist:
 
 - [ ] Tables, DAO, database class and data source all live in the **owning package**
 - [ ] Database file name is a constant in that package's `utils/`, named after the package
 - [ ] `migration` delegates to `driftMigrationStrategy` (do not hand-roll `MigrationStrategy`)
 - [ ] Migrations are **passed into** the database, never looked up inside it
-- [ ] `_registeredMigrations()` guards with `isRegistered` before `getAll`
+- [ ] The open collects steps with `getAllOrEmpty<IDatabaseMigration<YourDatabase>>()`, never a bare `getAll`
+- [ ] The `@preResolve` open carries `@Order(1)`, so the package's own migrations register before it; a step from another package sits in an earlier DI group
 - [ ] Data sources take `IDatabaseHandle<TDb>`, not the database
 - [ ] Signatures return a **Model**; no Drift row class in the public API
-- [ ] New schema step = new `IDatabaseMigration` with `version >= 2`, registered via `@LazySingleton(as: IDatabaseMigration)`; `schemaVersion` bumped to match
+- [ ] New schema step = new `IDatabaseMigration` with `version >= 2`, registered via `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` bumped to match
 - [ ] `downgrade` implemented, or throws a descriptive error when irreversible
 - [ ] Barrels regenerated and `build_runner` run
 
-## See also
+## Troubleshooting
 
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `no such column` after an upgrade | `schemaVersion` was not bumped, or the step was never collected | Bump `schemaVersion` and register the step typed to your database (step 11) |
+| The step exists but never runs | The open lacks `@Order(1)`, the step is registered as untyped `IDatabaseMigration`, or it sits in a later DI group | Add `@Order(1)` (step 7); register `as: IDatabaseMigration<YourDatabase>` (step 11) |
+| Boot crashes in `configureDependencies()` with no migration registered | `getAll<T>()` throws when nothing is registered | Collect with `getAllOrEmpty<IDatabaseMigration<YourDatabase>>()` (step 7) |
+| `UnsupportedError: Cannot downgrade the schema…` at startup | An older build was installed over a newer schema | Ship the downgrade step first, or reinstall the newer build |
+| Relations are not enforced | A hand-written `MigrationStrategy` skipped `foreign_keys = ON` | Delegate to `driftMigrationStrategy` (step 6) |
+| The file was moved to `<name>.corrupt` | The opener detected a corrupt database and quarantined it | The bytes are kept for recovery; see [`../architecture/02_core.md` § 8](../architecture/02_core.md#corruption-recovery-quarantine-never-delete) |
+| A test cannot prove WAL is on | In-memory databases report `journal_mode = memory` | Test pragmas on a real file (step 12) |
+| `arch_check` R22: *imports package:drift/native.dart, which uses dart:ffi …* | A `lib/` file of a web-capable package imports a native-only library | Move the import to `test/`, or take an executor as `forTesting` does (step 6) |
+| The web build boots, then the database fails to open | `sqlite3.wasm` or `drift_worker.js` is missing next to `index.html`, or the server sends the wasm without `application/wasm` | Run `composer runners --app <id> --platform web`; serve `.wasm` as `application/wasm` ([§ 13](#13-the-web)) |
+| A corrupt database on the web keeps failing at boot | The web cannot quarantine | Clear the site's data in the browser ([§ 13](#13-the-web)) |
+
+## Related
+
+- Rules: RULE-41 (return models, never rows), RULE-46 (each package owns its database), RULE-47 (migrations typed to their database), RULE-82 (no native-only library in a web-capable `lib/`, R22) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--relational-storage-drift--sqlite) — the design behind the mechanism
 - [`06_storage.md`](06_storage.md) — key-value storage, and when to prefer it
 - [`02_new_domain_data.md`](02_new_domain_data.md) — the repository and model layers above the DAO
 - [`05_di.md`](05_di.md) — `@preResolve`, module ordering, `getAll` vs `getAllOrEmpty`
-- [`../architecture/02_core.md`](../architecture/02_core.md) — where `core_database` sits
-- [`../reference/01_rules.md`](../reference/01_rules.md) — the ownership rules in full

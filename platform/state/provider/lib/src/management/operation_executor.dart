@@ -1,0 +1,184 @@
+part of '../base/base_provider.dart';
+
+/// Handles operation execution and response processing
+///
+/// This class is responsible for executing operations (API calls, database operations,
+/// file operations, etc.) and processing their responses according to the provided configuration.
+///
+/// Simplified to work with Result<R> directly instead of BaseResult<R>.
+///
+/// Features:
+/// - Handles loading state management
+/// - Processes success and error responses
+/// - Manages state transitions during operations
+/// - Provides comprehensive error handling: a failed [Result] and an operation
+///   that throws both end in the error state, never in a stuck `loading`
+class OperationExecutor<T> {
+  const OperationExecutor(this._stateManager);
+
+  final StateManager<T> _stateManager;
+
+  /// Execute an operation with the given configuration
+  ///
+  /// This is the main method that orchestrates the entire operation flow:
+  /// 1. Handle loading state
+  /// 2. Execute the operation
+  /// 3. Process the response (Success or Failure)
+  ///
+  /// Simplified to work directly with Result<R> pattern.
+  Future<void> execute<R>(
+    OperationConfig<R, T> config,
+    T? Function(R? data)? convert,
+  ) async {
+    if (_stateManager.isDisposed) return;
+
+    // Execute global onStart hook
+    OperationGlobalConfig.instance.onStart?.call();
+
+    // onFinish pairs with onStart on every path — including a provider
+    // disposed mid-operation and an operation that throws — so a global
+    // hook such as a loading overlay counter never stays unbalanced.
+    try {
+      // Show loading state if configured. Skipped once data exists so the
+      // view keeps showing it instead of flashing a spinner over it.
+      if (config.showLoading && _stateManager.data == null) {
+        _stateManager.setState(state: const ViewState.loading());
+      }
+
+      // Execute operation
+      final Result<R> result;
+      try {
+        result = await config.operation();
+      } catch (error, stackTrace) {
+        // Repositories already turn exceptions into `Result.failure`; one
+        // that escapes is a bug. Still settle the screen — rethrowing here
+        // would leave it on `loading` for good — as `emitResult` does for a
+        // bloc: the failure state, and the error surfaced where a bug is
+        // looked for.
+        if (_stateManager.isDisposed) return;
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'provider_state_management',
+            context: ErrorDescription('while running an operation'),
+          ),
+        );
+        await _handleFailure(
+          ErrorHandler.handleError(error, stackTrace),
+          config,
+        );
+        return;
+      }
+
+      if (_stateManager.isDisposed) return;
+
+      // Await the whenAsync call to handle async branches correctly.
+      await result.whenAsync(
+        success: (data) => _handleSuccess(data, config, convert: convert),
+        failure: (failure) => _handleFailure(failure, config),
+        none: _handleNone,
+        cancel: _handleCancel,
+      );
+    } finally {
+      // Execute global onFinish hook
+      OperationGlobalConfig.instance.onFinish?.call();
+    }
+  }
+
+  /// Handle successful response
+  Future<void> _handleSuccess<R>(
+    R? data,
+    OperationConfig<R, T> config, {
+    T? Function(R? data)? convert,
+  }) async {
+    if (_stateManager.isDisposed) return;
+
+    T? finalData;
+
+    try {
+      if (convert != null) {
+        finalData = convert(data);
+      } else if (data is T) {
+        finalData = data;
+      } else if (data == null) {
+        finalData = null;
+      } else {
+        assert(
+          false,
+          'A `convert` function must be provided to `executeOperation` when the operation result type ($R) is not assignable to the provider\'s state type ($T).',
+        );
+      }
+    } catch (error, stackTrace) {
+      // A `convert` that throws (a parse of a value the repository let
+      // through) is a bug like a throwing operation: settle the screen on the
+      // failure state instead of leaving it on `loading`, and surface the
+      // error where a bug is looked for.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'provider_state_management',
+          context: ErrorDescription('while converting an operation result'),
+        ),
+      );
+      await _handleFailure(ErrorHandler.handleError(error, stackTrace), config);
+      return;
+    }
+
+    _stateManager.setState(state: const ViewState.success(), data: finalData);
+
+    // Execute local callback if provided, otherwise execute global callback
+    if (config.onSuccess != null) {
+      await config.onSuccess?.call(finalData);
+    } else {
+      OperationGlobalConfig.instance.onSuccess?.call(finalData);
+    }
+  }
+
+  /// Handle failure response
+  Future<void> _handleFailure<R>(
+    AppFailure<dynamic> failure,
+    OperationConfig<R, T> config,
+  ) async {
+    if (_stateManager.isDisposed) return;
+
+    final errorState = config.errorStateBuilder?.call(failure);
+    // Forced: with data already loaded no loading state sits between two
+    // failures, so a repeated identical failure would otherwise be equal to
+    // the current state and never reach a listener.
+    _stateManager.setState(
+      state: ViewState.error(error: errorState),
+      message: failure.message,
+      force: true,
+    );
+
+    // Execute local callback if provided, otherwise execute global callback
+    if (config.onFailure != null) {
+      await config.onFailure?.call(failure);
+    } else {
+      OperationGlobalConfig.instance.onFailure?.call(failure);
+    }
+  }
+
+  /// Handle a 'None' result.
+  ///
+  /// This method is called when an operation results in a no-op. It intentionally
+  /// does nothing to the state, ensuring that the UI remains in its current
+  /// state without transitioning to an error or success state.
+  void _handleNone() {
+    if (_stateManager.isDisposed) return;
+    // No state change is needed for a 'None' result.
+    // It signifies a no-op, so we keep the UI as is.
+  }
+
+  /// Handle cancelled response
+  ///
+  /// This method is called when an operation is cancelled. It intentionally
+  /// does nothing to the state, ensuring that the UI remains in its current
+  /// state without transitioning to an error or success state.
+  void _handleCancel() {
+    if (_stateManager.isDisposed) return;
+    // No state change is needed when an operation is cancelled.
+  }
+}

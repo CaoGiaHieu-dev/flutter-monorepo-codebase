@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App-level privacy manifest for the Runner target (bundled as a resource).
+
+  It declares what the TEMPLATE itself does. Plugins and the Firebase pods ship
+  their own manifests, and Xcode merges them into the privacy report at
+  archive time (Product > Archive > Generate Privacy Report).
+
+  ADOPTERS MUST REVIEW THIS FILE before the first App Store submission:
+  every data type your backend collects (account email, user id, analytics,
+  crash data, ...) has to be listed under NSPrivacyCollectedDataTypes, and
+  it must agree with the App Privacy answers in App Store Connect.
+
+  - NSPrivacyCollectedDataTypeDeviceID: the Firebase Cloud Messaging token
+    that core_notifications obtains to deliver push notifications. Used for
+    app functionality only; the template sends it to no backend of its own,
+    so it is not linked to the user. Set Linked to true once your server
+    stores the token against an account.
+  - NSPrivacyAccessedAPICategoryUserDefaults / CA92.1: shared_preferences
+    (core_storage's StorageType.pref) reads and writes the app's own
+    NSUserDefaults, accessible only to the app itself.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

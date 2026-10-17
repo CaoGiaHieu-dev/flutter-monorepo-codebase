@@ -1,3 +1,4 @@
+// composer:managed:imports — generated from app_manifest.yaml
 import 'package:bloc_state_management/di/module.module.dart';
 import 'package:core_base_ui/di/module.module.dart';
 import 'package:core_common/core_common.dart';
@@ -7,77 +8,86 @@ import 'package:core_network/di/module.module.dart';
 import 'package:core_notifications/di/module.module.dart';
 import 'package:core_storage/di/module.module.dart';
 import 'package:data_auth/di/module.module.dart';
+import 'package:data_cache/di/module.module.dart';
 import 'package:data_core/di/module.module.dart';
-import 'package:data_language/di/module.module.dart';
 import 'package:domain_auth/di/module.module.dart';
+import 'package:domain_cache/di/module.module.dart';
 import 'package:domain_core/di/module.module.dart';
-import 'package:domain_language/di/module.module.dart';
 import 'package:feature_auth/di/module.module.dart';
 import 'package:feature_dashboard/di/module.module.dart';
 import 'package:feature_home/di/module.module.dart';
 import 'package:feature_onboarding/di/module.module.dart';
-import 'package:feature_payment/di/module.module.dart';
 import 'package:feature_settings/di/module.module.dart';
 import 'package:feature_splash/di/module.module.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_app_shell/di/module.module.dart';
+import 'package:platform_shell_adapters/di/module.module.dart';
 import 'package:provider_state_management/di/module.module.dart';
 
 import 'injection.config.dart';
 
+// composer:end:imports
+
+// Dependency injection for the `mobile` app.
+//
+// **The two marked regions are generated** — the imports and the module lists
+// with the `configureDependencies` entry point — from
+// `apps/mobile/app_manifest.yaml` by:
+//
+//   dart tools/composer/composer.dart sync --app mobile
+//
+// Outside them there is only this comment, so there is nothing to keep in step
+// by hand: edit the manifest instead, and `composer verify` fails CI if a region
+// has drifted from it or code appears outside them. Getting a module list wrong fails at boot with
+// `"<Type> is not registered"`, which `flutter analyze` cannot see.
+//
+// Group order is load-bearing and is declared in the manifest's `di_groups`:
+// `configureDependencies()` initialises modules in exactly that sequence, and
+// an eager `@Singleton` may only depend on a type registered by an earlier
+// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
+// proves it).
+
+// composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
-  ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
-  // Registers nothing: `core_database` is mechanism only and owns no database.
-  // Each package that persists data declares its own (see `data_core`).
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
-// CoreBaseUiPackageModule depends on ILanguageStorage and IThemeStorage,
-// which are app-local singletons registered before externalPackageModulesAfter.
-// It must run AFTER those local bindings, so it lives here instead of _coreModules.
-const _uiModules = [ExternalModule(CoreBaseUiPackageModule)];
+const _notificationsModules = [
+  ExternalModule(CoreNotificationsPackageModule),
+];
+
+const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
+const _uiModules = [
+  ExternalModule(CoreBaseUiPackageModule),
+];
 
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
-  ExternalModule(DomainLanguagePackageModule),
+  ExternalModule(DomainCachePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
-  ExternalModule(DataLanguagePackageModule),
+  ExternalModule(DataCachePackageModule),
 ];
 
-/// Feature modules the app assembles.
-///
-/// These imports are the app shell's **only intentional hard reference** to
-/// feature packages: as the composition root it must name what it composes.
-///
-/// To drop a feature, remove in this order:
-///   1. its `ExternalModule(...)` entry below and the matching import above;
-///   2. its `feature_x:` entry in `app/pubspec.yaml`;
-///   3. its path in the root `pubspec.yaml` `workspace:` list;
-///   4. `flutter pub get` + `dart run build_runner build -d --workspace`.
-///
-/// Everything the shell consumes at runtime resolves through `core_di`
-/// contracts with `getAllOrEmpty` / `getItOrNull` fallbacks, so no other file
-/// needs editing. `core_ui_kit` is imported directly in a few shell files, but
-/// it is a core library rather than a removable feature.
-///
-/// `dart tools/sample_cleanup/remove_sample.dart <name>` performs these steps
-/// and reports the couplings a manual removal would miss.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
-  ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
-  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSettingsPackageModule),
-  ExternalModule(FeaturePaymentPackageModule),
+  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSplashPackageModule),
+  ExternalModule(FeatureDashboardPackageModule),
 ];
 
 const _otherModules = [
@@ -85,36 +95,47 @@ const _otherModules = [
   ExternalModule(BlocStateManagementPackageModule),
 ];
 
-/// Configure dependency injection.
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+  ..._notificationsModules,
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
+];
+
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
 ///
-/// ## Ordering rule for databases
+/// A class the graph builds injects the profile sections it reads
+/// (`NetworkProfile`, `LocaleProfile`, ...). `runShellApp` registers the app's
+/// own before this runs; `registerProfileDefaults` then adds the template's
+/// default for any section still missing, so a graph booted without a profile
+/// completes instead of throwing `"<Section> is not registered"`.
 ///
-/// A module that opens a database with `@preResolve` runs its collected
-/// `IDatabaseMigration` steps *during its own initialisation*, so any package
-/// contributing a step must be registered before it. `data_core` opens
-/// `CacheDatabase` here, which means a migration contributed by a **feature**
-/// would not be seen — features initialise after `_dataModules`.
-///
-/// Nothing in the template hits this yet (no feature contributes a schema
-/// step). When one does, move that feature's module ahead of the module that
-/// owns the database, or give the feature its own database instead.
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
 @InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
-  ],
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
 )
-Future<void> configureDependencies({String? environment}) async {
-  getIt.enableRegisteringMultipleInstancesOfOneType();
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
   final env = environment ?? AppConfig.appFlavor.toValue();
-  await getIt.init(environment: env);
+  await target.init(environment: env);
 }
 
 /// Reset all dependencies (useful for testing)
 Future<void> resetDependencies() async {
   await getIt.reset();
 }
+// composer:end:modules

@@ -48,14 +48,22 @@ class ReviewResult {
 
     // Helper to clean titles for summary
     String cleanTitle(String text) {
+      // Bold goes first: after "1. " the marker strip below would otherwise
+      // eat one `*` of a leading `**` and leave "*Title" behind.
       return text
+          .replaceAll('**', '') // Strip bolding
           .replaceFirst(RegExp(r'^\d+\.\s*'), '') // Strip "1. "
           .replaceFirst(RegExp(r'^(\*|-|•)\s*'), '') // Strip "* "
-          .replaceAll('**', '') // Strip bolding
           .split('\n')
           .first // Only take the first line
           .trim();
     }
+
+    final suggestionsMarkers = [
+      '### 🚀 Improvement Suggestions',
+      '### 🚀 Key Improvements',
+      '### Suggestions',
+    ];
 
     // Extract issues
     final issuesMarkers = [
@@ -77,11 +85,12 @@ class ReviewResult {
         '### 📈 Quality Matrix',
         '### 📈 Overall Rating',
       ];
-      int endOfIssuesIndex = -1;
-      for (final marker in endMarkers) {
-        endOfIssuesIndex = review.indexOf(marker, issuesStartIndex);
-        if (endOfIssuesIndex != -1) break;
-      }
+      // The suggestions section ends the issues too: its numbered items were
+      // counted as issues when it came first among the end markers' siblings.
+      final endOfIssuesIndex = _nearest(review, issuesStartIndex, [
+        ...endMarkers,
+        ...suggestionsMarkers,
+      ]);
 
       final block = endOfIssuesIndex != -1
           ? review.substring(issuesStartIndex, endOfIssuesIndex).trim()
@@ -103,11 +112,6 @@ class ReviewResult {
     }
 
     // Extract suggestions
-    final suggestionsMarkers = [
-      '### 🚀 Improvement Suggestions',
-      '### 🚀 Key Improvements',
-      '### Suggestions',
-    ];
 
     int suggestionsStartIndex = -1;
     for (final marker in suggestionsMarkers) {
@@ -122,11 +126,10 @@ class ReviewResult {
         '### 📈 Quality Matrix',
         '### 📈 Overall Rating',
       ];
-      int endOfSuggestionsIndex = -1;
-      for (final marker in endMarkers) {
-        endOfSuggestionsIndex = review.indexOf(marker, suggestionsStartIndex);
-        if (endOfSuggestionsIndex != -1) break;
-      }
+      final endOfSuggestionsIndex = _nearest(review, suggestionsStartIndex, [
+        ...endMarkers,
+        ...issuesMarkers,
+      ]);
 
       final block = endOfSuggestionsIndex != -1
           ? review
@@ -187,5 +190,16 @@ class ReviewResult {
       suggestions: suggestions,
       ratings: ratings,
     );
+  }
+
+  /// Index of the first of [markers] at or after [start], or -1 when none
+  /// follows: where the section that begins at [start] ends.
+  static int _nearest(String review, int start, List<String> markers) {
+    var nearest = -1;
+    for (final marker in markers) {
+      final index = review.indexOf(marker, start);
+      if (index != -1 && (nearest == -1 || index < nearest)) nearest = index;
+    }
+    return nearest;
   }
 }

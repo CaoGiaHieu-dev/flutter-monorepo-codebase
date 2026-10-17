@@ -1,0 +1,40 @@
+import 'package:core_di/core_di.dart';
+import 'package:go_router/go_router.dart';
+import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../extensions/l10n_{{snakeNameInput}}_extension.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
+import '{{snakeNameInput}}_route_module.dart';
+
+/// Contributes one primary navigation destination and its
+/// [StatefulShellBranch] routes.
+///
+/// The app shell collects every registration with
+/// `getAllOrEmpty<INavDestinationModule>()` sorted by [order], so removing this
+/// package simply drops the destination.
+///
+/// Returns a [NavDestination] rather than a widget: this module works the same
+/// whether the app renders a bottom bar, a rail or a sidebar.
+@LazySingleton(as: INavDestinationModule)
+class {{pascalNameInput}}NavDestination extends INavDestinationModule {
+  /// Ascending order among destinations. The generator picked {{navOrder}}:
+  /// 10 above the highest `order` of the destinations that existed when this
+  /// file was written, so generated tabs never tie (tied orders have no
+  /// defined sequence). Renumber freely — only the relative order matters.
+  @override
+  int get order => {{navOrder}};
+
+  @override
+  String get path => {{pascalNameInput}}Path.{{screamingNameInput}};
+
+  @override
+  List<RouteBase> get routes => [${{camelNameInput}}Route];
+
+  @override
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10n{{pascalNameInput}}.title,
+    icon: Icons.star_border,
+    selectedIcon: Icons.star,
+  );
+}

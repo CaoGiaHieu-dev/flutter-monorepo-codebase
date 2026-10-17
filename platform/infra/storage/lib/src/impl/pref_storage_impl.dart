@@ -1,0 +1,354 @@
+import 'dart:convert';
+
+import 'package:dynamic_logger/dynamic_logger.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../contracts/storage_interface.dart';
+import '../storage_codec.dart';
+import '../utils/storage_constants.dart';
+import 'encrypted_storage.dart';
+
+const String _TAG = 'PrefStorageImpl';
+
+/// A class for managing shared preferences storage.
+///
+/// This class uses the `shared_preferences` package to store data on the
+/// device. Every value is AES-encrypted with this backend's master key before
+/// it is written.
+///
+/// Registered as [StorageInterface] with named qualifier 'Pref' via DI.
+///
+/// The master key lives in hardware-backed [FlutterSecureStorage]. Only when
+/// secure storage cannot be read and there is nothing a new key could orphan
+/// does it fall back to a key held in SharedPreferences — see [init].
+@Injectable(as: StorageInterface)
+@Named('Pref')
+class PrefStorageImpl extends EncryptedStorage {
+  /// Constructor – no singleton pattern, fully managed by DI. [platform] is
+  /// the running platform's facts (`registerAppProfile` registers them
+  /// before DI starts).
+  PrefStorageImpl(
+    this._preferences, [
+    PlatformFacts platform = const PlatformFacts.today(),
+  ]) : _platform = platform,
+       _secureStorage = EncryptedStorage.secureStorage,
+       _retryDelay = StorageConstants.MASTER_KEY_RETRY_DELAY;
+
+  /// Over a given secure-storage backend, retrying after `retryDelay`, on
+  /// the `platform` given — for tests that need a platform failure the real
+  /// plugin cannot produce on demand.
+  @visibleForTesting
+  PrefStorageImpl.withSecureStorage(
+    this._preferences,
+    this._secureStorage, {
+    this._retryDelay = Duration.zero,
+    this._platform = const PlatformFacts.today(),
+  });
+
+  /// SharedPreferences instance for storing data
+  final SharedPreferences _preferences;
+
+  /// Where the master key is kept.
+  final FlutterSecureStorage _secureStorage;
+
+  /// Base delay between master-key read attempts (grows linearly).
+  final Duration _retryDelay;
+
+  /// The running platform's facts: [PlatformFacts.secureStorage] decides
+  /// what [init] does when the master key cannot be read and the stored
+  /// preferences depend on it.
+  final PlatformFacts _platform;
+
+  /// This run's preferences, sealed as on disk, when the master key the
+  /// stored ones depend on cannot be read and the policy is
+  /// [SecureStoragePolicy.memoryFallback]. `null` while SharedPreferences is
+  /// in use.
+  Map<String, String>? _volatile;
+
+  /// Establishes the master key the stored preferences are sealed with.
+  ///
+  /// **Never replaces a key that may still be good.** A new key orphans every
+  /// value sealed with the old one, and [read] then deletes them — theme,
+  /// locale and the onboarding flag reset. A locked Keychain before the first
+  /// unlock after a reboot, or a busy KeyStore, is therefore never a reason
+  /// to generate a fresh key in SharedPreferences. The policy matches
+  /// `SecureStorageImpl`:
+  ///
+  /// * A failing read is retried. If it keeps failing, init uses the
+  ///   SharedPreferences fallback key only when that key opens the stored
+  ///   values, and creates one only when there are no stored values to lose.
+  ///   Otherwise nothing is written or deleted, and
+  ///   [PlatformFacts.secureStorage] decides: [SecureStoragePolicy.required]
+  ///   rethrows and the boot stops (B01); [SecureStoragePolicy.memoryFallback]
+  ///   leaves the stored values on disk untouched, serves defaults for this
+  ///   run from memory under a fresh key that is never persisted, and logs
+  ///   one WARNING naming the cause.
+  /// * A fallback key from a session without secure storage is moved into
+  ///   secure storage once it is readable again — when it is the key that
+  ///   opens the stored values.
+  /// * Only a key that is absent or unusable (not a 256-bit base64 key) is
+  ///   replaced; values sealed with a lost key then fail to decrypt and are
+  ///   dropped one by one by [read].
+  @override
+  Future<void> init() async {
+    final fallbackKey = _usableOrNull(
+      _preferences.getString(StorageConstants.PREF_MASTER_KEY_ID),
+    );
+    final sealed = _sealedValues();
+
+    final String? secureKey;
+    try {
+      secureKey = await _readSecureKey();
+    } catch (e) {
+      if (fallbackKey != null &&
+          (sealed.isEmpty || _opens(fallbackKey, sealed))) {
+        setMasterKey(fallbackKey);
+        return;
+      }
+      if (sealed.isEmpty) {
+        DynamicLogger.log(
+          'Secure storage is unavailable; keeping the pref master key in '
+          'SharedPreferences until it is readable again.',
+          tag: _TAG,
+          level: LogLevel.WARNING,
+        );
+        final newKey = _generateKey();
+        await _preferences.setString(
+          StorageConstants.PREF_MASTER_KEY_ID,
+          newKey,
+        );
+        setMasterKey(newKey);
+        return;
+      }
+      if (_platform.secureStorage == SecureStoragePolicy.memoryFallback) {
+        _volatile = <String, String>{};
+        setMasterKey(_generateKey());
+        DynamicLogger.log(
+          'Secure storage is unavailable (${e.runtimeType}) and the stored '
+          'preferences are sealed with the pref master key kept there: they '
+          'are left on disk untouched, and this run uses defaults kept in '
+          'memory only. On Linux, start and unlock a Secret Service '
+          '(gnome-keyring, KWallet) — or decide `platforms.<p>.secure_storage` '
+          'in apps/<id>/app_manifest.yaml.',
+          tag: _TAG,
+          level: LogLevel.WARNING,
+        );
+        return;
+      }
+      DynamicLogger.log(
+        'The pref master key cannot be read and stored preferences depend '
+        'on it; giving up with every preference left intact.',
+        tag: _TAG,
+        level: LogLevel.ERROR,
+      );
+      rethrow;
+    }
+
+    var storedKey = secureKey;
+    if (storedKey != null && !EncryptedStorage.isUsableKey(storedKey)) {
+      DynamicLogger.log(
+        'Stored pref master key is corrupt; replacing it. Values sealed with '
+        'it will be dropped as they are read.',
+        tag: _TAG,
+        level: LogLevel.WARNING,
+      );
+      storedKey = null;
+    }
+
+    if (fallbackKey != null) {
+      // Left by a session that could not read secure storage; whatever it
+      // wrote is sealed with it. Keep whichever key opens the stored values.
+      final useFallback = storedKey == null || _opens(fallbackKey, sealed);
+      if (useFallback) {
+        await _adoptFallbackKey(fallbackKey);
+        setMasterKey(fallbackKey);
+        return;
+      }
+      await _preferences.remove(StorageConstants.PREF_MASTER_KEY_ID);
+    }
+
+    if (storedKey != null) {
+      setMasterKey(storedKey);
+      return;
+    }
+
+    // No usable key anywhere: nothing stored can be opened by any key.
+    final newKey = _generateKey();
+    try {
+      await _secureStorage.write(
+        key: StorageConstants.PREF_MASTER_KEY_ID,
+        value: newKey,
+      );
+    } catch (e) {
+      DynamicLogger.log(
+        'Failed to write the pref master key to SecureStorage '
+        '(${e.runtimeType}); keeping it in SharedPreferences.',
+        tag: _TAG,
+        level: LogLevel.WARNING,
+      );
+      await _preferences.setString(StorageConstants.PREF_MASTER_KEY_ID, newKey);
+    }
+    setMasterKey(newKey);
+  }
+
+  /// Reads the master key from secure storage, retrying a platform failure
+  /// before giving up. Rethrows the last error once the attempts run out.
+  Future<String?> _readSecureKey() => EncryptedStorage.readKeyWithRetry(
+    _secureStorage,
+    StorageConstants.PREF_MASTER_KEY_ID,
+    retryDelay: _retryDelay,
+    tag: _TAG,
+  );
+
+  /// Moves [key] from SharedPreferences into secure storage. If secure
+  /// storage refuses the write, the key stays where it is — still usable.
+  Future<void> _adoptFallbackKey(String key) async {
+    try {
+      await _secureStorage.write(
+        key: StorageConstants.PREF_MASTER_KEY_ID,
+        value: key,
+      );
+      await _preferences.remove(StorageConstants.PREF_MASTER_KEY_ID);
+    } catch (e) {
+      DynamicLogger.log(
+        'Could not move the pref master key into SecureStorage '
+        '(${e.runtimeType}); it stays in SharedPreferences for now.',
+        tag: _TAG,
+        level: LogLevel.WARNING,
+      );
+    }
+  }
+
+  /// The stored values sealed by [write] (`iv:ciphertext`), excluding the
+  /// reserved keys — the data a wrong master key would cost.
+  List<String> _sealedValues() => [
+    for (final key in _preferences.getKeys())
+      if (isValidKey(key))
+        if (_preferences.get(key) case final String value
+            when _looksSealed(value))
+          value,
+  ];
+
+  /// Whether [value] has the shape [encryptData] produces: a base64 16-byte
+  /// IV, a colon, and base64 ciphertext. Keeps an unrelated plain string
+  /// some other code stored in SharedPreferences out of the key decision.
+  static bool _looksSealed(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2 || parts[1].isEmpty) return false;
+    try {
+      return base64.decode(parts[0]).length == StorageConstants.IV_BYTES;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// Whether [key] decrypts at least one of the first few [sealed] values.
+  ///
+  /// A wrong AES-CBC key still passes the padding check about once in 256
+  /// tries, so a value only counts as opened when it also decodes as the
+  /// JSON [write] stores.
+  ///
+  /// Leaves [key] installed as the master key; [init] sets the final one.
+  bool _opens(String key, List<String> sealed) {
+    setMasterKey(key);
+    for (final value in sealed.take(StorageConstants.KEY_PROBE_SAMPLES)) {
+      try {
+        jsonDecode(decryptData(value));
+        return true;
+      } catch (_) {
+        // Expected while probing: this sample does not open with [key]
+        // (bad padding or not JSON). Try the next one; none → `false`.
+      }
+    }
+    return false;
+  }
+
+  static String _generateKey() => EncryptedStorage.generateKey();
+
+  static String? _usableOrNull(String? base64Key) =>
+      base64Key != null && EncryptedStorage.isUsableKey(base64Key)
+      ? base64Key
+      : null;
+
+  /// Write a value to shared preferences.
+  ///
+  /// The value can be any type, but it will be encoded as JSON before being stored.
+  ///
+  /// Args:
+  ///   key: The key to store the value under.
+  ///   value: The value to store.
+  @override
+  Future<void> write<T>(String key, T? value) async {
+    checkKey(key);
+
+    if (value == null) {
+      await delete(key); // Delete the value if it's null
+      return;
+    }
+    final sealed = encryptData(StorageCodec.encode(value));
+
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile[key] = sealed;
+      return;
+    }
+    await _preferences.setString(key, sealed); // Store data
+  }
+
+  /// Read a value from shared preferences.
+  ///
+  /// The value will be decoded from JSON.
+  ///
+  /// Args:
+  ///   key: The key to read the value from.
+  ///   reviver: A function that can be used to customize the decoding of JSON.
+  ///
+  /// Returns:
+  ///   The value stored under the given key.
+  @override
+  Future<T?> read<T>(
+    String key, {
+    T Function(Object? key, Object? value)?
+    reviver, // Reviver function for custom decoding
+  }) async {
+    checkKey(key);
+
+    final volatile = _volatile;
+    try {
+      final data = volatile != null
+          ? volatile[key]
+          : _preferences.get(key)?.toString(); // Read data from storage
+      if (data == null) return null; // Return null if data is not found
+
+      final decrypted = decryptData(data);
+      return StorageCodec.decode<T>(decrypted, key, reviver: reviver);
+    } catch (e) {
+      DynamicLogger.log(
+        'Failed to read or decrypt key: $key. Error: ${e.runtimeType}',
+        tag: _TAG,
+        level: LogLevel.ERROR,
+      );
+      await delete(key); // Delete value on error
+      return null;
+    }
+  }
+
+  /// Delete a value from shared preferences.
+  ///
+  /// Args:
+  ///   key: The key to delete the value from.
+  @override
+  Future<void> delete(String key) async {
+    checkKey(key);
+    final volatile = _volatile;
+    if (volatile != null) {
+      volatile.remove(key);
+      return;
+    }
+    await _preferences.remove(key); // Delete the value from storage
+  }
+}

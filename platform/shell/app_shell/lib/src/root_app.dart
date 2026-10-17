@@ -1,0 +1,77 @@
+import 'package:core_common/core_common.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
+import 'package:material_ui/material_ui.dart';
+
+import 'app_material_wrapper.dart';
+import 'navigation/app_router.dart';
+
+/// Root application widget that sets up the main app structure
+///
+/// This widget serves as the entry point for the Flutter application and
+/// is responsible for setting up the core application infrastructure including:
+/// - Provider dependency injection
+/// - Theme management
+/// - Localization support
+/// - Navigation routing
+/// - Global app configuration
+///
+/// The widget follows Clean Architecture principles by separating concerns
+/// and providing a clean interface between the presentation layer and
+/// the underlying app infrastructure.
+///
+/// Key responsibilities:
+/// - Initialize global providers (ThemeProvider, LanguageProvider, DeeplinkProvider)
+/// - Configure MaterialApp with routing, theming, and localization
+/// - Set up global gesture handling and UI overlays
+/// - Provide consistent app-wide behavior and styling
+///
+/// Example usage:
+/// ```dart
+/// void main() async {
+///   WidgetsFlutterBinding.ensureInitialized();
+///
+///   // Initialize dependencies
+///   await setupDependencies();
+///
+///   runApp(const RootApp());
+/// }
+/// ```
+class RootApp extends StatelessWidget {
+  /// Creates the root application widget. [display] is the app's
+  /// `DisplayProfile` (its OS font-size cap reaches the `MaterialApp`); the
+  /// template defaults when none is given.
+  const RootApp({super.key, this.display = const DisplayProfile()});
+
+  /// The app's display settings.
+  final DisplayProfile display;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppMaterialWrapper.router(
+      display: display,
+      // Navigation configuration using GoRouter
+      routeInformationProvider:
+          getIt<AppRouter>().router.routeInformationProvider,
+      routeInformationParser: getIt<AppRouter>().router.routeInformationParser,
+      routerDelegate: getIt<AppRouter>().router.routerDelegate,
+      backButtonDispatcher: getIt<AppRouter>().router.backButtonDispatcher,
+
+      // Global app builder for consistent behavior
+      builder: (context, child) {
+        return Overlay.wrap(
+          // The one overlay system (dialogs, toast, loading); it also
+          // routes the system back to a visible dialog.
+          child: AppOverlayInitializer(
+            child: GestureDetector(
+              // Global tap handler to unfocus keyboard when tapping outside input fields
+              onTap: AppUtils.unfocusKeyboard,
+              // No text-scale override here: `AppMaterialWrapper` caps the
+              // OS font size around this whole builder, overlays included.
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

@@ -5,7 +5,18 @@
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-		android:roundIcon="@mipmap/ic_launcher_round">
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
+        <!-- Backup is off. Auto Backup would copy SharedPreferences, which is
+             where flutter_secure_storage keeps its ciphertext, while the key
+             that decrypts it lives in the Android Keystore and never leaves
+             the device: a restore onto a new phone brings back values that
+             can no longer be decrypted. To enable backup, exclude those files
+             instead (docs/en/getting-started/01_setup.md, "Android: app
+             backup is off"). dataExtractionRules covers Android 12+, where
+             allowBackup no longer stops device-to-device transfer. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -27,7 +38,47 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep links are delivered to Dart by app_links and routed by
+                 the shell's DeeplinkProvider, which checks the session first
+                 (DeeplinkProvider.canRoute). Flutter's built-in deep linking
+                 would push the same URI straight into GoRouter and skip that
+                 check, so it is switched off.
+                 docs/en/guides/04_routing.md §9 -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
+            <!-- App Links: https://<WEB_DOMAIN>/<path>. WEB_DOMAIN comes from
+                 the env file (build.gradle.kts resValue). autoVerify needs
+                 https://<WEB_DOMAIN>/.well-known/assetlinks.json listing this
+                 flavor's application id and signing-certificate SHA-256. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="@string/WEB_DOMAIN" />
+            </intent-filter>
+            <!-- Custom scheme: <DEEP_LINK_SCHEME>://<first-segment>/<rest>,
+                 one scheme per flavor (build.gradle.kts productFlavors). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/DEEP_LINK_SCHEME" />
+            </intent-filter>
         </activity>
+        <!-- Firebase Cloud Messaging: the channel and small icon used for a
+             notification message that arrives while the app is in the
+             background (FCM displays it, not the app). The channel id must
+             equal NotificationConstants.CHANNEL_ID in core_notifications,
+             and the icon is the flavor's monochrome drawable
+             (src/<flavor>/res/drawable-*/ic_notification.png). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="message_channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

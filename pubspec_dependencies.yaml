@@ -1,11 +1,14 @@
 # Source of Truth for shared package versions across the entire monorepo.
 # Running `dart tools/dependency_sync.dart` will synchronize these versions to all pubspec.yaml files.
 #
-# Toolchain baseline: Flutter 3.47.0 / Dart 3.13.3
+# Toolchain: the Flutter version is pinned in `.fvmrc` (the one place); every
+# pubspec `environment:` floor is derived from it by the generators.
 
 dependencies:
   # State Management
-  equatable: "^2.1.0"
+  #
+  # No `equatable`: every value type here is Freezed, which generates `==` and
+  # `hashCode` itself. The pin sat in this file with no package declaring it.
   flutter_bloc: "^9.1.1"
   provider: "^6.1.5+1"
 
@@ -15,7 +18,11 @@ dependencies:
 
   # Networking & HTTP client
   dio: "^5.11.0"
-  http_security_pinning: "^1.0.1"
+  # >= 2.0.0, the security release: every redirect hop is pin-checked (an HTTPS -> HTTP redirect is refused, not
+  # sent in cleartext) and an empty pin list throws instead of pinning nothing. Below 1.1.0 the client recurses as
+  # the global HttpOverrides, and core_common no longer guards against that. Needs Flutter 3.41, Android minSdk 24
+  # (Java 17) and iOS 13, which this template already meets.
+  http_security_pinning: "^2.0.0"
   retrofit: "^4.10.0"
 
   # Navigation & Routing
@@ -27,38 +34,27 @@ dependencies:
   json_annotation: "^4.12.0"
 
   # Firebase & Push Notifications
-  cloud_firestore: "^6.8.0"
-  firebase_auth: "^6.5.7"
+  #
+  # `cloud_firestore`, `firebase_auth`, `flutter_facebook_auth` and
+  # `google_sign_in` were pinned here for an auth sample that no longer uses
+  # them. A catalog entry nothing declares is a version this repo claims to
+  # manage and never resolves — `check_outdated.dart` reports on it forever.
+  # Add the pin back alongside the dependency, not ahead of it.
   firebase_core: "^4.13.0"
   firebase_messaging: "^16.5.0"
   flutter_local_notifications: "^22.3.0"
 
-  # Authentication Providers
-  flutter_facebook_auth: "^7.2.0"
-  google_sign_in: "^7.2.0"
-
   # Media & Image Processing
   cached_network_image_ce: "^4.10.0"
-  extended_image: "^10.1.0"
-  image_picker: "^1.2.3"
-  photo_manager: "^3.12.0"
 
-  # Device Info & Permissions
-  device_info_plus: "^13.2.0"
+  # App Info
   package_info_plus: "^10.2.1"
-  permission_handler: "^13.0.1"
 
   # UI Components & Styling
   material_ui: "^1.1.1"
   cupertino_ui: "^1.0.2"
-  cupertino_icons: "^1.0.9"
-  dotted_line: "^3.3.0"
   flutter_native_splash: "^2.4.8"
   flutter_svg: "^2.3.0"
-  google_fonts: "^8.2.1"
-  gradient_borders: "^1.0.4"
-  jumping_dot: "^0.0.7"
-  refresh_sticky: "^0.1.2"
 
   # Utilities
   email_validator: "^3.0.0"
@@ -67,20 +63,29 @@ dependencies:
   intl: "^0.20.3"
   path: "^1.9.1"
   path_provider: "^2.1.6"
-  uuid: "^4.6.0"
+
+  # CLI tools (tools/, core_tools): the repo's own gates and generators
+  args: "^2.7.0"
+  # tools: sha256 of sqlite3.wasm (composer runners)
+  crypto: "^3.0.7"
+  glob: "^2.1.3"
+  http: "^1.6.0"
+  mustache_template: "^2.0.5"
+  yaml: "^3.1.3"
 
   # Local Storage (Key-Value / Secure)
   encrypt: "^5.0.3"
-  flutter_secure_storage: "10.3.1"
+  flutter_secure_storage: "11.2.0"
   shared_preferences: "^2.5.5"
 
   # Local Database (Drift + SQLite)
   drift: "^2.34.3"
+  sqlite3: "^3.6.0"   # core_database: per-connection setup for the read pool
 
 dev_dependencies:
   # Build Runner & Code Generators
   build_runner: "^2.16.0"
-  freezed: "^4.0.0-dev.3"
+  freezed: "^4.0.1"
   go_router_builder: "^4.4.0"
   injectable_generator: "^3.1.3"
   json_serializable: "^6.14.1"
@@ -89,6 +94,13 @@ dev_dependencies:
   flutter_gen_runner: "^5.15.0"
   flutter_lints: "^6.0.0"
 
+  # Testing — `package:test` for pure-Dart packages (tools/, domain_core);
+  # Flutter packages use the SDK's `flutter_test` instead. The exact version
+  # must agree with the `test_api` that `flutter_test` pins.
+  test: "^1.31.1"
+  # `setupFirebaseCoreMocks()` (its `test.dart`) for apps/mobile's DI smoke
+  # test. Bump it together with `firebase_core`, whose interface it is.
+  firebase_core_platform_interface: "^8.1.1"
+
   # Release Tooling
   icons_launcher: "^3.1.0"
-  package_rename: "^1.10.1"

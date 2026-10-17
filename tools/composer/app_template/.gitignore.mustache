@@ -1,0 +1,39 @@
+# Build output and tool state, at any depth.
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Firebase configuration: `lib/firebase/firebase_options_*.dart` is generated
+# per project by `tools/firebase/firebase_config.dart` and carries this app's
+# project identifiers, so it is never committed.
+firebase_options_*.dart
+firebase.json
+google-services.json
+**/google-services.json
+
+# Lock files are generated and never committed.
+*.lock
+
+# Production environment values: create `env.prod` yourself, never commit it.
+env.prod
+
+# Desktop runner state `flutter create` / the IDEs leave behind.
+/macos/Flutter/ephemeral/
+/windows/flutter/ephemeral/
+/linux/flutter/ephemeral/
+
+# Generated runners (RULE-83): `composer runners` writes them, git never tracks them.
+# composer:managed:runners — generated from app_manifest.yaml
+# composer:end:runners

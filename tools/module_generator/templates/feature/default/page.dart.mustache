@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
+import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_{{snakeNameInput}}_extension.dart';
 
 class {{pascalNameInput}}Page extends StatelessWidget {
   const {{pascalNameInput}}Page({super.key});
@@ -11,8 +13,16 @@ class {{pascalNameInput}}Page extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.l10n{{pascalNameInput}}.title),
       ),
-      body: Center(
-        child: Text(context.l10n{{pascalNameInput}}.title),
+      // AdaptiveContent (core_responsive) caps the column at a readable width
+      // on a tablet or desktop window and changes nothing on a phone. Sizes
+      // and type come from the design system, already scaled through context
+      // — never a raw number, and never re-scaled (RULE-30, RULE-31).
+      body: AdaptiveContent(
+        padding: EdgeInsets.all(AppSpacing.lg(context)),
+        child: Text(
+          context.l10n{{pascalNameInput}}.title,
+          style: AppTextStyles.bodyMediumStyle(context),
+        ),
       ),
     );
   }

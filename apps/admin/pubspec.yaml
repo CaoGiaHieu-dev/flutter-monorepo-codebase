@@ -1,5 +1,5 @@
 name: admin_app
-description: "Flutter Web Admin Dashboard for the monorepo"
+description: "Back-office app: auth + settings, composed from the shared modules"
 publish_to: "none"
 version: 1.0.0+1
 
@@ -12,17 +12,58 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  material_ui: ^1.1.1
-  app_client:
-    path: ../../packages/serverpod_client
-  core_base_ui:
-    path: ../../packages/core/base_ui
+
+  # composer:managed:deps — generated from app_manifest.yaml
+  core_common:
+    path: ../../platform/foundation/common
+  core_network:
+    path: ../../platform/infra/network
+  core_storage:
+    path: ../../platform/infra/storage
   core_di:
-    path: ../../packages/core/di
-  core_ui_kit:
-    path: ../../packages/core/ui_kit
+    path: ../../platform/foundation/contracts
+  platform_shell_adapters:
+    path: ../../platform/shell/adapters
+  platform_app_shell:
+    path: ../../platform/shell/app_shell
+  core_base_ui:
+    path: ../../platform/ui/design_system
+  domain_core:
+    path: ../../platform/layers/domain
+  domain_auth:
+    path: ../../modules/auth/domain
+  data_core:
+    path: ../../platform/layers/data
+  data_auth:
+    path: ../../modules/auth/data
+  feature_auth:
+    path: ../../modules/auth/feature
+  feature_settings:
+    path: ../../modules/settings/feature
+  provider_state_management:
+    path: ../../platform/state/provider
+  bloc_state_management:
+    path: ../../platform/state/bloc
+  # composer:end:deps
+
+  # External packages this app itself uses. Everything else belongs to
+  # `platform_app_shell` and the composed modules.
+  injectable: ^3.0.0           # lib/di/injection.dart
 
 dev_dependencies:
-  flutter_lints: ^6.0.0
+  # test/di_smoke_test.dart: boots the generated DI graph with the storage
+  # plugins' in-memory doubles.
   flutter_test:
     sdk: flutter
+  # integration_test/boot_test.dart: main() on a device, until the first
+  # screen is drawn (RULE-83); test_driver/ runs it on the web.
+  integration_test:
+    sdk: flutter
+  flutter_secure_storage: "11.2.0"
+  shared_preferences: "^2.5.5"
+  flutter_lints: ^6.0.0
+  build_runner: "^2.16.0"
+  injectable_generator: "^3.1.3"
+
+flutter:
+  uses-material-design: true

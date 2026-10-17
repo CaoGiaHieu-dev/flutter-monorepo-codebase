@@ -1,6 +1,10 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
+import '../core/constants.dart';
 import '../core/enums.dart';
+import 'git_helper.dart';
 
 /// Utility class for analyzing file types and architecture layers
 class FileAnalyzer {
@@ -26,23 +30,44 @@ class FileAnalyzer {
     return FileType.dartFile;
   }
 
-  /// Get architecture layer based on file path
+  /// Get architecture layer from where the file sits in the workspace:
+  /// `modules/<name>/{domain,data,feature}`, `platform/<group>/<pkg>`, `apps/<id>`.
   static ArchitectureLayer getArchitectureLayer(String filePath) {
-    if (filePath.startsWith('lib/presentation/'))
+    final p = filePath.replaceAll('\\', '/');
+    if (p.contains('/gen/') || p.contains('/generated/')) {
+      return ArchitectureLayer.generated;
+    }
+    final module = RegExp(r'(^|/)modules/[^/]+/(domain|data|feature)/')
+        .firstMatch(p);
+    if (module != null) {
+      return switch (module.group(2)) {
+        'domain' => ArchitectureLayer.domain,
+        'data' => ArchitectureLayer.data,
+        _ => ArchitectureLayer.presentation,
+      };
+    }
+    if (RegExp(r'(^|/)platform/').hasMatch(p)) return ArchitectureLayer.core;
+    if (RegExp(r'(^|/)apps/').hasMatch(p))
       return ArchitectureLayer.presentation;
-    if (filePath.startsWith('lib/domain/')) return ArchitectureLayer.domain;
-    if (filePath.startsWith('lib/data/')) return ArchitectureLayer.data;
-    if (filePath.startsWith('lib/core/')) return ArchitectureLayer.core;
-    if (filePath.startsWith('lib/gen/')) return ArchitectureLayer.generated;
     return ArchitectureLayer.unknown;
   }
 
+  /// Source roots of the workspace, scanned when run from the repository
+  /// root (which has no `lib/` of its own).
+  static const List<String> workspaceRoots = ['apps', 'modules', 'platform'];
+
   /// Check if file matches a pattern (supports * wildcard)
   static bool matchesPattern(String text, String pattern) {
+    // `**/` is "any directories" (`.*/`). It is swapped for a placeholder
+    // first: left as `.*/`, the `*` pass below turned it into `.[^/]*/`,
+    // which spans one directory only — `modules/**/routing/**` then missed
+    // `modules/a/b/routing/x.dart`.
+    const anyDirs = '\u0000';
     final regexPattern = pattern
-        .replaceAll('**/', '.*/')
+        .replaceAll('**/', anyDirs)
         .replaceAll('*', '[^/]*')
-        .replaceAll('?', '.');
+        .replaceAll('?', '.')
+        .replaceAll(anyDirs, '.*/');
     return RegExp(regexPattern).hasMatch(text);
   }
 
@@ -53,30 +78,36 @@ class FileAnalyzer {
       return false;
     }
 
-    final libDir = Directory('lib');
-    if (!await libDir.exists()) {
-      return false;
-    }
-
-    // Check if pubspec.yaml contains Flutter dependencies
     final pubspecContent = await pubspecFile.readAsString();
+    // The workspace root: no `lib/`, its packages live under the roots.
+    if (pubspecContent.contains('\nworkspace:')) return true;
+
+    if (!await Directory('lib').exists()) return false;
     return pubspecContent.contains('flutter:') ||
         pubspecContent.contains('flutter_');
   }
 
-  /// Get all Dart files in the project
+  /// Get all Dart files in the project: a package's `lib/`, or — from the
+  /// workspace root — every `lib/` under [workspaceRoots].
   static Future<List<String>> getAllDartFiles() async {
     final files = <String>[];
     final libDir = Directory('lib');
 
     if (await libDir.exists()) {
-      await for (final entity in libDir.list(recursive: true)) {
-        if (entity is File && entity.path.endsWith('.dart')) {
-          files.add(entity.path);
+      files.addAll(await getDartFilesInFolder('lib'));
+      return files;
+    }
+
+    for (final root in workspaceRoots) {
+      for (final file in await getDartFilesInFolder(root)) {
+        final p = file.replaceAll('\\', '/');
+        if (p.contains('/lib/') &&
+            !p.contains('/.dart_tool/') &&
+            !p.contains('/build/')) {
+          files.add(file);
         }
       }
     }
-
     return files;
   }
 
@@ -98,31 +129,32 @@ class FileAnalyzer {
     return files;
   }
 
-  /// Filter files based on exclude patterns
-  static List<String> filterFiles(
+  /// Whether [filePath] is generated code or a test — excluded always.
+  static bool isGeneratedOrTest(String filePath) {
+    final p = '/${filePath.replaceAll('\\', '/')}';
+    final name = path.posix.basename(p);
+    return CodeReviewConstants.generatedSuffixes.any(name.endsWith) ||
+        CodeReviewConstants.generatedFilePrefixes.any(name.startsWith) ||
+        CodeReviewConstants.excludedPathSegments.any(p.contains);
+  }
+
+  /// Drops generated files and tests, gitignored files, and anything
+  /// matching [excludePatterns].
+  ///
+  /// The built-in exclusions used to apply only when no `--exclude` was
+  /// given, so adding one pattern put every `*.g.dart` back in the review.
+  static Future<List<String>> filterFiles(
     List<String> files,
     List<String> excludePatterns,
-  ) {
-    if (excludePatterns.isEmpty) {
-      // Default exclusions
-      return files
-          .where(
-            (file) =>
-                !file.contains('.g.dart') &&
-                !file.contains('.freezed.dart') &&
-                !file.contains('.mocks.dart') &&
-                !file.contains('test/'),
-          )
-          .toList();
-    }
-
-    return files.where((file) {
+  ) async {
+    final kept = files.where((file) {
+      if (isGeneratedOrTest(file)) return false;
       for (final pattern in excludePatterns) {
-        if (matchesPattern(file, pattern)) {
-          return false;
-        }
+        if (matchesPattern(file, pattern)) return false;
       }
       return true;
     }).toList();
+    final ignored = await GitHelper.ignoredFiles(kept);
+    return kept.where((f) => !ignored.contains(f)).toList();
   }
 }

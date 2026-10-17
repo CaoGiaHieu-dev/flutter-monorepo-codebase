@@ -3,7 +3,126 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-void main() async {
+import 'shared/toolchain.dart';
+
+const _usage = '''
+Usage: dart tools/check_outdated.dart
+
+Resolves every package in pubspec_dependencies.yaml in a sandbox, runs
+`pub outdated`, then offers a checklist to bump the catalog (on a terminal;
+report only otherwise) and re-runs dependency_sync + pub get.
+
+Exits non-zero when resolution, `pub outdated` or applying an update fails.''';
+
+/// One catalog entry whose pinned version is not the latest on pub.dev.
+class OutdatedPackage {
+  OutdatedPackage({
+    required this.name,
+    required this.current,
+    required this.latest,
+    required this.pattern,
+  });
+
+  final String name;
+  final String current;
+  final String latest;
+
+  /// Matches the entry's `name: "^version"` line; group 2 is the version.
+  final RegExp pattern;
+
+  /// Whether the interactive checklist will apply it.
+  bool selected = true;
+}
+
+/// The pubspec the sandbox resolves: the catalog wrapped in the minimum
+/// metadata that makes it a valid package.
+String sandboxPubspec(String dependenciesContent) =>
+    '''
+name: outdated_check
+description: A temporary pubspec to check outdated shared dependencies.
+publish_to: 'none'
+environment:
+  sdk: '>=3.13.3 <4.0.0'
+  flutter: ">=3.47.4"
+
+$dependenciesContent
+''';
+
+/// The catalog entries that [packages] (the `packages` list of
+/// `pub outdated --json`) report a newer version for.
+///
+/// A package the catalog does not pin, or already at its latest version, is
+/// not listed. The version is read up to the closing quote, a space or a
+/// comment, so `http: ^1.6.0  # why` is not mistaken for a different version.
+List<OutdatedPackage> findOutdated(
+  String dependenciesContent,
+  List<Map<String, dynamic>> packages,
+) {
+  final outdated = <OutdatedPackage>[];
+  for (final pkg in packages) {
+    final name = pkg['package'] as String?;
+    final latest =
+        (pkg['latest'] as Map<String, dynamic>?)?['version'] as String?;
+    if (name == null || latest == null) continue;
+    final pattern = RegExp(
+      '^(\\s*${RegExp.escape(name)}\\s*:\\s*["\']?\\^?)([^"\'\\s#]+)(["\']?)',
+      multiLine: true,
+    );
+    final match = pattern.firstMatch(dependenciesContent);
+    if (match == null) continue;
+    final current = match.group(2)!;
+    if (current != latest) {
+      outdated.add(
+        OutdatedPackage(
+          name: name,
+          current: current,
+          latest: latest,
+          pattern: pattern,
+        ),
+      );
+    }
+  }
+  return outdated;
+}
+
+/// [dependenciesContent] with each of [selected] bumped to its latest
+/// version; the `^`, the quotes and everything else on the line are kept.
+String applyUpdates(
+  String dependenciesContent,
+  Iterable<OutdatedPackage> selected,
+) {
+  var content = dependenciesContent;
+  for (final item in selected) {
+    content = content.replaceAllMapped(
+      item.pattern,
+      (match) => '${match.group(1)}${item.latest}${match.group(3)}',
+    );
+  }
+  return content;
+}
+
+/// Flips the selection of the 1-based numbers in [input] (`1,3`); anything
+/// that is not a number in range is ignored.
+void toggleSelection(List<OutdatedPackage> list, String input) {
+  for (final part in input.split(',')) {
+    final number = int.tryParse(part.trim());
+    if (number != null && number > 0 && number <= list.length) {
+      list[number - 1].selected = !list[number - 1].selected;
+    }
+  }
+}
+
+void main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    return;
+  }
+  if (args.isNotEmpty) {
+    stderr.writeln('❌ Unknown argument(s): ${args.join(' ')}');
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
   final stopwatch = Stopwatch()..start();
 
   stdout.writeln(
@@ -31,111 +150,98 @@ void main() async {
   );
 
   try {
-    // 1. Khởi tạo Sandbox
+    // 1. Create the sandbox
     stdout.writeln('⏳ Preparing temporary sandbox...');
     if (sandboxDir.existsSync()) {
       sandboxDir.deleteSync(recursive: true);
     }
     sandboxDir.createSync(recursive: true);
 
-    // 2. Tái tạo Pubspec
+    // 2. Rebuild a pubspec from the catalog
     final pubspecFile = File(p.join(sandboxDir.path, 'pubspec.yaml'));
     final dependenciesContent = dependenciesFile.readAsStringSync();
 
-    // Gắn thêm meta data tối thiểu để thành file pubspec hợp lệ
-    final dummyPubspecContent =
-        '''
-name: outdated_check
-description: A temporary pubspec to check outdated shared dependencies.
-publish_to: 'none'
-environment:
-  sdk: '>=3.13.3 <4.0.0'
-  flutter: ">=3.47.4"
-
-$dependenciesContent
-''';
+    final dummyPubspecContent = sandboxPubspec(dependenciesContent);
 
     pubspecFile.writeAsStringSync(dummyPubspecContent);
 
-    // Sử dụng Platform.resolvedExecutable để luôn dùng đúng phiên bản Dart SDK đang chạy script này
-    final executable = Platform.resolvedExecutable;
-    final getArgs = ['pub', 'get'];
-    final outdatedArgs = ['pub', 'outdated'];
+    // The repo's toolchain — `fvm dart` when FVM is configured and
+    // installed — never whichever SDK happens to run this script.
+    reportToolchain();
+    final executable = dartExecutable;
+    final getArgs = [...dartArgs, 'pub', 'get'];
+    final outdatedArgs = [...dartArgs, 'pub', 'outdated'];
 
     stdout.writeln('⏳ Resolving dependencies (this might take a moment)...\n');
 
-    // 3. Chạy pub get (ẩn log trừ khi lỗi)
+    // 3. Run pub get (output hidden unless it fails)
     final getResult = await Process.run(
       executable,
       getArgs,
       workingDirectory: sandboxDir.path,
+      runInShell: true,
     );
 
     if (getResult.exitCode != 0) {
       stderr.writeln('❌ Failed to resolve dependencies in sandbox!');
       stderr.writeln(getResult.stderr);
-      exit(1);
+      // Not `exit(1)`: that would skip the `finally` below that deletes the
+      // sandbox directory.
+      exitCode = 1;
+      return;
     }
 
-    // 4. Chạy pub outdated (truyền thẳng stdout để giữ màu)
+    // 4. Run pub outdated (stdout passed through to keep its colours)
     final outdatedProcess = await Process.start(
       executable,
       outdatedArgs,
       workingDirectory: sandboxDir.path,
       mode: ProcessStartMode.inheritStdio,
+      runInShell: true,
     );
 
-    final exitCode = await outdatedProcess.exitCode;
+    final outdatedExit = await outdatedProcess.exitCode;
 
-    if (exitCode == 0) {
+    if (outdatedExit == 0) {
       stdout.writeln(
         '\n✅ Outdated check completed successfully in ${stopwatch.elapsedMilliseconds}ms.',
       );
 
       stdout.writeln('\n⏳ Fetching latest versions data for checklist...');
-      final jsonProcess = await Process.run(executable, [
-        'pub',
-        'outdated',
-        '--json',
-      ], workingDirectory: sandboxDir.path);
+      final jsonProcess = await Process.run(
+        executable,
+        [...outdatedArgs, '--json'],
+        workingDirectory: sandboxDir.path,
+        runInShell: true,
+      );
 
       if (jsonProcess.exitCode == 0) {
         try {
-          final Map<String, dynamic> data = jsonDecode(jsonProcess.stdout);
+          final data =
+              jsonDecode(jsonProcess.stdout as String) as Map<String, dynamic>;
           final packages = data['packages'] as List<dynamic>? ?? [];
 
           String depsContent = dependenciesFile.readAsStringSync();
-          final List<Map<String, dynamic>> outdatedList = [];
-
-          for (final pkg in packages) {
-            final name = pkg['package'] as String?;
-            final latest = pkg['latest']?['version'] as String?;
-
-            if (name != null && latest != null) {
-              final regex = RegExp(
-                '^(\\s*$name\\s*:\\s*["\']?\\^?)([^"\']+)(["\']?)',
-                multiLine: true,
-              );
-              final match = regex.firstMatch(depsContent);
-              if (match != null) {
-                final currentVersion = match.group(2);
-                if (currentVersion != latest) {
-                  outdatedList.add({
-                    'name': name,
-                    'current': currentVersion,
-                    'latest': latest,
-                    'selected': true,
-                    'regex': regex,
-                  });
-                }
-              }
-            }
-          }
+          final outdatedList = findOutdated(
+            depsContent,
+            packages.cast<Map<String, dynamic>>(),
+          );
 
           if (outdatedList.isEmpty) {
             stdout.writeln(
               '\n✨ All packages in pubspec_dependencies.yaml are already at their latest versions!',
             );
+          } else if (!stdin.hasTerminal) {
+            // No one to ask (CI, a pipe): report only. Applying on EOF would
+            // bump every package — major versions included — unattended.
+            stdout.writeln(
+              '\n📦 Outdated packages (report only, no terminal):',
+            );
+            for (final item in outdatedList) {
+              stdout.writeln(
+                '  - ${item.name} (${item.current} -> ${item.latest})',
+              );
+            }
           } else {
             // Interactive checklist loop
             bool proceed = false;
@@ -143,9 +249,9 @@ $dependenciesContent
               stdout.writeln('\n📦 Outdated Packages Checklist:');
               for (int i = 0; i < outdatedList.length; i++) {
                 final item = outdatedList[i];
-                final checkbox = (item['selected'] as bool) ? '[x]' : '[ ]';
+                final checkbox = item.selected ? '[x]' : '[ ]';
                 stdout.writeln(
-                  '  $checkbox ${i + 1}. ${item['name']} (${item['current']} -> ${item['latest']})',
+                  '  $checkbox ${i + 1}. ${item.name} (${item.current} -> ${item.latest})',
                 );
               }
 
@@ -155,56 +261,48 @@ $dependenciesContent
               );
               stdout.writeln('  - Type "all" to select all');
               stdout.writeln('  - Type "none" to deselect all');
-              stdout.writeln(
-                '  - Type "a" (or press Enter) to APPLY selected updates',
-              );
+              stdout.writeln('  - Type "a" to APPLY selected updates');
               stdout.writeln('  - Type "q" to QUIT without making changes');
 
-              stdout.write(
-                '\nYour choice: (Empty to migrate all selected packages)',
-              );
-              final input = stdin.readLineSync()?.trim().toLowerCase() ?? '';
+              stdout.write('\nYour choice: ');
+              final line = stdin.readLineSync();
+              if (line == null) {
+                stdout.writeln('\nAborted (end of input).');
+                break;
+              }
+              final input = line.trim().toLowerCase();
 
-              if (input == 'q') {
+              if (input.isEmpty) {
+                continue;
+              } else if (input == 'q') {
                 stdout.writeln('\nAborted.');
                 break;
-              } else if (input == 'a' || input.isEmpty) {
+              } else if (input == 'a') {
                 proceed = true;
                 break;
               } else if (input == 'all') {
-                for (var item in outdatedList) {
-                  item['selected'] = true;
+                for (final item in outdatedList) {
+                  item.selected = true;
                 }
               } else if (input == 'none') {
-                for (var item in outdatedList) {
-                  item['selected'] = false;
+                for (final item in outdatedList) {
+                  item.selected = false;
                 }
               } else {
-                final parts = input.split(',');
-                for (final p in parts) {
-                  final num = int.tryParse(p.trim());
-                  if (num != null && num > 0 && num <= outdatedList.length) {
-                    final idx = num - 1;
-                    outdatedList[idx]['selected'] =
-                        !(outdatedList[idx]['selected'] as bool);
-                  }
-                }
+                toggleSelection(outdatedList, input);
               }
             }
 
             if (proceed) {
-              int updateCount = 0;
-              for (final item in outdatedList) {
-                if (item['selected'] as bool) {
-                  final regex = item['regex'] as RegExp;
-                  depsContent = depsContent.replaceAllMapped(regex, (match) {
-                    return '${match.group(1)}${item['latest']}${match.group(3)}';
-                  });
-                  updateCount++;
-                  stdout.writeln(
-                    '⬆️  Updated ${item['name']}: ${item['current']} -> ${item['latest']}',
-                  );
-                }
+              final chosen = outdatedList
+                  .where((item) => item.selected)
+                  .toList();
+              final updateCount = chosen.length;
+              depsContent = applyUpdates(depsContent, chosen);
+              for (final item in chosen) {
+                stdout.writeln(
+                  '⬆️  Updated ${item.name}: ${item.current} -> ${item.latest}',
+                );
               }
 
               if (updateCount > 0) {
@@ -216,18 +314,20 @@ $dependenciesContent
                 stdout.writeln('\n🔄 Auto-syncing workspace dependencies...');
                 final syncProcess = await Process.start(
                   executable,
-                  ['tools/dependency_sync.dart'],
+                  [...dartArgs, 'tools/dependency_sync.dart'],
                   workingDirectory: projectRoot,
                   mode: ProcessStartMode.inheritStdio,
+                  runInShell: true,
                 );
 
                 if (await syncProcess.exitCode == 0) {
                   stdout.writeln('\n🚀 Running pub get to apply changes...');
                   final pubGetProcess = await Process.start(
                     executable,
-                    ['pub', 'get'],
+                    getArgs,
                     workingDirectory: projectRoot,
                     mode: ProcessStartMode.inheritStdio,
+                    runInShell: true,
                   );
 
                   if (await pubGetProcess.exitCode == 0) {
@@ -236,9 +336,11 @@ $dependenciesContent
                     );
                   } else {
                     stderr.writeln('\n⚠️ pub get finished with errors.');
+                    exitCode = 1;
                   }
                 } else {
                   stderr.writeln('\n❌ Workspace synchronization failed.');
+                  exitCode = 1;
                 }
               } else {
                 stdout.writeln('\n⚠️ No packages were selected for update.');
@@ -247,23 +349,28 @@ $dependenciesContent
           }
         } catch (e) {
           stderr.writeln('❌ Failed to parse JSON from pub outdated: $e');
+          exitCode = 1;
         }
       } else {
         stderr.writeln('❌ Error running pub outdated --json.');
+        stderr.writeln(jsonProcess.stderr);
+        exitCode = 1;
       }
     } else {
-      stderr.writeln('\n⚠️ Outdated check finished with code: $exitCode');
+      stderr.writeln('\n❌ Outdated check finished with code: $outdatedExit');
+      exitCode = 1;
     }
   } catch (e, stackTrace) {
     stderr.writeln('❌ An unexpected error occurred:');
     stderr.writeln(e);
     stderr.writeln(stackTrace);
+    exitCode = 1;
   } finally {
-    // 5. Dọn dẹp
+    // 5. Clean up
     try {
       if (sandboxDir.existsSync()) {
-        // Nghỉ một chút trước khi xoá để nhả handle trên Windows
-        await Future.delayed(const Duration(milliseconds: 200));
+        // Pause briefly before deleting so Windows releases its file handles
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         sandboxDir.deleteSync(recursive: true);
       }
     } catch (_) {

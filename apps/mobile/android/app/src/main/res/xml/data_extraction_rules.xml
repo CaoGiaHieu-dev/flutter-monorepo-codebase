@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup and device-to-device transfer rules. Both are
+     disabled for the reason given in AndroidManifest.xml next to
+     android:allowBackup: flutter_secure_storage ciphertext cannot be
+     decrypted on another device. To opt in, replace each <exclude> below
+     with the domains you do want, and keep the secure-storage prefs
+     excluded (docs/en/getting-started/01_setup.md, "Android: app backup
+     is off"). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

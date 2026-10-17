@@ -1,0 +1,25 @@
+name: platform_kernel
+description: "Pure-Dart foundation: service locator, error handling, primitive extensions and global constants."
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+
+resolution: workspace
+
+# NO `flutter:` entry, and no UI, Firebase, plugin or routing package.
+# This is the one package every other package may depend on, so its dependency
+# list is everyone's dependency list. Enforced by `arch_check` rule R9.
+dependencies:
+  domain_core:
+    path: ../../layers/domain
+  get_it: ^9.2.1
+  dynamic_logger: "^0.5.0"
+  email_validator: "^3.0.0"
+  freezed_annotation: "^3.1.0"
+
+dev_dependencies:
+  build_runner: "^2.16.0"
+  freezed: "^4.0.1"
+  test: "^1.31.1"

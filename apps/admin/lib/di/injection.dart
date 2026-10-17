@@ -1,0 +1,121 @@
+// composer:managed:imports — generated from app_manifest.yaml
+import 'package:bloc_state_management/di/module.module.dart';
+import 'package:core_base_ui/di/module.module.dart';
+import 'package:core_common/core_common.dart';
+import 'package:core_di/di/module.module.dart';
+import 'package:core_network/di/module.module.dart';
+import 'package:core_storage/di/module.module.dart';
+import 'package:data_auth/di/module.module.dart';
+import 'package:data_core/di/module.module.dart';
+import 'package:domain_auth/di/module.module.dart';
+import 'package:domain_core/di/module.module.dart';
+import 'package:feature_auth/di/module.module.dart';
+import 'package:feature_settings/di/module.module.dart';
+import 'package:injectable/injectable.dart';
+import 'package:platform_app_shell/di/module.module.dart';
+import 'package:platform_shell_adapters/di/module.module.dart';
+import 'package:provider_state_management/di/module.module.dart';
+
+import 'injection.config.dart';
+
+// composer:end:imports
+
+// Dependency injection for the `admin` app.
+//
+// **The two marked regions are generated** — the imports and the module lists
+// with the `configureDependencies` entry point — from
+// `apps/admin/app_manifest.yaml` by:
+//
+//   dart tools/composer/composer.dart sync --app admin
+//
+// Outside them there is only this comment, so there is nothing to keep in step
+// by hand: edit the manifest instead, and `composer verify` fails CI if a region
+// has drifted from it or code appears outside them. Getting a module list wrong fails at boot with
+// `"<Type> is not registered"`, which `flutter analyze` cannot see.
+//
+// Group order is load-bearing and is declared in the manifest's `di_groups`:
+// `configureDependencies()` initialises modules in exactly that sequence, and
+// an eager `@Singleton` may only depend on a type registered by an earlier
+// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
+// proves it).
+
+// composer:managed:modules — generated from app_manifest.yaml
+const _coreModules = [
+  ExternalModule(CoreCommonPackageModule),
+  ExternalModule(CoreNetworkPackageModule),
+  ExternalModule(CoreStoragePackageModule),
+  ExternalModule(CoreDiPackageModule),
+];
+
+const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
+const _uiModules = [
+  ExternalModule(CoreBaseUiPackageModule),
+];
+
+const _domainModules = [
+  ExternalModule(DomainCorePackageModule),
+  ExternalModule(DomainAuthPackageModule),
+];
+
+const _dataModules = [
+  ExternalModule(DataCorePackageModule),
+  ExternalModule(DataAuthPackageModule),
+];
+
+const _featureModules = [
+  ExternalModule(FeatureAuthPackageModule),
+  ExternalModule(FeatureSettingsPackageModule),
+];
+
+const _otherModules = [
+  ExternalModule(ProviderStateManagementPackageModule),
+  ExternalModule(BlocStateManagementPackageModule),
+];
+
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
+];
+
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
+///
+/// A class the graph builds injects the profile sections it reads
+/// (`NetworkProfile`, `LocaleProfile`, ...). `runShellApp` registers the app's
+/// own before this runs; `registerProfileDefaults` then adds the template's
+/// default for any section still missing, so a graph booted without a profile
+/// completes instead of throwing `"<Section> is not registered"`.
+///
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
+@InjectableInit(
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
+)
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
+  final env = environment ?? AppConfig.appFlavor.toValue();
+  await target.init(environment: env);
+}
+
+/// Reset all dependencies (useful for testing)
+Future<void> resetDependencies() async {
+  await getIt.reset();
+}
+// composer:end:modules

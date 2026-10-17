@@ -1,44 +1,27 @@
 import 'dart:io';
+
 import 'package:mustache_template/mustache.dart';
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
+
+import '../../shared/app_locator.dart';
+import '../../shared/toolchain.dart' as toolchain;
 import 'module_type.dart';
+import 'pubspec_generator.dart';
 
 class CommonHelpers {
-
   static void createDir(String path) {
     Directory(path).createSync(recursive: true);
-    stdout.writeln('  -> Đã tạo thư mục: $path');
+    stdout.writeln('  -> Created directory: $path');
   }
 
   // ---------------------------------------------------------------------------
   // Toolchain resolution (FVM vs global SDK)
   // ---------------------------------------------------------------------------
 
-  static bool? _useFvmCache;
-
-  /// Whether toolchain commands should be prefixed with `fvm`.
-  ///
-  /// Two conditions must BOTH hold, because either one alone gives a wrong
-  /// answer: a repo can pin a version in `.fvmrc` on a machine that never
-  /// installed FVM, and a machine can have FVM installed for other projects
-  /// while this repo does not pin anything.
-  ///
-  /// Checks `.fvmrc` (used by this repo) as well as the legacy
-  /// `.fvm/fvm_config.json`, then verifies the executable actually runs.
-  static bool get useFvm {
-    final cached = _useFvmCache;
-    if (cached != null) return cached;
-
-    final hasConfig =
-        File('.fvmrc').existsSync() || File('.fvm/fvm_config.json').existsSync();
-    if (!hasConfig) return _useFvmCache = false;
-
-    try {
-      final result = Process.runSync('fvm', ['--version'], runInShell: true);
-      return _useFvmCache = result.exitCode == 0;
-    } on ProcessException {
-      return _useFvmCache = false;
-    }
-  }
+  /// Whether toolchain commands should be prefixed with `fvm` — the shared
+  /// two-signal detection in `tools/shared/toolchain.dart`.
+  static bool get useFvm => toolchain.useFvm;
 
   /// Fails fast when the toolchain this run needs is not callable.
   ///
@@ -46,25 +29,28 @@ class CommonHelpers {
   /// reported while the workspace is still pristine.
   static void assertToolchainAvailable() {
     if (useFvm) {
-      stdout.writeln('[INFO] Phát hiện cấu hình FVM. Dùng "fvm dart/flutter".');
+      stdout.writeln('[INFO] FVM config detected. Using "fvm dart/flutter".');
       return;
     }
 
     for (final executable in const ['dart', 'flutter']) {
       try {
-        final result =
-            Process.runSync(executable, ['--version'], runInShell: true);
+        final result = Process.runSync(executable, [
+          '--version',
+        ], runInShell: true);
         if (result.exitCode != 0) {
-          throw Exception('"$executable --version" trả về ${result.exitCode}');
+          throw Exception(
+            '"$executable --version" exited with ${result.exitCode}',
+          );
         }
       } on ProcessException {
         throw Exception(
-          'Không tìm thấy "$executable" trong PATH và cũng không có FVM khả dụng. '
-          'Cài Flutter SDK hoặc chạy "dart pub global activate fvm" trước khi tạo module.',
+          '"$executable" is not on PATH and no usable FVM setup was found. '
+          'Install the Flutter SDK, or run "dart pub global activate fvm", before generating a module.',
         );
       }
     }
-    stdout.writeln('[INFO] Không dùng FVM. Dùng "dart/flutter" toàn cục.');
+    stdout.writeln('[INFO] No FVM. Using the global "dart/flutter".');
   }
 
   /// Runs `dart <args>`, routed through FVM when this repo uses it.
@@ -73,8 +59,10 @@ class CommonHelpers {
     String? workingDirectory,
   }) {
     return useFvm
-        ? runCommand('fvm', ['dart', ...args],
-            workingDirectory: workingDirectory)
+        ? runCommand('fvm', [
+            'dart',
+            ...args,
+          ], workingDirectory: workingDirectory)
         : runCommand('dart', args, workingDirectory: workingDirectory);
   }
 
@@ -84,8 +72,10 @@ class CommonHelpers {
     String? workingDirectory,
   }) {
     return useFvm
-        ? runCommand('fvm', ['flutter', ...args],
-            workingDirectory: workingDirectory)
+        ? runCommand('fvm', [
+            'flutter',
+            ...args,
+          ], workingDirectory: workingDirectory)
         : runCommand('flutter', args, workingDirectory: workingDirectory);
   }
 
@@ -93,45 +83,103 @@ class CommonHelpers {
   // Rollback of shared-file mutations
   // ---------------------------------------------------------------------------
 
-  /// Files outside the new module that generation rewrites in place.
+  /// Files outside the new module that generation rewrites in place: every
+  /// app's `app_manifest.yaml` ([registerInAppManifests]), what
+  /// `composer sync` regenerates from them — the root `pubspec.yaml` and, per
+  /// app, `pubspec.yaml`, `lib/di/injection.dart`, the `facts` region of
+  /// `lib/app/app_profile.dart` and the `report` region of `README.md`. The
+  /// last two are in the list so a rolled-back run leaves `composer verify`
+  /// green, not just a manifest that matches the old files.
+  ///
+  /// `pubspec.lock` is not here: lock files are generated, git-ignored and
+  /// rebuilt by `pub get`, so there is nothing to restore.
+  ///
+  /// Not here: what `pub get` and `build_runner` write that git does not
+  /// track — `.dart_tool/package_config.json`, each app's
+  /// `injection.config.dart`, every package's `module.module.dart`. Restoring
+  /// a snapshot of those would be wrong the moment codegen had legitimately
+  /// changed them, so [rollback] regenerates them instead.
   ///
   /// A failure partway through would leave these half-edited — a module
   /// registered in the workspace whose directory was never finished building,
   /// which then breaks `pub get` for everyone. Hence the backup-and-restore
   /// around them.
-  static String get appDir =>
-      Directory('apps/mobile').existsSync() ? 'apps/mobile' : 'app';
-  static String get appRelativePathPrefix =>
-      Directory('apps/mobile').existsSync() ? '../../' : '../';
-
   static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
-    '$appDir/pubspec.yaml',
-    '$appDir/lib/di/injection.dart',
+    for (final app in discoverApps()) ...[
+      '${app.dir}/app_manifest.yaml',
+      '${app.dir}/pubspec.yaml',
+      '${app.dir}/lib/di/injection.dart',
+      '${app.dir}/lib/app/app_profile.dart',
+      '${app.dir}/README.md',
+    ],
   ];
 
   static final Map<String, String?> _sharedFileSnapshots = {};
   static String? _createdModulePath;
+  static bool _workspaceResolved = false;
+  static bool _codegenStarted = false;
 
-  /// Snapshots every shared file before the first mutation.
+  /// Call just before `pub get`: from here on `.dart_tool/package_config.json`
+  /// may list the new module, so [rollback] must resolve the workspace again.
+  static void noteWorkspaceResolving() => _workspaceResolved = true;
+
+  /// Call just before `build_runner`: from here on the untracked generated
+  /// files (`injection.config.dart`, `module.module.dart`) may reference the
+  /// new module, so [rollback] must regenerate them.
+  static void noteCodegenStarted() => _codegenStarted = true;
+
+  /// The command, as the user would type it — `fvm dart …` under FVM.
+  static String _commandLine(bool dart, List<String> args) => [
+    if (useFvm) 'fvm',
+    if (dart) 'dart' else 'flutter',
+    ...args,
+  ].join(' ');
+
+  static const List<String> _pubGetArgs = ['pub', 'get'];
+  static const List<String> _buildRunnerArgs = [
+    'run',
+    'build_runner',
+    'build',
+    '--workspace',
+  ];
+
+  /// Snapshots every shared file before the first mutation — plus
+  /// [extraFiles], files of *another* package this run edits or creates
+  /// (an API package wires its existing feature).
   ///
   /// A `null` value records "did not exist", so restore deletes rather than
   /// resurrecting a file generation created.
-  static void snapshotSharedFiles(String modulePath) {
+  static void snapshotSharedFiles(
+    String modulePath, {
+    List<String> extraFiles = const [],
+  }) {
     _createdModulePath = modulePath;
+    _workspaceResolved = false;
+    _codegenStarted = false;
     _sharedFileSnapshots.clear();
-    for (final path in sharedMutatedFiles) {
+    for (final path in [...sharedMutatedFiles, ...extraFiles]) {
       final file = File(path);
-      _sharedFileSnapshots[path] =
-          file.existsSync() ? file.readAsStringSync() : null;
+      _sharedFileSnapshots[path] = file.existsSync()
+          ? file.readAsStringSync()
+          : null;
     }
   }
 
-  /// Restores the snapshotted files and removes the half-built module.
+  /// Restores the snapshotted files, removes the half-built module, and —
+  /// when generation got that far — resolves the workspace and reruns
+  /// `build_runner` so the untracked generated files stop referencing it.
   ///
-  /// Best-effort by design: it reports what it could not undo instead of
-  /// throwing, because it runs while another error is already propagating.
-  static void rollback() {
+  /// Restoring the tracked files alone is not enough after a late failure:
+  /// `build_runner` had already rewritten every app's `injection.config.dart`
+  /// to import the new package, and with the package deleted the app no
+  /// longer compiles — while this used to report the workspace as clean.
+  ///
+  /// Best-effort by design: it reports what it could not undo, with the
+  /// commands to finish by hand, instead of throwing, because it runs while
+  /// another error is already propagating. It claims a clean workspace only
+  /// when every step succeeded.
+  static Future<void> rollback() async {
     final failures = <String>[];
 
     _sharedFileSnapshots.forEach((path, original) {
@@ -152,48 +200,65 @@ class CommonHelpers {
       try {
         final dir = Directory(modulePath);
         if (dir.existsSync()) dir.deleteSync(recursive: true);
+        // modules/<name>/ is left empty when <layer> was its only child.
+        final parent = dir.parent;
+        if (parent.existsSync() && parent.listSync().isEmpty) {
+          parent.deleteSync();
+        }
       } catch (e) {
         failures.add('$modulePath ($e)');
       }
     }
 
+    // Regenerate what git does not track, in dependency order: build_runner
+    // needs a package_config.json that no longer lists the deleted module.
+    final pending = <String>[
+      if (_workspaceResolved || _codegenStarted)
+        _commandLine(false, _pubGetArgs),
+      if (_codegenStarted) _commandLine(true, _buildRunnerArgs),
+    ];
+    if (failures.isEmpty && pending.isNotEmpty) {
+      stderr.writeln(
+        '[ROLLBACK] Regenerating untracked generated files so they no '
+        'longer reference the removed module...',
+      );
+      try {
+        if (_workspaceResolved || _codegenStarted) {
+          await runFlutter(_pubGetArgs);
+          pending.removeAt(0);
+        }
+        if (_codegenStarted) {
+          await runDart(_buildRunnerArgs);
+          pending.removeAt(0);
+        }
+      } catch (e) {
+        failures.add('regenerate generated files ($e)');
+      }
+    }
+
     if (failures.isEmpty) {
       stderr.writeln(
-        '[ROLLBACK] Đã hoàn tác mọi thay đổi. Workspace trở lại nguyên trạng.',
+        '[ROLLBACK] Every change was undone. The workspace is back to its original state.',
       );
       return;
     }
 
-    stderr.writeln('[ROLLBACK] Không hoàn tác được các mục sau — cần dọn tay:');
+    stderr.writeln(
+      '[ROLLBACK] The workspace is NOT clean. These could not be undone — '
+      'clean them up by hand:',
+    );
     for (final failure in failures) {
       stderr.writeln('  - $failure');
     }
-  }
-
-  static void registerInRootWorkspace(String path) {
-    final rootPubspec = File('pubspec.yaml');
-    if (!rootPubspec.existsSync()) return;
-
-    final lines = rootPubspec.readAsLinesSync();
-    final workspaceIndex = lines.indexWhere(
-      (line) => line.trim() == 'workspace:',
-    );
-
-    if (workspaceIndex != -1) {
-      final normalizedPath = path.replaceAll('\\\\', '/');
-      if (lines.any((line) => line.contains(normalizedPath))) {
-        stdout.writeln('  (Module đã được đăng ký trong workspace)');
-        return;
+    if (pending.isNotEmpty) {
+      stderr.writeln(
+        '[ROLLBACK] Then run these from the repo root so the generated files '
+        '(injection.config.dart, module.module.dart) stop referencing the '
+        'removed module:',
+      );
+      for (final command in pending) {
+        stderr.writeln('    $command');
       }
-
-      int insertIndex = workspaceIndex + 1;
-      while (insertIndex < lines.length &&
-          lines[insertIndex].trim().startsWith('-')) {
-        insertIndex++;
-      }
-      lines.insert(insertIndex, '  - $normalizedPath');
-      rootPubspec.writeAsStringSync('${lines.join('\n')}\n');
-      stdout.writeln('  -> Đã đăng ký module vào root pubspec.yaml');
     }
   }
 
@@ -228,104 +293,209 @@ class CommonHelpers {
     }
   }
 
-  static void generateGitIgnore(String modulePath) {
-    final templateString = File(
-      'tools/module_generator/templates/common/gitignore.mustache',
-    ).readAsStringSync();
-    final template = Template(templateString);
-    final content = template.renderString({});
-    File('$modulePath/.gitignore').writeAsStringSync(content);
-  }
-
-  static void registerInAppPubspec(String moduleName, String modulePath) {
-    final appPubspec = File('$appDir/pubspec.yaml');
-    if (!appPubspec.existsSync()) return;
-
-    final lines = appPubspec.readAsLinesSync();
-    if (lines.any((line) => line.trim().startsWith('$moduleName:'))) return;
-
-    final insertIndex = lines.indexWhere(
-      (line) => line.contains('# external packages'),
-    );
-    if (insertIndex != -1) {
-      lines.insert(
-        insertIndex,
-        '  $moduleName:\n    path: $appRelativePathPrefix$modulePath',
+  /// Adds the new module to every app manifest — or, with [apps], only to
+  /// the manifests whose `app.id` is listed — then leaves the wiring alone.
+  ///
+  /// This used to patch `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`
+  /// directly. Both now live between `composer:managed` markers, so writing
+  /// into them by hand puts the tree straight into the drift that
+  /// `composer verify` fails CI on — and the marker text the old code looked
+  /// for (`externalPackageModulesBefore: [`) no longer exists, so it had
+  /// silently stopped working.
+  ///
+  /// The manifest is the only hand-edited input; `generate.dart` runs
+  /// `composer sync` next to regenerate the rest.
+  ///
+  /// Presence is decided by parsing the manifest, never by substring: a line
+  /// test once took `core_net` for registered because `core_network` contains
+  /// it, and the package silently joined no app. Every write is re-parsed and
+  /// checked, and a manifest the edit could not register in throws — the
+  /// caller rolls back rather than leaving a package nothing composes.
+  static void registerInAppManifests(
+    String packageName,
+    ModuleType moduleType,
+    String moduleName, {
+    List<String>? apps,
+    String root = '.',
+  }) {
+    final manifests = [
+      for (final app in discoverApps(root))
+        if (apps == null || apps.contains(app.id))
+          File(p.join(root, app.dir, 'app_manifest.yaml')),
+    ];
+    if (manifests.isEmpty) {
+      stdout.writeln(
+        '  !! No app_manifest.yaml found — skipping app composition.',
       );
-      appPubspec.writeAsStringSync('${lines.join('\n')}\n');
-      stdout.writeln('  -> Đã thêm $moduleName vào $appDir/pubspec.yaml');
-    }
-  }
-
-  static void registerInAppInjection(String moduleName) {
-    final file = File('$appDir/lib/di/injection.dart');
-    if (!file.existsSync()) return;
-
-    final lines = file.readAsLinesSync();
-    final pascalName = toPascalCase(moduleName);
-
-    if (lines.any((line) => line.contains('${pascalName}PackageModule')))
       return;
-
-    final importLine = "import 'package:$moduleName/di/module.module.dart';";
-    final lastPackageImportIndex = lines.lastIndexWhere(
-      (line) => line.startsWith("import 'package:"),
-    );
-    if (lastPackageImportIndex != -1) {
-      lines.insert(lastPackageImportIndex + 1, importLine);
-    } else {
-      lines.insert(0, importLine);
     }
 
-    String targetListName = '_otherModules';
-    if (moduleName.startsWith('feature_'))
-      targetListName = '_featureModules';
-    else if (moduleName.startsWith('domain_'))
-      targetListName = '_domainModules';
-    else if (moduleName.startsWith('data_'))
-      targetListName = '_dataModules';
-    else if (moduleName.startsWith('core_'))
-      targetListName = '_coreModules';
+    // `feature` / `domain` / `data` are layers of a module; a core or custom
+    // package is a platform package that joins a DI group directly.
+    final layer = switch (moduleType) {
+      ModuleType.feature => 'feature',
+      ModuleType.domain => 'domain',
+      ModuleType.data => 'data',
+      ModuleType.api => 'api',
+      ModuleType.core || ModuleType.custom => null,
+    };
 
-    final listStartIndex = lines.indexWhere(
-      (line) => line.contains('const $targetListName = ['),
-    );
+    bool isRegistered(String text) => layer != null
+        ? _hasModuleLayer(text, moduleName, layer)
+        : _hasPlatformPackage(text, packageName);
 
-    if (listStartIndex != -1) {
-      int insertIndex = listStartIndex + 1;
-      while (insertIndex < lines.length && !lines[insertIndex].contains('];')) {
-        insertIndex++;
+    if (apps != null) {
+      stdout.writeln('  -> --apps: composing into ${apps.join(', ')} only');
+    }
+    for (final manifest in manifests) {
+      final original = manifest.readAsStringSync();
+      if (isRegistered(original)) {
+        stdout.writeln('  -> Already listed in ${manifest.path}');
+        continue;
       }
-      lines.insert(
-        insertIndex,
-        '  ExternalModule(${pascalName}PackageModule),',
-      );
-    } else {
-      final initIndex = lines.indexWhere(
-        (line) => line.contains('@InjectableInit('),
-      );
-      if (initIndex != -1) {
-        lines.insertAll(initIndex, [
-          'const $targetListName = [',
-          '  ExternalModule(${pascalName}PackageModule),',
-          '];',
-          '',
-        ]);
 
-        final externalIndex = lines.indexWhere(
-          (line) => line.contains('externalPackageModulesBefore: ['),
-          initIndex,
+      final lines = original.split('\n');
+      if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
+      if (layer != null) {
+        _addModuleLayer(lines, moduleName, layer);
+      } else {
+        _addPlatformPackage(lines, packageName);
+      }
+      final updated = '${lines.join('\n')}\n';
+
+      if (!isRegistered(updated)) {
+        throw Exception(
+          'Could not add "$packageName" to ${manifest.path}: no '
+          '${layer != null ? '`modules:` list' : '`core` DI group (`packages:`)'} '
+          'in the expected format. Add it by hand, then run '
+          '`dart tools/composer/composer.dart sync`.',
         );
-        if (externalIndex != -1) {
-          lines.insert(externalIndex + 1, '    ...$targetListName,');
+      }
+      manifest.writeAsStringSync(updated);
+      stdout.writeln('  -> Added to ${manifest.path}');
+    }
+  }
+
+  /// Parses [text] as a manifest; a malformed one is reported, not guessed at.
+  static Map<Object?, Object?> _parseManifest(String text) {
+    final doc = loadYaml(text);
+    if (doc is! Map) {
+      throw Exception('app_manifest.yaml is not a YAML map.');
+    }
+    return doc;
+  }
+
+  /// Whether `modules:` lists `{ id: moduleName }` with [layer] among its
+  /// `layers`.
+  static bool _hasModuleLayer(String text, String moduleName, String layer) {
+    final modules = _parseManifest(text)['modules'];
+    if (modules is! List) return false;
+    for (final entry in modules) {
+      if (entry is Map && entry['id'] == moduleName) {
+        final layers = entry['layers'];
+        if (layers is List && layers.contains(layer)) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether any DI group's `packages:` — or `extra_dependencies:` — names
+  /// [packageName] exactly.
+  static bool _hasPlatformPackage(String text, String packageName) {
+    final doc = _parseManifest(text);
+    final groups = doc['di_groups'];
+    if (groups is List) {
+      for (final group in groups) {
+        if (group is Map) {
+          final packages = group['packages'];
+          if (packages is List && packages.contains(packageName)) return true;
         }
       }
     }
+    final extra = doc['extra_dependencies'];
+    return extra is List && extra.contains(packageName);
+  }
 
-    file.writeAsStringSync('${lines.join('\n')}\n');
-    stdout.writeln(
-      '  -> Đã đăng ký ${pascalName}PackageModule vào $appDir/lib/di/injection.dart ($targetListName)',
+  /// `- { id: <name>, layers: [...] }` — appended, or extended if present.
+  static void _addModuleLayer(
+    List<String> lines,
+    String moduleName,
+    String layer,
+  ) {
+    final existing = lines.indexWhere(
+      (l) => RegExp(
+        '^\\s*-\\s*\\{\\s*id:\\s*${RegExp.escape(moduleName)}\\s*,',
+      ).hasMatch(l),
     );
+    if (existing != -1) {
+      lines[existing] = lines[existing].replaceFirst(
+        RegExp(r'layers:\s*\['),
+        'layers: [$layer, ',
+      );
+      return;
+    }
+    // `composer new` writes an app with no modules as `modules: []` — an empty
+    // flow list has no block to append to, so it becomes the block form first.
+    final emptyFlow = lines.indexWhere(
+      (l) => RegExp(r'^modules:\s*\[\s*\]\s*(#.*)?$').hasMatch(l),
+    );
+    if (emptyFlow != -1) lines[emptyFlow] = 'modules:';
+    final modulesIndex = lines.indexWhere((l) => l.trimRight() == 'modules:');
+    if (modulesIndex == -1) return;
+    // After the last `- ` item; comments and blank lines between items are
+    // skipped, the first other line (a top-level key) ends the list.
+    var lastItem = modulesIndex;
+    for (var i = modulesIndex + 1; i < lines.length; i++) {
+      final trimmed = lines[i].trimLeft();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+      if (!trimmed.startsWith('- ')) break;
+      lastItem = i;
+    }
+    lines.insert(lastItem + 1, '  - { id: $moduleName, layers: [$layer] }');
+  }
+
+  /// A platform package joins the `core` DI group — after its last entry.
+  ///
+  /// Handles both list styles the manifests use: a block list (comments
+  /// between items allowed) and a flow list (`packages: [a, b]`).
+  static void _addPlatformPackage(List<String> lines, String packageName) {
+    final group = lines.indexWhere(
+      (l) => RegExp(r'^\s*-\s*name:\s*core\s*$').hasMatch(l),
+    );
+    if (group == -1) return;
+    final groupIndent = lines[group].indexOf('-');
+
+    for (var i = group + 1; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trimLeft();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+      final indent = line.length - trimmed.length;
+      // Left the group: the next `- name:` or a top-level key.
+      if (indent <= groupIndent) return;
+
+      final flow = RegExp(r'^(\s*packages:\s*\[)(.*)\](.*)$').firstMatch(line);
+      if (flow != null) {
+        final items = flow.group(2)!.trim();
+        lines[i] =
+            '${flow.group(1)}${items.isEmpty ? packageName : '$items, $packageName'}]${flow.group(3)}';
+        return;
+      }
+      if (RegExp(r'^\s*packages:\s*$').hasMatch(line)) {
+        var lastItem = -1;
+        var itemIndent = indent + 2;
+        for (var j = i + 1; j < lines.length; j++) {
+          final t = lines[j].trimLeft();
+          if (t.isEmpty || t.startsWith('#')) continue;
+          final ind = lines[j].length - t.length;
+          if (!t.startsWith('- ') || ind < indent) break;
+          lastItem = j;
+          itemIndent = ind;
+        }
+        final at = lastItem == -1 ? i + 1 : lastItem + 1;
+        lines.insert(at, '${' ' * itemIndent}- $packageName');
+        return;
+      }
+    }
   }
 
   static void createL10nScaffold(
@@ -372,15 +542,18 @@ class CommonHelpers {
       '$modulePath/assets/language/vi.arb',
     ).writeAsStringSync(viArbTemplate.renderString(values));
 
-    // di/localization.dart
-    final diLocTemplate = Template(
+    // lib/src/localization/<nameInput>_localization_impl.dart — the
+    // IFeatureLocalization registration. Not in lib/di/, which holds the
+    // DI module and its generated file only.
+    final locTemplate = Template(
       File(
         'tools/module_generator/templates/feature/localization/localization.dart.mustache',
       ).readAsStringSync(),
     );
+    Directory('$modulePath/lib/src/localization').createSync(recursive: true);
     File(
-      '$modulePath/lib/di/localization.dart',
-    ).writeAsStringSync(diLocTemplate.renderString(values));
+      '$modulePath/lib/src/localization/${nameInput}_localization_impl.dart',
+    ).writeAsStringSync(locTemplate.renderString(values));
 
     // lib/src/extensions/l10n_<nameInput>_extension.dart
     final extTemplate = Template(
@@ -393,7 +566,7 @@ class CommonHelpers {
     ).writeAsStringSync(extTemplate.renderString(values));
 
     stdout.writeln(
-      '  -> Đã tạo l10n.yaml, các file .arb, extension và DI cho localization',
+      '  -> Created l10n.yaml, the .arb files, the l10n extension and its DI registration',
     );
   }
 
@@ -413,7 +586,7 @@ class CommonHelpers {
     final camelNameInput = toCamelCase(config.nameInput);
     final snakeNameInput = config.nameInput;
 
-    final values = {
+    final values = <String, Object>{
       'moduleName': config.moduleName,
       'pascalName': toPascalCase(config.moduleName),
       'pascalNameInput': pascalNameInput,
@@ -428,8 +601,7 @@ class CommonHelpers {
 
     String pageTemplatePath;
     if (config.smType == StateManagementType.provider) {
-      pageTemplatePath =
-          'tools/module_generator/templates/feature/provider/page.dart.mustache';
+      pageTemplatePath = 'tools/module_generator/templates/feature/provider/page.dart.mustache';
 
       final providerTpl = Template(
         File(
@@ -500,57 +672,223 @@ class CommonHelpers {
       '${config.modulePath}/lib/src/routing/${snakeNameInput}_route_module.dart',
     ).writeAsStringSync(routeModuleTpl.renderString(values));
 
+    if (PubspecGenerator.hasApiPackage(config)) {
+      writeNavigatorImpl(config.modulePath, config.nameInput);
+    }
+
+    createFeatureTests(config, values);
+
     stdout.writeln(
-      '  -> Đã tạo template mã nguồn cho ${config.smType.name.toUpperCase()}, Route và Page',
+      '  -> Created the ${config.smType.name.toUpperCase()}, route and page templates',
     );
   }
 
+  /// `lib/src/routing/<name>_navigator_impl.dart` in the feature at
+  /// [featurePath]: implements `<Name>Navigator` from `<name>_api` with the
+  /// feature's own `<Name>Route`.
+  static String navigatorImplPath(String featurePath, String nameInput) =>
+      '$featurePath/lib/src/routing/${nameInput}_navigator_impl.dart';
 
-
-  static void registerLocalizationsDelegateInApp(String moduleName) {
-    // Không còn cần thiết, GetIt getAll đã đảm nhận.
-    final file = File('$appDir/lib/presentation/root_app.dart');
-    if (!file.existsSync()) return;
-
-    final lines = file.readAsLinesSync();
-    final pascalName = toPascalCase(moduleName);
-    final delegateClass = 'Feature${pascalName}Localizations';
-
-    if (lines.any((line) => line.contains('$delegateClass.delegate'))) return;
-
-    final importLine =
-        "import 'package:$moduleName/src/l10n/generated/app_localizations_$moduleName.dart';";
-
-    // 1. Add import if not exists
-    final lastImportIndex = lines.lastIndexWhere(
-      (line) => line.startsWith('import '),
-    );
-    if (lastImportIndex != -1) {
-      if (!lines.any((l) => l.trim() == importLine)) {
-        lines.insert(lastImportIndex + 1, importLine);
-      }
+  /// Sorts the first run of consecutive `import 'package:…';` lines of
+  /// [source] by URI, the order the `directives_ordering` lint wants. A
+  /// template cannot place `<name>_api` itself, because where it falls among
+  /// `flutter` and `injectable` depends on the name the user picked.
+  static String sortLeadingPackageImports(String source) {
+    final lines = source.split('\n');
+    final start = lines.indexWhere((l) => l.startsWith("import 'package:"));
+    if (start < 0) return source;
+    var end = start;
+    while (end < lines.length && lines[end].startsWith("import 'package:")) {
+      end++;
     }
+    final block = lines.sublist(start, end)..sort();
+    return [
+      ...lines.sublist(0, start),
+      ...block,
+      ...lines.sublist(end),
+    ].join('\n');
+  }
 
-    // 2. Add delegate to localizationsDelegates list
-    final delegateListIndex = lines.indexWhere(
-      (line) => line.contains('localizationsDelegates: ['),
+  static void writeNavigatorImpl(String featurePath, String nameInput) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/feature/routing/navigator_impl.dart.mustache',
+      ).readAsStringSync(),
     );
-    if (delegateListIndex != -1) {
-      int insertIndex = delegateListIndex + 1;
-      lines.insert(insertIndex, '        $delegateClass.delegate,');
-    } else {
-      // try multiline format if single line doesn't match
-      final delegateIndex = lines.indexWhere(
-        (line) => line.contains('localizationsDelegates:'),
-      );
-      if (delegateIndex != -1) {
-        lines.insert(delegateIndex + 1, '        $delegateClass.delegate,');
-      }
-    }
-
-    file.writeAsStringSync('${lines.join('\n')}\n');
+    File(navigatorImplPath(featurePath, nameInput)).writeAsStringSync(
+      sortLeadingPackageImports(
+        tpl.renderString({
+          'moduleName': 'feature_$nameInput',
+          'snakeNameInput': nameInput,
+          'pascalNameInput': toPascalCase(nameInput),
+        }),
+      ),
+    );
     stdout.writeln(
-      '  -> Đã đăng ký $delegateClass.delegate vào $appDir/lib/presentation/root_app.dart',
+      '  -> Implemented ${toPascalCase(nameInput)}Navigator in '
+      '${navigatorImplPath(featurePath, nameInput)}',
     );
+  }
+
+  /// API scaffold: the navigator contract other features reach this module
+  /// through. The barrel is written by the barrel generator afterwards.
+  static void createApiTemplates(ModuleConfig config) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/api/navigator.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/navigators/${config.nameInput}_navigator.dart',
+    ).writeAsStringSync(tpl.renderString(_layerValues(config)));
+  }
+
+  /// The feature of the module an API package is generated for, when it
+  /// exists and still has the route its generator wrote — the one an
+  /// API's navigator can be implemented with, without guessing.
+  static String? featureToWire(String nameInput) {
+    final feature = 'modules/$nameInput/feature';
+    final route = File(
+      '$feature/lib/src/routing/${nameInput}_route_module.dart',
+    );
+    if (!File('$feature/pubspec.yaml').existsSync() || !route.existsSync()) {
+      return null;
+    }
+    final declaresRoute = RegExp(
+      'class\\s+${toPascalCase(nameInput)}Route\\b',
+    ).hasMatch(route.readAsStringSync());
+    return declaresRoute ? feature : null;
+  }
+
+  /// Makes the existing feature at [featurePath] declare `<name>_api` (a
+  /// path dependency, first under `dependencies:`) and implement its
+  /// navigator.
+  static void wireFeatureToApi(String featurePath, String nameInput) {
+    final pubspec = File('$featurePath/pubspec.yaml');
+    final lines = pubspec.readAsLinesSync();
+    final at = lines.indexWhere((l) => l.trimRight() == 'dependencies:');
+    if (at == -1) {
+      throw Exception('$featurePath/pubspec.yaml has no `dependencies:`.');
+    }
+    if (!lines.any((l) => l.trimRight() == '  ${nameInput}_api:')) {
+      lines.insertAll(at + 1, ['  ${nameInput}_api:', '    path: ../api']);
+      pubspec.writeAsStringSync('${lines.join('\n')}\n');
+      stdout.writeln('  -> $featurePath now depends on ${nameInput}_api');
+    }
+    writeNavigatorImpl(featurePath, nameInput);
+  }
+
+  /// The tests a feature starts with, so `flutter test` has something to run
+  /// the moment the package exists (CI Gate 3 runs every `test/` it finds):
+  ///
+  /// * `test/<name>_page_test.dart` — the page under `ResponsiveInit` and the
+  ///   feature's localizations, with its controller provided the way the
+  ///   route provides it, on a phone and a tablet window.
+  /// * `test/<name>_provider_test.dart` (Provider) or
+  ///   `test/<name>_bloc_test.dart` (BLoC) — the controller on its own.
+  ///   Nothing controller-specific for SM = none.
+  static void createFeatureTests(
+    ModuleConfig config,
+    Map<String, Object> values,
+  ) {
+    const dir = 'tools/module_generator/templates/feature/test';
+    final testDir = '${config.modulePath}/test';
+    createDir(testDir);
+    void render(String template, String out) {
+      File('$testDir/$out').writeAsStringSync(
+        Template(File('$dir/$template').readAsStringSync())
+            .renderString(values),
+      );
+    }
+
+    final name = config.nameInput;
+    render('page_test.dart.mustache', '${name}_page_test.dart');
+    switch (config.smType) {
+      case StateManagementType.provider:
+        render('provider_test.dart.mustache', '${name}_provider_test.dart');
+      case StateManagementType.bloc:
+        render('bloc_test.dart.mustache', '${name}_bloc_test.dart');
+      case StateManagementType.none:
+        break;
+    }
+  }
+
+  /// The values every non-feature template is rendered with.
+  static Map<String, Object> _layerValues(ModuleConfig config) => {
+    'moduleName': config.moduleName,
+    'pascalNameInput': toPascalCase(config.nameInput),
+    'snakeNameInput': config.nameInput,
+  };
+
+  /// Domain scaffold: the module's repository contract, so the package
+  /// starts out using the `domain_core` it declares.
+  static void createDomainTemplates(ModuleConfig config) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/domain/repository.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/repositories/i_${config.nameInput}_repository.dart',
+    ).writeAsStringSync(tpl.renderString(_layerValues(config)));
+  }
+
+  /// Data scaffold: a `RepositoryImpl` on data_core's `BaseRepository`,
+  /// implementing and registered as the domain's contract when [hasDomain].
+  static void createDataTemplates(
+    ModuleConfig config, {
+    required bool hasDomain,
+  }) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/data/repository_impl.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/repositories_impl/${config.nameInput}_repository_impl.dart',
+    ).writeAsStringSync(
+      tpl.renderString({..._layerValues(config), 'hasDomain': hasDomain}),
+    );
+    if (!hasDomain) {
+      stdout.writeln(
+        '  !! No domain_${config.nameInput} yet: the RepositoryImpl implements '
+        'no interface — generate the domain, then wire it up '
+        '(see the comment in the file).',
+      );
+    }
+  }
+
+  /// The `order` for a newly generated `INavDestinationModule`: 10 above the
+  /// highest order any existing destination under `modules/*/feature` returns
+  /// (10 when there is none).
+  ///
+  /// A fixed value made every generated tab tie, and the dashboard's sort is
+  /// not stable, so tied tabs could swap places between builds. Spacing by 10
+  /// leaves room to slot a destination in between by hand.
+  static int nextNavDestinationOrder() {
+    final orderPattern = RegExp(r'int\s+get\s+order\s*=>\s*(-?\d+)\s*;');
+    var highest = -1;
+    var found = false;
+    final modules = Directory('modules');
+    if (!modules.existsSync()) return 10;
+    for (final module in modules.listSync().whereType<Directory>()) {
+      final lib = Directory('${module.path}/feature/lib');
+      if (!lib.existsSync()) continue;
+      for (final file in lib.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final text = file.readAsStringSync();
+        if (!RegExp(
+          r'(extends|implements)\s+INavDestinationModule\b',
+        ).hasMatch(text)) {
+          continue;
+        }
+        for (final match in orderPattern.allMatches(text)) {
+          final value = int.parse(match.group(1)!);
+          if (!found || value > highest) highest = value;
+          found = true;
+        }
+      }
+    }
+    return found ? highest + 10 : 10;
   }
 }

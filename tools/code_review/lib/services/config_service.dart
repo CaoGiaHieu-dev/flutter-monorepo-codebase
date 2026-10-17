@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
 import '../core/constants.dart';
+import 'api_key_service.dart';
 
 /// Service for managing configuration settings
 class ConfigService {
@@ -27,8 +30,7 @@ class ConfigService {
 
       return defaultConfig;
     } catch (e) {
-      // ignore: avoid_print
-      print('⚠️  Error reading config: $e');
+      stdout.writeln('⚠️  Error reading config: $e');
       return _getDefaultConfig();
     }
   }
@@ -44,16 +46,23 @@ class ConfigService {
       const encoder = JsonEncoder.withIndent('    ');
       await configFile.writeAsString(encoder.convert(config));
 
-      // ignore: avoid_print
-      print('✅ Configuration saved successfully!');
+      stdout.writeln('✅ Configuration saved successfully!');
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error saving config: $e');
+      stdout.writeln('❌ Error saving config: $e');
     }
   }
 
-  /// Get report language from config
+  /// A `--language` given for this run; wins over the saved setting and is
+  /// never written back.
+  static String? languageOverride;
+
+  /// Get report language: this run's `--language`, else the config's.
   static String getReportLanguage() {
+    final override = languageOverride;
+    if (override != null &&
+        CodeReviewConstants.supportedLanguages.contains(override)) {
+      return override;
+    }
     final config = getConfig();
     final language = config['reportLanguage'] as String? ?? 'en';
 
@@ -73,24 +82,6 @@ class ConfigService {
 
     final config = getConfig();
     config['reportLanguage'] = language;
-    await saveConfig(config);
-  }
-
-  /// Get output format from config
-  static String getOutputFormat() {
-    final config = getConfig();
-    return config['outputFormat'] as String? ?? 'markdown';
-  }
-
-  /// Set output format
-  static Future<void> setOutputFormat(String format) async {
-    final supportedFormats = ['markdown', 'html', 'json', 'txt'];
-    if (!supportedFormats.contains(format)) {
-      throw ArgumentError('Unsupported format: $format');
-    }
-
-    final config = getConfig();
-    config['outputFormat'] = format;
     await saveConfig(config);
   }
 
@@ -124,7 +115,6 @@ class ConfigService {
   static Map<String, dynamic> _getDefaultConfig() {
     return {
       'reportLanguage': 'en',
-      'outputFormat': 'markdown',
       'includeTimestamps': true,
       'detailedOutput': true,
       'batchSize': 5,
@@ -170,32 +160,26 @@ class ConfigService {
   static void showConfig() {
     final config = getConfig();
 
-    // ignore: avoid_print
-    print('📋 Current Configuration:');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('📋 Current Configuration:');
+    stdout.writeln('');
     final languageCode = config['reportLanguage'] as String;
     final languageName =
         CodeReviewConstants.languageNames[languageCode] ?? languageCode;
-    // ignore: avoid_print
-    print('🌐 Report Language: $languageName ($languageCode)');
-    // ignore: avoid_print
-    print('📄 Output Format: ${config['outputFormat']}');
-    // ignore: avoid_print
-    print('⏰ Include Timestamps: ${config['includeTimestamps']}');
-    // ignore: avoid_print
-    print('📊 Detailed Output: ${config['detailedOutput']}');
-    // ignore: avoid_print
-    print('📦 Batch Size: ${config['batchSize']}');
-    // ignore: avoid_print
-    print('⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms');
+    stdout.writeln('🌐 Report Language: $languageName ($languageCode)');
+    stdout.writeln(
+      '📄 Output Format: ${CodeReviewConstants.reportFormat} (the only one implemented)',
+    );
+    stdout.writeln('⏰ Include Timestamps: ${config['includeTimestamps']}');
+    stdout.writeln('📊 Detailed Output: ${config['detailedOutput']}');
+    stdout.writeln('📦 Batch Size: ${config['batchSize']}');
+    stdout.writeln(
+      '⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms',
+    );
 
-    if (config.containsKey('geminiApiKey')) {
-      final apiKey = config['geminiApiKey'] as String;
-      // ignore: avoid_print
-      print('🔑 API Key: ${apiKey.substring(0, 8)}...');
+    final apiKey = config['geminiApiKey'];
+    if (apiKey is String && apiKey.isNotEmpty) {
+      stdout.writeln('🔑 API Key: ${ApiKeyService.mask(apiKey)}');
     }
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
   }
 }

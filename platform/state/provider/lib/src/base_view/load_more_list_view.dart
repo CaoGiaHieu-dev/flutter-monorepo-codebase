@@ -1,0 +1,111 @@
+import 'dart:math' as math;
+
+import 'package:core_base_ui/core_base_ui.dart';
+import 'package:flutter/rendering.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+
+import '../mixins/load_more_mixin.dart';
+
+/// A separated list view that appends a spinner slot after the last item
+/// while [P] (a [LoadMoreMixin]) reports `isLoadingMore`.
+class LoadMoreListView<P extends LoadMoreMixin<Object?>> extends BoxScrollView {
+  const LoadMoreListView({
+    super.key,
+    required this.itemBuilder,
+    this.findChildIndexCallback,
+    this.separatorBuilder,
+    required this.itemCount,
+    super.scrollDirection,
+    super.reverse,
+    super.controller,
+    super.primary,
+    super.physics,
+    super.shrinkWrap,
+    super.padding,
+    super.scrollCacheExtent,
+    super.dragStartBehavior,
+    super.keyboardDismissBehavior,
+    super.restorationId,
+    super.clipBehavior,
+    super.hitTestBehavior,
+  }) : assert(itemCount >= 0),
+       itemExtent = null,
+       itemExtentBuilder = null,
+       prototypeItem = null,
+       super(semanticChildCount: itemCount);
+
+  final double? itemExtent;
+
+  final ItemExtentBuilder? itemExtentBuilder;
+
+  final Widget? prototypeItem;
+
+  final NullableIndexedWidgetBuilder itemBuilder;
+  final ChildIndexGetter? findChildIndexCallback;
+  final IndexedWidgetBuilder? separatorBuilder;
+  final int itemCount;
+
+  @override
+  Widget buildChildLayout(BuildContext context) {
+    final SliverChildDelegate childrenDelegate;
+
+    final isLoadMore = context.select<P, bool>((value) => value.isLoadingMore);
+    final actualChildCount = _computeActualChildCount(itemCount);
+
+    childrenDelegate = SliverChildBuilderDelegate(
+      (BuildContext context, int index) {
+        // The spinner takes the slot appended past the last item — never the
+        // last item's own slot, and with no items it is the only child.
+        if (isLoadMore && index == actualChildCount) {
+          return SafeArea(
+            minimum: EdgeInsets.symmetric(vertical: AppSpacing.mdH(context)),
+            child: const Center(child: CircularProgressIndicator.adaptive()),
+          );
+        }
+        final int itemIndex = index ~/ 2;
+        if (index.isEven) {
+          return itemBuilder(context, itemIndex);
+        }
+        return separatorBuilder?.call(context, itemIndex) ?? const SizedBox();
+      },
+      findChildIndexCallback: findChildIndexCallback,
+      childCount: actualChildCount + (isLoadMore ? 1 : 0),
+      addAutomaticKeepAlives: true,
+      addRepaintBoundaries: true,
+      addSemanticIndexes: true,
+      semanticIndexCallback: (Widget widget, int index) {
+        return index.isEven ? index ~/ 2 : null;
+      },
+    );
+    if (itemExtent != null) {
+      return SliverFixedExtentList(
+        delegate: childrenDelegate,
+        itemExtent: itemExtent!,
+      );
+    } else if (itemExtentBuilder != null) {
+      return SliverVariedExtentList(
+        delegate: childrenDelegate,
+        itemExtentBuilder: itemExtentBuilder!,
+      );
+    } else if (prototypeItem != null) {
+      return SliverPrototypeExtentList(
+        delegate: childrenDelegate,
+        prototypeItem: prototypeItem!,
+      );
+    }
+    return SliverList(delegate: childrenDelegate);
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(
+      DoubleProperty('itemExtent', itemExtent, defaultValue: null),
+    );
+  }
+
+  static int _computeActualChildCount(int itemCount) {
+    return math.max(0, itemCount * 2 - 1);
+  }
+}

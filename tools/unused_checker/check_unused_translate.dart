@@ -1,19 +1,29 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
+
 import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
-void main() async {
+const _usage = '''
+Usage: dart tools/unused_checker/check_unused_translate.dart [--help]
+
+Reports ARB translation keys that no Dart file reads.
+
+Works on the repository this script belongs to, whatever the working
+directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
+
+void main(List<String> args) async {
+  final projectRootPosix = MonorepoHelper.startCheck(args, usage: _usage);
+
   OutputFormatter.printHeader(
     'Monorepo Translation Key Checker',
     subtitle: 'Analyzing unused translation keys in the monorepo workspace',
   );
 
   final stopwatch = Stopwatch()..start();
-  final projectRoot = Directory.current.path;
-  final projectRootPosix = p.posix.normalize(projectRoot.replaceAll(r'\', '/'));
 
   // 1. Locate all packages which contain translation keys
   final packages = MonorepoHelper.getPackages(projectRootPosix);
@@ -111,8 +121,13 @@ Set<String> getStringKeys(String rootPath) {
     return {};
   }
 
-  // Use the first non-template arb file (or any arb file)
-  final sourceFile = files.first;
+  // The template ARB (`en.arb` in every package here) holds the full key set;
+  // `listSync` order is unspecified, so pick it by name, not position.
+  files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+  final sourceFile = files.firstWhere(
+    (f) => p.basename(f.path) == 'en.arb',
+    orElse: () => files.first,
+  );
   stdout.writeln(
     'Parsing translation keys from: ${p.basename(sourceFile.path)}',
   );
@@ -150,7 +165,6 @@ StringKeyResult findUsedAndUnusedStringKeys(
     r'(?:S\s*\.\s*of\(\s*context\s*\)\s*\.\s*'
     r'|AppLocalizations\s*\.\s*of\(\s*context\s*\)\s*\.\s*'
     r'|(?:\w+\s*\.\s*)*context\s*\.\s*l10n[a-zA-Z0-9_]*\s*\.\s*'
-    r'|AppRouter\s*\.\s*currentContext\s*\.\s*l10n[a-zA-Z0-9_]*\s*\.\s*'
     r'|\b(?:l10n|loc)[a-zA-Z0-9_]*\s*\.\s*'
     r')'
     r'([a-zA-Z_][a-zA-Z0-9_]*)'
@@ -160,6 +174,22 @@ StringKeyResult findUsedAndUnusedStringKeys(
   for (final file in files) {
     try {
       final content = File(file).readAsStringSync();
+
+      // Inside `extension X on AppLocalizations { ... }` a key is a bare
+      // getter (`noInternetConnection`), with no receiver for the regex below
+      // to anchor on.
+      for (final body in localizationExtensionBodies(content)) {
+        for (final key in stringKeys) {
+          if (!unused.contains(key)) continue;
+          final bare = RegExp(
+            r'(?<![\w.$])' + RegExp.escape(key) + r'(?![\w$])',
+          );
+          if (bare.hasMatch(body)) {
+            used.add(key);
+            unused.remove(key);
+          }
+        }
+      }
 
       if (!content.contains('l10n') &&
           !content.contains('loc') &&
@@ -182,4 +212,29 @@ StringKeyResult findUsedAndUnusedStringKeys(
   }
 
   return StringKeyResult(used, unused);
+}
+
+/// The bodies of every `extension <Name> on <X>Localizations { ... }` in
+/// [source] — where the generated getters are read without a receiver.
+///
+/// The body is cut at the matching brace; braces inside string literals
+/// (`'${...}'`, `'{count}'`) are balanced or rare enough in these extensions
+/// that counting them as code is harmless.
+List<String> localizationExtensionBodies(String source) {
+  final header = RegExp(
+    r'extension\s+\w*\s+on\s+\w*Localizations\s*\{',
+  );
+  final bodies = <String>[];
+  for (final match in header.allMatches(source)) {
+    var depth = 1;
+    var i = match.end;
+    while (i < source.length && depth > 0) {
+      final c = source[i];
+      if (c == '{') depth++;
+      if (c == '}') depth--;
+      i++;
+    }
+    bodies.add(source.substring(match.end, depth == 0 ? i - 1 : i));
+  }
+  return bodies;
 }

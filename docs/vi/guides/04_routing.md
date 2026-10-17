@@ -1,210 +1,144 @@
+<!-- translated-from: docs/en/guides/04_routing.md@b455ad2 -->
 # Routing & Điều hướng
 
-**File này trả lời:** làm sao thêm một màn hình, và làm sao điều hướng sang màn hình thuộc feature khác?
+## Mục tiêu
 
-**Đọc xong bạn làm được:** đăng ký route từ bên trong feature package mà không đụng app shell, dựng route type-safe bằng `go_router_builder`, và điều hướng xuyên feature qua interface thay vì hardcode path.
+Bạn thêm một màn hình từ bên trong feature package, không đụng tới app shell. Màn hình được dựng thành route type-safe bằng `go_router_builder`, đăng ký qua DI, và feature khác điều hướng tới nó qua một interface thay vì path hardcode. Nếu cần, bạn cho nó mở được từ deep link.
 
----
+## Điều kiện cần
 
-## 1. Ý tưởng cốt lõi: routing là phi tập trung
-
-`app/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
-
-```dart
-List<IDashboardTabModule> get _dashboardTabs {
-  return getAllOrEmpty<IDashboardTabModule>().toList()
-    ..sort((a, b) => a.order.compareTo(b.order));
-}
-
-List<RouteBase> get _featureRoutes {
-  return [
-    for (final module in getAllOrEmpty<IFeatureRouteModule>())
-      ...module.routes,
-  ];
-}
-```
-
-> [!CAUTION]
-> **Tuyệt đối không sửa `app_router.dart` để thêm route.** Thêm `$myFeatureRoute` vào đó là buộc app shell dính chặt vào feature của bạn, phá vỡ cam kết "gỡ feature ra app vẫn chạy". Hãy đăng ký contract trong DI module của chính feature.
-
-Cây shell mà nó dựng lên:
-
-```
-GoRouter (navigatorKey: NavigatorKeys.rootKey)
-└── ShellRoute (navigatorKey: appKey)  →  NavigatorWrapperWidget
-    ├── ...route từ IFeatureRouteModule        ← auth, onboarding, …
-    └── StatefulShellRoute.indexedStack        →  DashboardRouteModule.builder
-        └── mỗi IDashboardTabModule một StatefulShellBranch (sắp theo order)
-```
+- Một feature package — [`01_new_feature.md`](01_new_feature.md).
+- **Router được lắp ráp thế nào** từ các đóng góp qua DI, cây shell nó dựng ra, và nó suy giảm mềm ra sao khi thiếu module: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-lắp-ráp-router). Tóm tắt: `app_router.dart` chỉ lắp ráp và không bao giờ gọi tên route của feature nào (RULE-20).
+- Dashboard được và không được sở hữu gì: [`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome).
 
 ---
 
-## 2. Bốn contract routing
+## 1. Chọn contract routing
 
-Tất cả nằm ở `packages/core/di/lib/src/routing/`.
+Tất cả contract nằm ở `platform/foundation/contracts/lib/src/routing/`.
 
 | Contract | Dùng cho | Có thứ tự? | Ai implement |
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
-| `IDashboardTabModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
-| `IAppEntryLocation` | Vị trí lúc khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
-| `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar) | n/a | **chỉ** `feature_dashboard` |
+| `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` tăng dần | home, settings, … |
+| `IAppEntryLocation` | Điểm bắt đầu ở lần chạy đầu tiên (`initialLocation` cho tới khi đã hiện một lần) | n/a | thường là onboarding |
+| `ISignInLocation` | Nơi shell đưa người dùng chưa đăng nhập tới (boot, đăng xuất, mất phiên) | n/a | module sở hữu phiên — `feature_auth` |
+| `IPostSignInLocation` | Nơi shell đưa người dùng đã đăng nhập tới (boot, đăng nhập); không có thì `fallbackLocation` | n/a | module trang đích — `feature_home` |
+| `IDashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
-### 2.1 `IFeatureRouteModule`
+Chỉ dùng `INavDestinationModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule` (RULE-24).
 
-```dart
-abstract class IFeatureRouteModule {
-  List<RouteBase> get routes;
-}
-```
+Điều **app** — không phải feature — quyết định về router được khai trong `apps/<id>/`: `RouterProfile` (từ `platform_kernel`) trong `lib/app/app_profile.dart` (`entry`: mặc định `EntryPolicy.firstLaunch`, hoặc `always`, `never`; `fallbackPath`: mặc định là tab đầu tiên) và, trong `lib/app/app_hooks.dart`, `ShellHooks.navigatorObservers` cùng `ShellHooks.redirect` — một guard áp dụng toàn app; guard riêng của module vẫn nằm trong `GoRouteData.redirect` của nó. Deep link theo từng platform: `platforms.<p>.deep_links` trong manifest mặc định bật, và platform nào tắt nó sẽ log một dòng nêu tên key ([`13_app_composition.md`](13_app_composition.md)).
 
-Đăng ký trong chính feature sở hữu — `packages/features/onboarding/lib/src/routing/onboarding_feature_route_module.dart`:
+## 2. Thêm hằng số path
 
-```dart
-@LazySingleton(as: IFeatureRouteModule)
-class OnboardingFeatureRouteModule implements IFeatureRouteModule {
-  @override
-  List<RouteBase> get routes => [$onboardingRoute];
-}
-
-@LazySingleton(as: IAppEntryLocation)
-class OnboardingAppEntryLocation implements IAppEntryLocation {
-  @override
-  String get path => OnboardingPath.ONBOARDING;
-}
-```
-
-Hãy dùng path duy nhất và tránh catch-all chồng lấn — thứ tự giữa các module không được đảm bảo.
-
-### 2.2 `IDashboardTabModule`
-
-```dart
-abstract class IDashboardTabModule {
-  int get order;                    // 0 = tab đầu tiên
-  String get path;                  // path chuẩn, dùng cho fallback
-  List<RouteBase> get routes;       // mount trong một StatefulShellBranch
-  void onRestore();                 // bấm lại vào tab đang active
-  BottomNavigationBarItem navigationBarItem(BuildContext context);
-}
-```
-
-`packages/features/home/lib/src/routing/home_dashboard_tab_module.dart`:
-
-```dart
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
-  @override
-  int get order => 0;
-
-  @override
-  String get path => HomePath.HOME;
-
-  @override
-  List<RouteBase> get routes => [$homeShellRoute];
-
-  @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
-}
-```
-
-> [!NOTE]
-> Chỉ dùng `IDashboardTabModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule`.
-
-### 2.3 Dashboard chỉ là chrome
-
-`feature_dashboard` chỉ phụ thuộc `core_di` và `core_common` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`packages/features/dashboard/lib/src/pages/dashboard_page.dart`):
-
-```dart
-final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
-  ..sort((a, b) => a.order.compareTo(b.order));
-return Scaffold(
-  body: navigationShell,
-  bottomNavigationBar: tabs.length < 2 ? null : BottomNavigationBar(...),
-);
-```
-
-Dashboard **không được**:
-- import `feature_home` / `feature_settings` hay nhúng page của chúng
-- sở hữu page của tab hoặc BLoC nghiệp vụ của tab
-- hardcode danh sách `BottomNavigationBarItem` thay vì đọc DI
-- tự đăng ký `IDashboardTabModule` để tạo tab "giả"
-
-Chú ý `tabs.length < 2` ẩn hẳn thanh bar khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6.
-
----
-
-## 3. Route type-safe với `go_router_builder`
-
-Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. **Phải chạy `dart run build_runner build -d --workspace` sau mỗi thay đổi.**
-
-Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` — mọi package đều giữ constants của mình dưới `utils/`:
-
-`packages/features/auth/lib/src/utils/auth_path.dart`:
+Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` (RULE-09). `modules/auth/feature/lib/src/utils/auth_path.dart`:
 
 ```dart
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
-  static const String REGISTER = '/auth/register';
-  static const String FORGOT_PASSWORD = '/auth/forgot-password';
 }
 ```
 
-`packages/features/auth/lib/src/routing/auth_route_module.dart`:
+## 3. Khai báo route type-safe
+
+Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. `modules/auth/feature/lib/src/routing/auth_route_module.dart`:
 
 ```dart
-@TypedShellRoute<AuthShellRoute>(
-  routes: [
-    TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN),
-    TypedGoRoute<RegisterRoute>(path: AuthPath.REGISTER),
-    TypedGoRoute<ForgotPasswordRoute>(path: AuthPath.FORGOT_PASSWORD),
-  ],
-)
-class AuthShellRoute extends ShellRouteData {
-  const AuthShellRoute();
+/// SAMPLE — a feature contributing a top-level route, on the app navigator
+/// above the dashboard's tabs. List further routes in
+/// `AuthFeatureRouteModule.routes`.
+///
+/// Controllers are created at the route, not in the page (RULE-21). Here
+/// `AuthProvider` is a global `@lazySingleton` mounted by `AuthTreeWrapper`, so
+/// the route builds the page directly; a screen-scoped controller would wrap it
+/// in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())`.
+@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
+class LoginRoute extends GoRouteDataCustom with $LoginRoute {
+  const LoginRoute();
 
-  static final $navigatorKey = NavigatorKeys.authKey;
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }
+```
 
-class LoginRoute extends GoRouteDataCustom with $LoginRoute {
-  const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+Một route dạng stack nằm trên navigator của app, phía trên các tab của dashboard, nên nó nêu `NavigatorKeys.appKey` làm `$parentNavigatorKey`. Route của một tab (`HomeRoute`) không nêu gì: shell gắn nó vào `StatefulShellBranch` riêng của tab. Thêm màn hình anh em bằng các class `@TypedGoRoute` khác trong cùng file và liệt kê các getter `$…Route` được sinh của chúng trong `IFeatureRouteModule.routes` của feature (bước 5).
+
+### Truyền tham số route
+
+Tham số path là một đoạn `:name` trong hằng số path; tham số query là mọi field khác của constructor. `go_router_builder` khớp cả hai với các field của constructor trong class route theo tên và parse chúng sang kiểu Dart của chúng. Trong `lib/src/utils/profile_path.dart`:
+
+```dart
+static const String DETAIL = '/profile/:id';
+```
+
+Trong file route:
+
+```dart
+@TypedGoRoute<ProfileDetailRoute>(path: ProfilePath.DETAIL)
+class ProfileDetailRoute extends GoRouteDataCustom with $ProfileDetailRoute {
+  const ProfileDetailRoute({required this.id, this.tab});
+
+  final String id; // tham số path — `/profile/42`
+  final int? tab; // tham số query — `/profile/42?tab=2`
+
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return const LoginPage();
+    return ChangeNotifierProvider(
+      create: (_) => getIt<ProfileDetailProvider>(param1: id),
+      child: ProfileDetailPage(initialTab: tab ?? 0),
+    );
   }
 }
 ```
 
-`$authShellRoute` được sinh ra chính là thứ feature trả về từ `IFeatureRouteModule.routes`.
+Điều hướng bằng chính class có kiểu — `const ProfileDetailRoute(id: '42', tab: 2).go(context)` — không bao giờ tự ghép chuỗi. Controller nhận id làm factory parameter, `ProfileDetailProvider(@factoryParam this._id)`, được route truyền vào như trên (RULE-11, RULE-21). Factory có `@factoryParam` **không nullable** là loại duy nhất mà smoke test DI không build được nếu thiếu màn hình của nó: hãy liệt kê type của nó trong `_factoriesNeedingArguments` ở `apps/<id>/test/di_smoke_test.dart`, kèm lý do (`F01`, [`05_di.md`](05_di.md)). Feature khác tới màn hình này qua một method của navigator nhận tham số đó — `void toProfileDetail(BuildContext context, {required String id})` trong `profile_api` (bước 6).
 
----
+### Hành vi của page: analytics màn hình, cử chỉ back, page key
 
-## 4. Khởi tạo controller ở route
-
-`build()` của route là nơi controller màn hình được tạo và gắn vào cây widget.
-
-**BLoC** — `packages/features/home/lib/src/routing/home_route_module.dart`:
+`GoRouteDataCustom` dựng page giúp bạn, trên mọi platform kể cả web: nó bọc kết quả của `build()` trong một `RouteAwareWidget`, nên mỗi màn hình được báo cho `IAnalytics` (tuỳ chọn) như một lượt xem màn hình, và chọn kiểu chuyển cảnh platform mong đợi (`CupertinoPage` trên iOS, `MaterialPage` thường trên web, kiểu trượt Cupertino ở nơi khác). Hai getter thay đổi page đó, và cả hai áp dụng trên mọi platform:
 
 ```dart
+class CheckoutRoute extends GoRouteDataCustom with $CheckoutRoute {
+  const CheckoutRoute();
+
+  @override
+  bool get canPop => false; // the system back gesture or button does not dismiss it
+
+  @override
+  ValueKey<Object?>? get pageKey => const ValueKey('checkout'); // two locations share one page
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => const CheckoutPage();
+}
+```
+
+`canPop` mặc định là `true`. `pageKey` mặc định là `null`, tức dùng `state.pageKey`; chỉ trả về một key ổn định khi go_router nên cập nhật một page tại chỗ thay vì thay thế nó. Đừng override `buildPage`, và đừng gọi `routePageFor`, hàm đứng sau nó: nó là public chỉ để dùng trong test.
+
+## 4. Tạo controller trong route
+
+`build()` của route là nơi controller màn hình được tạo và gắn vào cây widget (RULE-21).
+
+**BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
+
+```dart
+/// SAMPLE — a tab's route is an ordinary typed route; the shell turns each
+/// destination's routes into a `StatefulShellBranch`.
+@TypedGoRoute<HomeRoute>(path: HomePath.HOME)
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (_) => getIt<HomeProfileBloc>(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no ISessionStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<ISessionStatusStream>(),
+      ),
       child: const HomePage(),
     );
   }
@@ -217,149 +151,394 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 @override
 Widget build(BuildContext context, GoRouterState state) {
   return ChangeNotifierProvider(
-    create: (context) => getIt<OnboardingProvider>(),
-    child: const OnboardingPage(),
+    create: (context) => getIt<ProfileProvider>(),
+    child: const ProfilePage(),
   );
 }
 ```
 
 > [!CAUTION]
-> Bản thân page **không được** bọc provider lần thứ hai. Xem [`03_state_management.md`](03_state_management.md) §4.
+> Bản thân page **không được** bọc provider lần thứ hai. Xem [`03_state_management.md`](03_state_management.md) § 9.
 
-Route của màn hình dùng controller **toàn cục** (ví dụ `LoginPage` với `AuthProvider` là `@lazySingleton`) thì build thẳng page, không bọc gì.
+Màn hình dùng controller **toàn cục** (ví dụ `LoginPage` với `AuthProvider` là `@lazySingleton`) thì build thẳng page, không bọc gì.
 
----
+## 5. Đăng ký contract route
 
-## 5. Điều hướng xuyên feature
+Đăng ký trong DI module của chính feature, gắn `@LazySingleton(as: ...)`. Không bao giờ thêm route vào `app_router.dart` (RULE-20).
 
-Feature A không bao giờ được import Feature B. Điều hướng vượt ranh giới thông qua interface đặt ở `core_di`.
-
-**1. Khai báo** — `packages/core/di/lib/src/navigators/auth_navigator.dart`:
+### Route dạng stack — `IFeatureRouteModule`
 
 ```dart
+abstract class IFeatureRouteModule {
+  List<RouteBase> get routes;
+}
+```
+
+Đăng ký trong chính feature sở hữu — `modules/onboarding/feature/lib/src/routing/onboarding_route_module.dart`, file chứa route có kiểu và cả hai phần đóng góp của feature nhỏ này:
+
+```dart
+/// Contributes the route to the app shell's router (RULE-20).
+@LazySingleton(as: IFeatureRouteModule)
+class OnboardingFeatureRouteModule implements IFeatureRouteModule {
+  @override
+  List<RouteBase> get routes => [$onboardingRoute];
+}
+```
+
+Nơi lần chạy đầu tiên bắt đầu là một contract riêng, đăng ký cạnh nó trong cùng file:
+
+```dart
+/// Where a first launch starts. The shell resolves `IAppEntryLocation` with
+/// `getItOrNull` and shows it once, before any sign-in redirect.
+@LazySingleton(as: IAppEntryLocation)
+class OnboardingAppEntryLocation implements IAppEntryLocation {
+  @override
+  String get path => OnboardingPath.ONBOARDING;
+}
+```
+
+Hãy dùng path duy nhất và tránh catch-all chồng lấn: thứ tự giữa các module không được đảm bảo.
+
+### Tab chính — `INavDestinationModule`
+
+```dart
+abstract class INavDestinationModule {
+  int get order; // khoá sắp xếp tăng dần, 0 = tab đầu tiên
+  String get path; // path chuẩn, dùng cho fallback
+  List<RouteBase> get routes; // mount trong một StatefulShellBranch
+  NavDestination destination(BuildContext context);
+}
+```
+
+`modules/home/feature/lib/src/routing/home_nav_destination.dart`:
+
+```dart
+/// SAMPLE: a module contributing one primary navigation destination. It
+/// describes the destination ([NavDestination]) instead of building a widget,
+/// so the dashboard can render it as a bottom bar or a rail.
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
+  @override
+  int get order => 0;
+
+  @override
+  String get path => HomePath.HOME;
+
+  @override
+  List<RouteBase> get routes => [$homeRoute];
+
+  @override
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
+}
+```
+
+`order` là khoá sắp xếp tăng dần, không phải index, và phải duy nhất giữa các tab. `destination` trả về một `NavDestination` trung lập (`label`, `icon`, `selectedIcon` tuỳ chọn), nên cùng một đóng góp hiển thị được thành mục của bottom bar hay của rail. `feature_dashboard` dựng chrome đó từ mọi tab đã đăng ký, và bỏ hẳn chrome khi có ít hơn hai tab ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome)); bấm lại vào tab hiện tại đưa branch của nó về trang đầu. Một app ghép hai tab trở lên phải ghép cả `feature_dashboard` và khai `dashboard: provided`, nếu không chỉ tab đầu truy cập được — `checkAppContract` làm smoke test fail với `C12` ([`13_app_composition.md` § 6](13_app_composition.md#6-contract-shell-đòi-gì-ở-một-app)). Vì sao chrome đổi theo lớp kích thước cửa sổ: [`11_design_system.md` § 7](11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
+
+### Chrome của dashboard — `IDashboardRouteModule`
+
+Chỉ `feature_dashboard` implement contract này. Shell sắp xếp các tab đã đăng ký theo `order` một lần rồi đưa chính danh sách đó cho dashboard, nên destination `i` là branch `i` của `navigationShell`; hãy render danh sách này, đừng gom tab lần nữa:
+
+```dart
+abstract class IDashboardRouteModule {
+  /// [destinations] are the registered [INavDestinationModule]s sorted by
+  /// `order`, collected once by the shell's router: destination `i` is
+  /// branch `i` of [navigationShell]. Render them rather than collecting
+  /// them again.
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  );
+}
+```
+
+```dart
+// modules/dashboard/feature/lib/src/routing/dashboard_route_module_impl.dart
+@Singleton(as: IDashboardRouteModule)
+class DashboardRouteModuleImpl implements IDashboardRouteModule {
+  @override
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  ) {
+    return DashboardPage(
+      navigationShell: navigationShell,
+      destinations: destinations,
+    );
+  }
+}
+```
+
+Không có nó thì các destination vẫn render, chỉ là không có chrome.
+
+## 6. Cho feature khác điều hướng tới màn hình của bạn
+
+Feature A không bao giờ import feature B (RULE-04). Điều hướng vượt ranh giới qua một interface trong **package API của module B** — `modules/<id>/api`, tên `<id>_api`. Feature A phụ thuộc package đó thay cho feature B (`arch_check` R3). `core_di` không chứa navigator của module nào (RULE-22).
+
+**1. Khai báo** — `modules/auth/api/lib/src/navigators/auth_navigator.dart` (package `auth_api`):
+
+```dart
+/// Routes owned by auth, for other features (onboarding's "Get started").
+///
+/// Resolve with `getItOrNull<AuthNavigator>()` — `feature_auth` implements it
+/// and is removable (RULE-12). The shell uses `ISignInLocation`, not this.
 abstract class AuthNavigator {
   void toLogin(BuildContext context);
-  void toRegister(BuildContext context);
-  void toForgotPassword(BuildContext context);
 }
 ```
 
-**2. Implement trong feature sở hữu** — `packages/features/auth/lib/src/routing/auth_navigator_impl.dart`:
+Mỗi route mà feature sở hữu là một method — và chỉ những route nó sở hữu.
+
+Một file **mới** trong package API vô hình với mọi nơi dùng cho tới khi barrel của package, `package:auth_api/auth_api.dart`, export nó. Barrel được sinh ra: hãy sinh lại nó, đừng tự thêm dòng `export`, vì generator thay thế mọi export nó tìm thấy (RULE-75). Module chưa có package API thì tạo nó trước: `dart tools/module_generator/generate.dart 6 <name>` ghi package cùng stub navigator, và implement nó trong feature của module nếu feature đó đã có ([`01_new_feature.md`](01_new_feature.md) § 7; cách bố trí và những gì `arch_check` ép nó tuân theo: [`12_module_isolation.md` § 4](12_module_isolation.md#4-tạo-package-api-cho-module)).
+
+```bash
+dart tools/barrel_generator/generate.dart modules/auth/api/lib
+```
+
+**2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
-@Singleton(as: AuthNavigator)
+@LazySingleton(as: AuthNavigator)
 class AuthNavigatorImpl implements AuthNavigator {
   @override
-  void toLogin(BuildContext context) {
-    const LoginRoute().go(context);
-  }
-
-  @override
-  void toRegister(BuildContext context) => const RegisterRoute().go(context);
-
-  @override
-  void toForgotPassword(BuildContext context) =>
-      const ForgotPasswordRoute().go(context);
+  void toLogin(BuildContext context) => const LoginRoute().go(context);
 }
 ```
 
-**3. Gọi từ bất kỳ đâu:**
+**3. Gọi từ bất kỳ feature nào có `auth_api` trong `dependencies:`:**
 
 ```dart
-getIt<AuthNavigator>().toLogin(context);
-// hoặc, khi feature đó có thể bị gỡ:
+// Từ mọi package khác package sở hữu — package sở hữu có thể bị gỡ:
 getItOrNull<AuthNavigator>()?.toLogin(context);
+
+// Chỉ bên trong chính feature_auth, nơi nó không thể vắng mặt:
+getIt<AuthNavigator>().toLogin(context);
 ```
 
-### Quy tắc
+Các luật áp dụng ở chỗ gọi:
 
-- Một Navigator interface **chỉ** phơi ra route mà chính feature đó sở hữu.
-- **Không bao giờ** hardcode chuỗi path hay gọi `GoRouter.of(context).go('/auth/login')` để sang feature khác.
-- **`BuildContext` phải được truyền trực tiếp từ widget gọi.** Đừng lấy từ `NavigatorKeys.*.currentContext` hay `appRouter.currentContext` — cách đó bỏ qua vòng đời widget và sinh lỗi "dùng sau khi dispose".
-- Dùng `getItOrNull` ở những chỗ gọi cần sống sót khi feature đích bị gỡ.
+- **RULE-22** · Không bao giờ hardcode chuỗi path hay gọi `GoRouter.of(context).go('/auth/login')` để sang feature khác.
+- **RULE-23** · Truyền `BuildContext` thẳng từ widget gọi. Đừng dùng `NavigatorKeys.*.currentContext` hay `appRouter.currentContext`: chúng bỏ qua vòng đời widget và gây lỗi "dùng sau khi dispose".
+- **RULE-12** · Dùng `getItOrNull` ở mọi chỗ gọi cần sống sót khi feature đích bị gỡ.
+- **RULE-22** · App shell không dùng navigator của module nào. Người dùng chưa đăng nhập được đưa tới `ISignInLocation.path`, người đã đăng nhập tới `IPostSignInLocation.path`. Module sở hữu phiên và module trang đích đóng góp hai contract đó (`AuthSignInLocation`, `HomePostSignInLocation`), còn `NavigatorWrapperWidget` tự gọi `context.go(path)`.
 
----
+## 7. Cho module một back stack riêng
 
-## 6. `NavigatorKeys` — vì sao đặt ở DI Hub
-
-`packages/core/di/lib/src/routing/navigator_keys.dart`:
+`platform/foundation/contracts/lib/src/routing/navigator_keys.dart`:
 
 ```dart
 class NavigatorKeys {
   NavigatorKeys._();
 
-  static final appKey = GlobalKey<NavigatorState>();
-  static final rootKey = GlobalKey<NavigatorState>();
-  static final authKey = GlobalKey<NavigatorState>();
+  /// Navigator for the app [ShellRoute] that wraps all in-app routes.
+  static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+
+  /// Root navigator owned by `GoRouter` itself — used for full-screen routes
+  /// that must escape the app shell.
+  static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+  static final _nested = <String, GlobalKey<NavigatorState>>{};
+
+  /// The nested navigator key registered under [id], created on first use.
+  ///
+  /// Returns the *same* instance for the same id — which is the whole
+  /// requirement, since a shell route and its children must share one.
+  static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
+    id,
+    () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),
+  );
 }
 ```
 
-Một `ShellRoute` và các route con của nó phải tham chiếu **cùng một** instance `GlobalKey`. Shell do app shell lắp ráp; route con lại khai bên trong feature package. Đặt key ở một trong hai phía sẽ tạo vòng phụ thuộc — app shell vốn đã phụ thuộc mọi feature, nên feature không thể phụ thuộc ngược lại app shell để lấy key. `core_di`, thứ mà cả hai phía đều đã phụ thuộc, là nơi trung lập.
-
-`authKey` mang tên một feature, bình thường sẽ là mùi phân tầng sai. Nó được chấp nhận vì đây là **hạ tầng routing, không phải business logic**: key chỉ là token định danh trao cho GoRouter, và `core_di` không hề import `feature_auth`.
-
-Chỉ thêm key mới **khi** một feature thực sự cần navigator lồng riêng (back stack riêng). Tab trong dashboard đã có branch navigator từ `StatefulShellRoute` của GoRouter nên không cần.
-
----
-
-## 7. Suy giảm mềm khi thiếu module
-
-Mọi lần tra cứu trong `app_router.dart` đều chịu được việc thiếu đóng góp — đây chính là thứ khiến feature gỡ được:
+Có hai key cố định: `appKey`, navigator của shell route bọc mọi route trong app (một route dạng stack nêu nó làm `$parentNavigatorKey`, như `LoginRoute` ở bước 3), và `rootKey`, navigator gốc, cho route toàn màn hình cần thoát khỏi shell. Chỉ xin key bằng `NavigatorKeys.nested('<id>')` **khi** một module thực sự cần navigator lồng riêng — back stack riêng. Shell route và các route con phải nêu cùng một id:
 
 ```dart
-String get _fallbackLocation {
-  final entry = getItOrNull<IAppEntryLocation>()?.path;
-  if (entry != null) return entry;
-  final tabs = _dashboardTabs;
-  if (tabs.isNotEmpty) return tabs.first.path;
-  return '/';
+class CheckoutShellRoute extends ShellRouteData {
+  static final $navigatorKey = NavigatorKeys.nested('checkout');
 }
 ```
 
-```dart
-builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
-        context,
-        state,
-        navigationShell,
-      ) ??
-      const SizedBox.shrink();
-},
+Destination bên trong `StatefulShellRoute` đã có branch navigator từ GoRouter nên không cần. Vì sao các key nằm ở `core_di`: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#vì-sao-navigatorkeys-nằm-ở-core_di).
+
+## 8. Sinh route và export file
+
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/<name>/feature/lib
 ```
 
-| Thiếu gì | Kết quả |
-|---|---|
-| Toàn bộ `IFeatureRouteModule` | Không có route stack; app vẫn dựng được |
-| Toàn bộ `IDashboardTabModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
-| `DashboardRouteModule` | Dashboard render `SizedBox.shrink()` |
-| `IAppEntryLocation` | Rơi về path của tab đầu tiên, rồi tới `/` |
+Chạy `build_runner` sau **mọi** thay đổi annotation route. Rồi chạy barrel generator cho mọi package bạn đã thêm file — kể cả `modules/<id>/api/lib` khi bạn thêm navigator (bước 6).
 
-Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
+## 9. Thiết lập deep link
+
+Có hai dạng link đi vào app, và cả hai đều về cùng một location của router:
+
+| Link | Location của router |
+|:---|:---|
+| `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
+| `<scheme>://settings?tab=2` (custom scheme — segment đầu tiên nằm ở vị trí host) | `/settings?tab=2` |
+
+Nền tảng đưa URI cho `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/src/provider/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng. Nó chỉ làm vậy sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó — không bao giờ đè lên onboarding hay login. Path không module nào đăng ký sẽ rơi vào `UndefinedRouteWidget`, như mọi location lạ khác.
+
+`locationOf` giữ mọi thứ mà link mang theo: path, **mọi** query parameter (một key xuất hiện hai lần giữ cả hai giá trị: `?tag=a&tag=b`) và fragment (`#section`). Một link custom-scheme có host rỗng (`<scheme>:///settings`) được đọc là path `/settings`, giống `<scheme>://settings`.
+
+### Giữ deep linking có sẵn của Flutter ở trạng thái tắt
+
+Từ Flutter 3.27, engine mặc định cũng tự xử lý deep link. Nó đẩy thẳng URI vào `GoRouter`, bỏ qua `DeeplinkProvider` cùng bước kiểm tra phiên: người dùng chưa đăng nhập có thể mở màn hình cần đăng nhập, và mỗi link bị điều hướng hai lần. Vì vậy cả hai nền tảng đều tắt nó:
+
+- Android — trong `<activity>` ở `apps/mobile/android/app/src/main/AndroidManifest.xml`: `<meta-data android:name="flutter_deeplinking_enabled" android:value="false" />`
+- iOS — `apps/mobile/ios/Runner/Info.plist`: `FlutterDeepLinkingEnabled` = `false`
+
+Đừng xoá cái nào khi `DeeplinkProvider` vẫn là lối vào duy nhất của router.
+
+### Đặt giá trị theo từng flavor
+
+| Flavor | Custom scheme | Application id Android | Bundle id iOS |
+|:---|:---|:---|:---|
+| `dev` | `codebase-dev` | `com.example.codebase.dev` | `com.example.codebase.dev` |
+| `staging` | `codebase-stg` | `com.example.codebase.stg` | `com.example.codebase.staging` |
+| `prod` | `codebase` | `com.example.codebase` | `com.example.codebase` |
+
+Mỗi flavor một scheme, để dev, staging và prod cài song song không tranh nhau một link. Scheme được khai ở hai nơi, và hai nơi phải khớp nhau:
+
+- `resValue("string", "DEEP_LINK_SCHEME", …)` trong từng mục `productFlavors` của `apps/mobile/android/app/build.gradle.kts`;
+- build setting `DEEP_LINK_SCHEME` của từng configuration Runner trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*).
+
+Đổi tên app thì đổi các giá trị ở Android và iOS cùng lúc.
+
+`WEB_DOMAIN` lấy từ file env của flavor (`apps/mobile/env.dev`, …). Các file env đã commit để trống giá trị này.
+
+### Cấu hình Android
+
+`AndroidManifest.xml` khai hai intent-filter `VIEW` trên `MainActivity`:
+
+```xml
+<intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" />
+    <data android:host="@string/WEB_DOMAIN" />
+</intent-filter>
+<!-- Custom scheme: <DEEP_LINK_SCHEME>://<first-segment>/<rest>,
+     one scheme per flavor (build.gradle.kts productFlavors). -->
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="@string/DEEP_LINK_SCHEME" />
+</intent-filter>
+```
+
+`@string/WEB_DOMAIN` là một `resValue` mà `build.gradle.kts` giải mã từ dart-define. Khi file env để trống `WEB_DOMAIN`, nó thành `example.invalid`, một tên miền dành riêng không bao giờ phân giải được. Host rỗng sẽ khiến filter nhận mọi link https.
+
+**Xác minh App Links.** `autoVerify` khiến Android tải `https://<WEB_DOMAIN>/.well-known/assetlinks.json` lúc cài đặt. Phục vụ file qua https, không redirect, kiểu `application/json`, liệt kê mọi flavor dùng domain đó:
+
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.codebase",
+      "sha256_cert_fingerprints": ["AA:BB:…"]
+    }
+  }
+]
+```
+
+Fingerprint là của khoá dùng để ký APK **được cài**:
+
+- với khoá bạn tự ký: `keytool -list -v -keystore <release.jks> -alias <alias>`;
+- với bản build qua Play dùng Play App Signing: SHA-256 của *App signing key certificate* trong Play Console → *Test and release → App integrity* — không phải của upload key.
+
+Kiểm tra trên thiết bị:
+
+```bash
+adb shell pm get-app-links com.example.codebase            # "verified" cho từng domain
+adb shell pm verify-app-links --re-verify com.example.codebase
+adb shell am start -a android.intent.action.VIEW -d "codebase-dev://settings?tab=2"
+adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settings?tab=2"
+```
+
+### Cấu hình iOS
+
+**Vòng đời scene.** Runner dùng UIScene, vòng đời mà template của chính Flutter ship: `AppDelegate.swift` tuân theo `FlutterImplicitEngineDelegate` và đăng ký plugin trong `didInitializeImplicitFlutterEngine`, `SceneDelegate.swift` (một `FlutterSceneDelegate`, thuộc target Runner trong `project.pbxproj`) là delegate của window scene, và `Info.plist` khai báo nó dưới `UIApplicationSceneManifest`. Hãy giữ cả ba đi cùng nhau. Với vòng đời cũ chỉ có `AppDelegate`, công cụ của Flutter tự migrate các file này ở lần build iOS đầu tiên, làm bẩn các file đã được theo dõi bằng một diff chưa ai review.
+
+**Custom scheme.** `Info.plist` đăng ký nó dưới `CFBundleURLTypes`, với `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` và `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Không cần gì thêm: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` mở bản dev.
+
+**Universal link** vẫn tắt cho tới khi bạn sở hữu domain, vì entitlement này làm provisioning fail với App ID chưa có capability. Để bật:
+
+1. Bật **Associated Domains** cho từng App ID trên Apple Developer portal (hoặc *Signing & Capabilities → + Capability* trong Xcode) rồi tạo lại provisioning profile.
+2. Bỏ comment khối `com.apple.developer.associated-domains` trong `apps/mobile/ios/Runner/Runner.entitlements`.
+   - Giá trị của nó, `applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)`, được mở rộng từ `Flutter/Environment.xcconfig`. Build pre-action của mỗi scheme flavor ghi file đó ra từ dart-define, nên hãy build qua scheme flavor (`--flavor`).
+   - Để `APP_LINK_MODE` trống ở production; `?mode=developer` bỏ qua cache CDN của Apple trên thiết bị đã bật *Associated Domains Development*.
+3. Phục vụ `https://<WEB_DOMAIN>/.well-known/apple-app-site-association` — không đuôi file, `application/json`, không redirect:
+
+```json
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ABCDE12345.com.example.codebase"],
+        "components": [{ "/": "/*" }]
+      }
+    ]
+  }
+}
+```
+
+`ABCDE12345` là Team ID của bạn; thêm một mục `appIDs` cho mỗi bundle id dùng domain đó. Apple tải file qua CDN của họ lúc app được cài, nên thay đổi có thể mất một lúc mới tới thiết bị. `?mode=developer` sinh ra để xử lý chuyện đó.
 
 ---
 
-## 8. Thêm một màn hình — từ đầu đến cuối
+## Kiểm tra
 
-1. **Hằng số path** → `lib/src/utils/<feature>_path.dart`.
-2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
-3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `IDashboardTabModule` cho tab, gắn `@LazySingleton(as: ...)`.
-4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
-5. **Sinh code** → `dart run build_runner build -d --workspace`.
-6. **Barrel** → `dart tools/barrel_generator/generate.dart packages/features/<name>/lib`.
+```bash
+dart run build_runner build --workspace   # file route *.g.dart và phần đăng ký DI
+flutter analyze                           # No issues found!
+dart tools/arch_check/check.dart          # ✅ All architecture rules hold … (R3, R8, R10)
+cd apps/mobile && flutter test test/di_smoke_test.dart   # mọi route module đều resolve được
+```
 
-## Checklist
+`platform/shell/app_shell/test/app_router_test.dart` cho thấy cách test routing với một `AppRouter` thật. Với deep link, dùng các lệnh `adb` và `xcrun` ở bước 9.
+
+Checklist review:
 
 - [ ] Không đụng `app_router.dart`
 - [ ] Hằng số path nằm ở `src/utils/`, không phải `routing/`
 - [ ] Controller tạo trong `build()` của route, page không bọc lại
-- [ ] `IDashboardTabModule.order` khớp đúng vị trí tab mong muốn
-- [ ] Điều hướng xuyên feature đi qua Navigator interface ở `core_di`
+- [ ] `INavDestinationModule.order` xếp tab vào đúng vị trí mong muốn (khóa sắp xếp tăng dần, không phải index) và là duy nhất
+- [ ] Điều hướng xuyên feature đi qua Navigator interface trong `<id>_api` của module đích
 - [ ] `BuildContext` truyền từ UI, không lấy từ `NavigatorKeys`
 - [ ] Đã chạy lại `build_runner` sau khi sửa annotation route
+- [ ] Deep link vẫn chỉ tới router qua `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` giữ nguyên `false` (bước 9)
+
+## Xử lý sự cố
+
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|:--|:--|:--|
+| `Undefined name '$myRoute'` hoặc thiếu `*.g.dart` | Chưa chạy `build_runner` từ khi đổi annotation | `dart run build_runner build --workspace` (bước 8) |
+| Không vào được màn hình mới; GoRouter hiện `UndefinedRouteWidget` | Contract route chưa được đăng ký, hoặc app chỉ được hot reload | Kiểm tra annotation `@LazySingleton(as: IFeatureRouteModule)`, chạy lại `build_runner`, rồi **khởi động lại hẳn** app |
+| `Undefined name 'MyNavigator'` ở nơi dùng | Barrel của package API chưa export file mới | Chạy barrel generator cho `modules/<id>/api/lib` (bước 6) |
+| Tab sai thứ tự, hoặc tab này thay tab kia | Hai `INavDestinationModule` trùng `order` | Cho mỗi tab một `order` riêng (bước 5) |
+| Không có bottom bar hay rail | Có ít hơn hai tab được đăng ký | Đúng thiết kế: dashboard bỏ chrome khi dưới hai tab |
+| Deep link mở màn hình khi chưa đăng nhập, hoặc điều hướng hai lần | Deep linking có sẵn của Flutter bị bật lại | Đặt lại `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` = `false` (bước 9) |
+| `pm get-app-links` không báo `verified` | `assetlinks.json` thiếu, bị redirect, hoặc sai fingerprint | Phục vụ file như bước 9, với khoá ký của APK được cài |
+| Provisioning fail sau khi bật universal link | App ID chưa có capability Associated Domains | Bật capability rồi tạo lại profile (bước 9) |
 
 ## Liên quan
 
+- Luật: RULE-04 (không import feature → feature), RULE-12 (tra cứu tuỳ chọn), RULE-20 (không sửa `app_router.dart`), RULE-21 (controller ở route), RULE-22 (navigator trong `<id>_api`), RULE-23 (`BuildContext` từ nơi gọi), RULE-24 (tab so với màn hình push) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-lắp-ráp-router) — lắp ráp router, entry và fallback location, suy giảm mềm
+- [`13_app_composition.md`](13_app_composition.md) — `RouterProfile`, các hook điều hướng và công tắc deep link theo platform
 - [`03_state_management.md`](03_state_management.md) — vòng đời controller
 - [`05_di.md`](05_di.md) — contract được đăng ký và gom lại thế nào
 - [`10_cross_feature.md`](10_cross_feature.md) — các mô hình giao tiếp xuyên feature khác
-- [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) — lắp ráp router

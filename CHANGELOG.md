@@ -152,8 +152,8 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   the declared pins at boot with the client's own rules (a malformed pin stops the boot with
   `InvalidPinException`, and a boot retry can no longer start the app unpinned); a refused host lists the
   hashes the server presented, also in `AppFailure.message` (on desktop with a note that only the leaf
-  can match); a rotated certificate is read again once without a restart, and every host is read again
-  after an hour. Every redirect hop is checked like a first request; the pinned client follows
+  can match); a rotated certificate is read again once without a restart (a client keeps what it read for a host
+  until a handshake fails; a client created later reuses a chain read in the last hour). Every redirect hop is checked like a first request; the pinned client follows
   `https_proxy` / `no_proxy` like `dart:io`, its probe included; the Android probe's trust manager
   rejects what it records, so it no longer looks like an accept-all one to store scanners. The client is
   held as an `Object` and type-tested before it is returned, because on the web the package's class is an

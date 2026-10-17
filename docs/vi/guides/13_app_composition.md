@@ -250,7 +250,7 @@ flavors:
 
 Ít nhất hai pin, mỗi pin là base64 của 32 byte (V9). Cách tính: [`08_networking.md` § 10](08_networking.md#10-bật-ssl-pinning). Một flavor cố ý không pin thì ghi `ssl_pinning: { disabled: "lý do" }`, và báo cáo liệt kê nó ở mục các quyết định cần xem lại.
 
-Các pin áp dụng cho **mọi host mà process kết nối tới**, không chỉ API của bạn: một CDN ảnh, một host font hay endpoint SDK bên thứ ba có certificate không khớp pin nào cũng fail bắt tay TLS, nên hãy kiểm tra các host đó trước khi khai báo `pins:` (danh sách kiểm tra ở [`08_networking.md` § 10](08_networking.md#10-bật-ssl-pinning)). Bearer token là nửa còn lại của cùng quyết định: nó chỉ đi tới host của `BASE_URL` và `NetworkProfile.authorizedHosts` (mục 4), nên một API chia trên nhiều domain phải khai các host thêm ở đó — và phủ chúng bằng pin.
+Các pin áp dụng cho **mọi host mà isolate chính chạm tới qua `dart:io`**, không chỉ API của bạn: một CDN ảnh, một host font hay endpoint SDK bên thứ ba có certificate không khớp pin nào cũng fail bắt tay TLS, nên hãy kiểm tra các host đó trước khi khai báo `pins:` (danh sách kiểm tra ở [`08_networking.md` § 10](08_networking.md#10-bật-ssl-pinning)). Bearer token là nửa còn lại của cùng quyết định: nó chỉ đi tới host của `BASE_URL` và `NetworkProfile.authorizedHosts` (mục 4), nên một API chia trên nhiều domain phải khai các host thêm ở đó — và phủ chúng bằng pin.
 
 ### Thêm hoặc gỡ một module
 

@@ -185,6 +185,8 @@ void main() {
         for (final cause in [
           const RedirectException('Redirect loop detected', []),
           const RedirectException('Redirect limit exceeded', []),
+          // The pinning client's message; `dart:io`'s own client throws a
+          // FormatException for a malformed `Location` (a ParseFailure, above).
           const RedirectException('Invalid Location header: bad', []),
         ]) {
           final failure = classify(cause);

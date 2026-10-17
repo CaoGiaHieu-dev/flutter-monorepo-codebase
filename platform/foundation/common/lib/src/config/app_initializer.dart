@@ -330,8 +330,10 @@ class _MyHttpSecurityPinningHttpOverrides extends HttpOverrides {
     // compiled for the web, where the package's class is an `http.BaseClient`
     // and not an `HttpClient`. A direct return or an override of `open`
     // fails `flutter build web` while `flutter analyze` stays clean. The web
-    // never reaches this line (`AppPlatform.canPinTls` is false there); the
-    // test only turns a bare `TypeError` into a message that names the cause.
+    // never reaches this line (`AppPlatform.canPinTls` is false there); if it
+    // did, the package's web constructor would throw first (since 2.0.0 an
+    // `ArgumentError` asking for `serverPublicKeys`). The type test is there
+    // for the compiler; the error below is never thrown.
     final Object client = HttpSecurityPinningClient(pins);
     if (client is! HttpClient) {
       throw UnsupportedError('SSL pinning is not available on the web');

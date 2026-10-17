@@ -99,10 +99,13 @@ final class DioFailureClassifier implements ErrorClassifier {
   /// - anything else stays [ErrorCodes.NETWORK_UNKNOWN] — the pinning
   ///   client's other refusals included (a chain that could not be read, a
   ///   non-HTTPS URL on a pinned host, requested or reached by a redirect
-  ///   from HTTPS) and a redirect that cannot be followed (dart:io's
-  ///   [RedirectException]: a loop, too many hops, a bad `Location`): they
-  ///   say nothing about the certificate the server presented, and a
-  ///   [NetworkFailure] never ends a session.
+  ///   from HTTPS) and a redirect that cannot be followed (a
+  ///   [RedirectException]: a loop, too many hops, no `Location`, and — from
+  ///   the pinning client only — a malformed `Location`; `dart:io`'s own
+  ///   client lets `Uri.parse` throw for a malformed `Location`, a
+  ///   [FormatException] and so a [ParseFailure] above): they say nothing
+  ///   about the certificate the server presented, and a [NetworkFailure]
+  ///   never ends a session.
   static AppFailure<dynamic> _failureFromCause(DioException error) {
     final cause = error.error;
     if (cause is FormatException) {

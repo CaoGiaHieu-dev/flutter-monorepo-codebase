@@ -39,14 +39,15 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
   `ssl_pinning: { disabled: … }` for staging and prod in `apps/mobile/app_manifest.yaml` and
   `apps/admin/app_manifest.yaml`, so they use normal certificate validation only (and each app's
   report lists it under *decisions to revisit*).
-  Declare at least two SPKI hashes (leaf + backup) per flavor before relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning). Pins apply to every host the process connects to, not only your API: an image CDN, a font host or a third-party SDK endpoint with no matching pin fails its handshake too.
+  Declare at least two SPKI hashes (leaf + backup) per flavor before relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning). Pins apply to every host the main isolate reaches through `dart:io`, not only your API: an image CDN, a font host or a third-party SDK endpoint with no matching pin fails its handshake too. Another isolate (a background message handler, `compute`) is pinned only if it calls `AppInitializer.initBeforeRunApp` itself, and an SDK's native networking never is (same section of the guide).
 - **The pinning plugin's probe reads certificates it does not validate, on purpose.** To read the
   chain a host presents, `http_security_pinning` opens a separate observation connection that sends
-  no request and trusts nothing it sees (Android: a trust manager that records the chain and rejects
-  it; iOS: a challenge it cancels; desktop: `onBadCertificate` returns true and the socket is closed
-  after the handshake). Enforcement is the second, real connection, whose `SecurityContext` holds
-  only the certificates that matched your pins. A scanner finding on the desktop probe is expected; a
-  pin that does not stop a mismatching host is a vulnerability: report it.
+  no request to the host (through a proxy it sends only the `CONNECT`) and trusts nothing it sees
+  (Android: a trust manager that records the chain and rejects it; iOS: a challenge it cancels;
+  desktop: `onBadCertificate` returns true and no data is sent). Enforcement is the second, real
+  connection, whose `SecurityContext` holds only the certificates that matched your pins. A scanner
+  finding on the desktop probe is expected; a pin that does not stop a mismatching host is a
+  vulnerability: report it.
 - **Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`.** A missing or unknown flavor is treated as prod. A bypass reachable any other
   way *is* a vulnerability — please report it.

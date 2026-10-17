@@ -249,7 +249,7 @@ flavors:
 
 At least two pins, each the base64 of 32 bytes (V9). How to compute them: [`08_networking.md` § 10](08_networking.md#10-turn-on-ssl-pinning). A flavor that deliberately does not pin says `ssl_pinning: { disabled: "reason" }`, and the report lists it under the decisions to revisit.
 
-Pins apply to **every host the process connects to**, not only your API: an image CDN, a font host or a third-party SDK endpoint whose certificate matches none of the pins fails its handshake too, so check those hosts before declaring `pins:` (the checklist is in [`08_networking.md` § 10](08_networking.md#10-turn-on-ssl-pinning)). The bearer token is the other half of the same decision: it goes only to the `BASE_URL` host and `NetworkProfile.authorizedHosts` (section 4), so an API split over several domains names the extra hosts there — and covers them with pins.
+Pins apply to **every host the main isolate reaches through `dart:io`**, not only your API: an image CDN, a font host or a third-party SDK endpoint whose certificate matches none of the pins fails its handshake too, so check those hosts before declaring `pins:` (the checklist is in [`08_networking.md` § 10](08_networking.md#10-turn-on-ssl-pinning)). The bearer token is the other half of the same decision: it goes only to the `BASE_URL` host and `NetworkProfile.authorizedHosts` (section 4), so an API split over several domains names the extra hosts there — and covers them with pins.
 
 ### Add or remove a module
 

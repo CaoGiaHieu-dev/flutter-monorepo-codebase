@@ -102,6 +102,29 @@ void main() {
     expect(HttpOverrides.current, same(sentinel));
   });
 
+  test('every declared pin is checked at boot, not only the first', () {
+    const valid = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+    const backup = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=';
+    for (final decision in const [
+      SslPinning.pinned('not-a-pin', backup),
+      SslPinning.pinned(valid, 'not-a-pin'),
+      SslPinning.pinned(valid, backup, ['not-a-pin']),
+    ]) {
+      AppInitializer.debugResetBeforeRunApp();
+      expect(
+        () => AppInitializer.initBeforeRunApp(
+          profile: _profile(decision: decision),
+          platform: AppPlatform.android,
+          flavor: Flavor.prod,
+        ),
+        throwsA(
+          isA<InvalidPinException>().having((e) => e.pin, 'pin', 'not-a-pin'),
+        ),
+        reason: '$decision',
+      );
+    }
+  });
+
   test('an empty pin list stops the boot, before any HttpClient is '
       'built', () {
     expect(

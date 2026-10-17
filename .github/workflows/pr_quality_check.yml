@@ -496,6 +496,14 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # Before configure: its last step (`composer runners`) is what reads
+      # this cache, and what fills it on a miss (saved when the job ends).
+      - name: The sqlite3.wasm cache (composer runners)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flutter_monorepo/sqlite3
+          key: sqlite3-wasm-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
       # Exactly what an adopter runs on a fresh clone: codegen, the Firebase
       # stubs, then `composer runners` (the gitignored web and Linux runners,
       # with sqlite3.wasm and drift_worker.js for an app that links
@@ -503,13 +511,11 @@ jobs:
       - name: Set up the workspace (codegen, stubs) and generate the runners
         run: dart tools/workspace_setup/configure.dart --stub-firebase
 
-      - name: Native build-hook downloads (sqlite3) and the wasm cache
+      - name: Native build-hook downloads (sqlite3)
         uses: actions/cache@v6      # after configure: its flutter clean wipes .dart_tool
         with:
-          path: |
-            .dart_tool/hooks_runner/shared
-            ~/.cache/flutter_monorepo/sqlite3
-          key: hooks-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+          path: .dart_tool/hooks_runner/shared
+          key: hooks-runner-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
 
       # `flutter drive -d web-server` asks the chromedriver on port 4444 for a
       # browser; --chrome-binary names the Chrome it must launch (the tool does
@@ -527,7 +533,11 @@ jobs:
 
       # A private session bus and an unlocked login keyring: the Secret
       # Service answers, so secure values are stored there. Fresh XDG
-      # directories, so no state survives from another step.
+      # directories, so no state survives from another step. The boot passes
+      # on the memory fallback too, so the step then asks the Secret Service
+      # itself: the default collection, empty before the boot, must hold the
+      # item the secure store wrote — or this step proved no more than the
+      # next one.
       - name: Boot on Linux (an unlocked keyring)
         if: matrix.linux
         working-directory: apps/${{ matrix.app }}
@@ -536,7 +546,13 @@ jobs:
             T=$(mktemp -d); export XDG_DATA_HOME=$T/data XDG_CONFIG_HOME=$T/config XDG_CACHE_HOME=$T/cache XDG_RUNTIME_DIR=$T/run
             mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
             eval "$(printf "ci\n" | gnome-keyring-daemon --unlock --components=secrets)"; export GNOME_KEYRING_CONTROL
-            flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev'
+            flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+            items=$(dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets/aliases/default \
+              org.freedesktop.DBus.Properties.Get string:org.freedesktop.Secret.Collection string:Items)
+            if ! printf "%s" "$items" | grep -q "object path"; then
+              echo "::error::The boot stored nothing in the Secret Service: secure storage fell back to memory although a keyring was unlocked (RULE-83)."
+              exit 1
+            fi'
 
       # No Secret Service at all: the bus address points nowhere, so libsecret
       # fails at once and `secure_storage: memory_fallback` (Linux's derived
@@ -593,8 +609,10 @@ jobs:
       # is read from apps/mobile/android/app/build.gradle.kts (applicationId
       # + the flavor's applicationIdSuffix — `.dev` here). Real files, if a
       # workflow ever restores them, are kept.
+      # --no-runners: the APK is built from the committed android/ runner;
+      # the generated web and Linux runners are the `platforms` job's.
       - name: Install dependencies, run code generation, stub Firebase
-        run: dart tools/workspace_setup/configure.dart --stub-firebase
+        run: dart tools/workspace_setup/configure.dart --stub-firebase --no-runners
 
       # From apps/mobile — the workspace root has no android/. env.dev is
       # committed. Debug needs no release keystore.

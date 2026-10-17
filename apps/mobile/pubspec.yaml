@@ -1,5 +1,5 @@
 name: mobile_app
-description: "The mobile app: composes the shared modules into the Android and iOS application (flavors, native runners and release lanes live here)"
+description: "The mobile app: composes the shared modules into the Android and iOS application, with generated web and Linux runners (flavors, the native Android and iOS runners and release lanes live here)"
 publish_to: "none"
 version: 1.0.0+1
 

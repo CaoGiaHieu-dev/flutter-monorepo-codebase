@@ -14,12 +14,16 @@ class ProfileConstants {
   );
 
   /// `--dart-define=APP_FLAVOR=<dev|staging|prod>` names the flavor of a
-  /// **web** build — the one target whose Flutter tool has no `--flavor`
-  /// option. (The tool also refuses `--dart-define=FLUTTER_APP_FLAVOR=...`: that
-  /// name is the framework's own.) Empty by default, and read on the web only:
-  /// every other platform declares its flavor with `--flavor`.
+  /// build **wherever the Flutter tool set none**: the web, whose tool has no
+  /// `--flavor` option, and every generated runner (`runner: scaffold`), which
+  /// carries no native flavors — on any platform. (The tool also refuses
+  /// `--dart-define=FLUTTER_APP_FLAVOR=...`: that name is the framework's
+  /// own.) Empty by default. The tool's `--flavor` still wins: a build that
+  /// passes both has one source of truth.
   ///
-  /// Without it a web build is `prod` in release and `dev` in debug, like any
-  /// build that declared no flavor.
+  /// A flavor named here counts as declared, as `--flavor` does — so a debug
+  /// build with `APP_FLAVOR=dev` gets what a declared `dev` gets. Without
+  /// either, a build is `prod` in release and `dev` in debug, like any build
+  /// that declared no flavor.
   static const String APP_FLAVOR = String.fromEnvironment('APP_FLAVOR');
 }

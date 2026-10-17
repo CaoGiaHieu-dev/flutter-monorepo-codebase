@@ -48,7 +48,9 @@ import 'dart:io';
 /// (`debugDefaultTargetPlatformOverride`, so each picks that platform's side).
 ///
 /// The VM cannot be a browser: the web graph is proven by
-/// integration_test/boot_test.dart in one (RULE-83).
+/// integration_test/boot_test.dart in one (RULE-83). An app declared for the
+/// web alone still boots its graph here once per flavor, with the web's facts
+/// (`_bootedOnTheVm`).
 
 /// Factories this check does not build: those with a non-nullable
 /// `@factoryParam`, which only the screen that creates them can supply — a
@@ -99,9 +101,7 @@ void main() {
   tearDown(resetDependencies);
 {{/usesDatabase}}
 
-  for (final platform in appFacts.platforms.keys.where(
-    (p) => p != AppPlatform.web,
-  )) {
+  for (final platform in _bootedOnTheVm(appFacts.platforms.keys)) {
     for (final flavor in appFacts.flavors) {
       test(
         '${platform.name} · ${flavor.name}: the graph boots, every lazy '
@@ -181,12 +181,22 @@ void main() {
   });
 }
 
-/// What the plugins see for [platform]. The web is never booted on the VM.
-TargetPlatform _targetOf(AppPlatform platform) => switch (platform) {
+/// The platforms whose graph this test boots: every declared one but the
+/// web. An app on the web alone has no other, so its graph is booted with the
+/// web's facts instead — the plugins then see the VM's default — rather than
+/// not at all; integration_test/boot_test.dart still proves the web itself.
+Iterable<AppPlatform> _bootedOnTheVm(Iterable<AppPlatform> declared) {
+  final native = declared.where((p) => p != AppPlatform.web);
+  return native.isEmpty ? declared : native;
+}
+
+/// What the plugins see for [platform]: `null` (the VM's default) for the
+/// web, which the VM cannot be.
+TargetPlatform? _targetOf(AppPlatform platform) => switch (platform) {
   AppPlatform.android => TargetPlatform.android,
   AppPlatform.ios => TargetPlatform.iOS,
   AppPlatform.macos => TargetPlatform.macOS,
   AppPlatform.windows => TargetPlatform.windows,
   AppPlatform.linux => TargetPlatform.linux,
-  AppPlatform.web => throw StateError('the web is not booted on the VM'),
+  AppPlatform.web => null,
 };

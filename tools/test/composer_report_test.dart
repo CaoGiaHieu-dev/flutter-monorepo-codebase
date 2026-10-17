@@ -86,6 +86,7 @@ void main() {
           'platform/infra/notifications/lib/di/module.dart': diModule(),
           'modules/foo/feature/lib/src/splash.dart': kFixtureSplashRegistration,
           'apps/demo/lib/firebase/firebase_module.dart': kFixtureFirebaseModule,
+          'apps/demo/env.dev': 'BASE_URL=\nWEB_DOMAIN=\n',
         },
       );
 

@@ -1710,7 +1710,7 @@ List<Violation> _hygieneViolations(String root) {
 
   // --- R22: native-only libraries stay behind a configurable import -------
   // (RULE-82) after R17, whose allow-list says which configurable imports
-  // may name a native-only default target.
+  // may name a native-only target (a URI no web build loads).
   for (final problem in nativeImportProblems(root, handWritten)) {
     out.add(
       Violation(
@@ -2124,11 +2124,15 @@ RULES CHECKED
       file imports or exports `dart:ffi`, `package:drift/native.dart`,
       `package:sqlite3/sqlite3.dart` or `package:path_provider/path_provider.dart`
       — every web build of an app that links the package fails while
-      flutter analyze stays clean — unless the file is the default target of
-      a configurable import (`import 'native.dart' if (dart.library.js_interop)
-      'web.dart';`) in a file of the same package that is in
-      `kPlatformForkAllowList`. A configuration's own URI is not judged: it
-      loads only where its library exists. File-level only, no reachability;
+      flutter analyze stays clean — unless the file is the native target of
+      a configurable import in a file of the same package that is in
+      `kPlatformForkAllowList`: a URI no web build loads, read from the
+      conditions, not the position. `import 'native.dart' if
+      (dart.library.js_interop) 'web.dart';` and `import 'web.dart' if
+      (dart.library.io) 'native.dart';` both name native.dart. Every URI a
+      web build may load is judged, a configuration's included (one under
+      `dart.library.js_interop`, or under a test not known to fail on the
+      web such as `dart.library.ui`). File-level only, no reachability;
       test/ is not read. A package that wraps a native-only SDK declares
       `platforms:` without web instead (composer V7 then refuses web for the
       apps that link it).

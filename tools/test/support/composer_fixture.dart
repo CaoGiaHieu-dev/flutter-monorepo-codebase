@@ -154,6 +154,8 @@ import '../lib/app/app_profile.dart';
 void main() {
   for (final platform in appFacts.platforms.keys) {
     test('the declared contract holds', () async {
+      debugAppPlatformOverride = platform;
+      registerAppProfile(appProfile, platform: platform);
       getIt.findAll<Object>(instantiateLazySingletons: true);
       final recorder = FactoryRecorder(getIt);
       await configureDependencies(locator: recorder);
@@ -301,6 +303,8 @@ Map<String, String> demoWorkspaceFiles({
   'apps/demo/integration_test/boot_test.dart': kFixtureBootTest,
   'apps/demo/test_driver/integration_test.dart': kFixtureDriver,
   'apps/demo/.gitignore': kFixtureGitignore,
+  // What CI boots every platform with (V12).
+  'apps/demo/env.dev': '',
   // `runner: committed` for android needs the folder.
   'apps/demo/android/README.txt': 'runner\n',
   'platform/foundation/common/pubspec.yaml': 'name: core_common\n',

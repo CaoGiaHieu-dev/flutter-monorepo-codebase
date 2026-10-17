@@ -171,8 +171,11 @@ jobs:
         run: flutter pub get
 
         #6 Install Dependencies and Generate
+      # --no-runners: an Android-only build uses the committed android/
+      # runner; the generated web and desktop runners would only add
+      # failure surface (flutter create, a download, a compile) to a release.
       - name: Install Dependencies
-        run: dart tools/workspace_setup/configure.dart
+        run: dart tools/workspace_setup/configure.dart --no-runners
 
         #7 Building APK
       # The dart-define file sits in apps/mobile/ (env.dev / env.stg committed,

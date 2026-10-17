@@ -306,6 +306,53 @@ void main() {
 
       await expectLater(secure.init(), throwsA(isA<PlatformException>()));
     });
+
+    // A store that answers the master-key read (no key yet: a first launch)
+    // but refuses the write of the new one. A key that was never persisted
+    // must not seal values that would be lost on the next launch.
+    test('required: a refused master-key write stops init', () async {
+      final store = _RefusingWriteStore();
+      final secure = SecureStorageImpl.withStorage(
+        store,
+        platform: linuxFacts(SecureStoragePolicy.required),
+      );
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(store.calls, [
+        'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        'write ${StorageConstants.SECURE_MASTER_KEY_ID}',
+      ]);
+    });
+
+    test(
+      'memory_fallback: a refused master-key write keeps values in memory',
+      () async {
+        final store = _RefusingWriteStore();
+        final secure = SecureStorageImpl.withStorage(
+          store,
+          platform: linuxFacts(SecureStoragePolicy.memoryFallback),
+        );
+
+        await secure.init();
+
+        await secure.write('token', 'abc');
+        expect(await secure.read<String>('token'), 'abc');
+
+        // The refused key write is the only write the store saw: the value
+        // stayed in memory.
+        expect(store.calls, [
+          'read ${StorageConstants.SECURE_MASTER_KEY_ID}',
+          'write ${StorageConstants.SECURE_MASTER_KEY_ID}',
+        ]);
+        expect(
+          logged.where(
+            (l) => l.message.contains('Secure storage is unavailable'),
+          ),
+          hasLength(1),
+        );
+      },
+    );
   });
 
   group('PrefStorageImpl — secure-storage errors never cost preferences', () {
@@ -922,6 +969,44 @@ class _NoSecureStore extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) async => _fail('deleteAll');
+}
+
+/// A store that reads (nothing is stored) but refuses every write as a
+/// platform error; each call is recorded as `'<call> <key>'`.
+class _RefusingWriteStore extends FlutterSecureStorage {
+  final calls = <String>[];
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('read $key');
+    return null;
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('write $key');
+    throw PlatformException(
+      code: 'Libsecret error',
+      message: 'Failed to create the default collection',
+    );
+  }
 }
 
 /// Delegates to the mock platform, but throws a [PlatformException] — what a

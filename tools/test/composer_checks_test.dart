@@ -583,7 +583,12 @@ void main() {
     });
 
     test('a flavor with no env file is not compared', () async {
-      expect(await syncAndVerify(demo(manifest: manifest())), exitsWith(0));
+      // env.dev is what CI boots with (V12); staging and prod have none.
+      final ws = demo(
+        manifest: manifest(),
+        extra: {'apps/demo/env.dev': 'BASE_URL=\nWEB_DOMAIN=\n'},
+      );
+      expect(await syncAndVerify(ws), exitsWith(0));
     });
 
     test(
@@ -824,6 +829,102 @@ void main() {
         'apps/demo/test/di_smoke_test.dart: appFacts.platforms: does not '
             'iterate appFacts.platforms — boot every declared platform but the '
             'web (RULE-63)',
+      ]);
+    });
+
+    test('CI boots the dev flavor: an app without dev, or without '
+        'env.dev, fails', () async {
+      final noDev = demoManifest(
+        flavors:
+            'flavors:\n'
+            '  staging:\n'
+            '    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }\n'
+            '  prod:\n'
+            '    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }\n',
+      );
+      expectRefused(
+        await syncAndVerify(
+          demo(manifest: noDev, without: {'apps/demo/env.dev'}),
+        ),
+        [
+          'apps/demo/app_manifest.yaml: flavors.dev: not declared — CI boots '
+              'every declared platform as the dev flavor',
+          'RULE-83',
+        ],
+      );
+      expectRefused(
+        await syncAndVerify(demo(without: {'apps/demo/env.dev'})),
+        [
+          'apps/demo/env.dev: file: missing — CI boots every declared '
+              'platform with `--dart-define-from-file=env.dev`',
+        ],
+      );
+    });
+
+    test('a loop that pins one platform inside it fails', () async {
+      // The loop is there, but each pass boots linux: the loop variable
+      // never reaches the shell, the profile or the check.
+      final pinned = kFixtureSmokeTest
+          .replaceFirst(
+            'debugAppPlatformOverride = platform;',
+            'debugAppPlatformOverride = AppPlatform.linux;',
+          )
+          .replaceFirst(
+            'registerAppProfile(appProfile, platform: platform);',
+            'registerAppProfile(appProfile, platform: AppPlatform.linux);',
+          )
+          .replaceFirst('platform: platform,', 'platform: AppPlatform.linux,');
+      expect(pinned, isNot(contains('platform: platform')));
+      expectRefused(
+        await syncAndVerify(
+          demo(extra: {'apps/demo/test/di_smoke_test.dart': pinned}),
+        ),
+        [
+          'apps/demo/test/di_smoke_test.dart: appFacts.platforms: iterates '
+              'appFacts.platforms but never boots `platform` — without '
+              '`debugAppPlatformOverride = platform`, '
+              '`registerAppProfile(appProfile, platform: platform)`, '
+              '`checkAppContract(appProfile, flavor: flavor, platform: '
+              'platform)` every pass boots one platform',
+          'RULE-63',
+        ],
+      );
+    });
+
+    test('each of the three uses is required on its own', () async {
+      for (final (drop, named) in [
+        (
+          'debugAppPlatformOverride = platform;',
+          '`debugAppPlatformOverride = platform`',
+        ),
+        (
+          'registerAppProfile(appProfile, platform: platform);',
+          '`registerAppProfile(appProfile, platform: platform)`',
+        ),
+      ]) {
+        final ws = demo(
+          extra: {
+            'apps/demo/test/di_smoke_test.dart': kFixtureSmokeTest.replaceFirst(
+              drop,
+              '',
+            ),
+          },
+        );
+        expectRefused(await syncAndVerify(ws), [
+          'never boots `platform` — without $named every pass',
+        ]);
+      }
+      final noCheck = demo(
+        extra: {
+          'apps/demo/test/di_smoke_test.dart': kFixtureSmokeTest.replaceFirst(
+            'platform: platform,',
+            'platform: AppPlatform.android,',
+          ),
+        },
+      );
+      expectRefused(await syncAndVerify(noCheck), [
+        'never boots `platform` — without `checkAppContract(appProfile, '
+            'flavor: flavor, platform: platform)` every pass',
       ]);
     });
   });

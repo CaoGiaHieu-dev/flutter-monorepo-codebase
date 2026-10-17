@@ -614,7 +614,9 @@ void main() {
         final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
         expect(
           smoke,
-          contains('for (final platform in appFacts.platforms.keys'),
+          contains(
+            'for (final platform in _bootedOnTheVm(appFacts.platforms.keys))',
+          ),
         );
         expect(smoke, contains('(p) => p != AppPlatform.web'));
         expect(smoke, contains('for (final flavor in appFacts.flavors)'));
@@ -631,6 +633,25 @@ void main() {
         expect(smoke, isNot(contains('const _platform')));
       },
     );
+
+    test('a web-only app still boots its graph on the VM, with the web\'s '
+        'facts, instead of running no boot at all', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'web']),
+        exitsWith(0),
+      );
+      final smoke = ws.read('apps/kiosk/test/di_smoke_test.dart');
+      // Every declared platform but the web — or, with none left, the web.
+      expect(
+        smoke,
+        contains('return native.isEmpty ? declared : native;'),
+      );
+      // The plugins then see the VM's default; nothing throws for the web.
+      expect(smoke, contains('AppPlatform.web => null,'));
+      expect(smoke, isNot(contains('throw StateError')));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
   });
 
   group('generates no runner', () {

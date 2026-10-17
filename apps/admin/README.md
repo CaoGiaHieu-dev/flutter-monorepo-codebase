@@ -97,7 +97,7 @@ Modules: auth (api, domain, data, feature) · settings (feature).
 | `dashboard` | `IDashboardRouteModule` | optional | **absent** — one tab: destinations render without chrome | — | the destinations render without any chrome (with two or more tabs none after the first can be reached: C12) |
 | `entry` | `IAppEntryLocation` | optional | **absent** — no onboarding: boot goes straight to the sign-in check | — | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | **absent** — no home module: after sign-in the router's first tab (settings) opens | — | after sign-in the router opens its fallback, the first tab |
-| `splash` | `IAppSplashScreen` | optional | **absent** — no splash module: the first frame is held until boot ends — the page or window stays empty, at most NetworkProfile.connectTimeout while the session restores | — | the native splash is kept through boot |
+| `splash` | `IAppSplashScreen` | optional | **absent** — no splash module: the first frame is held until boot ends — the page or window stays empty, at most NetworkProfile.connectTimeout while the session restores | — | the first frame is held until boot ends: the native launch screen on Android and iOS, an empty page or window elsewhere |
 | `tree_wrappers` | `IAppTreeWrapper` | optional | provided | feature_auth | the widget tree is built unwrapped |
 | `localization` | `IFeatureLocalization` | optional | provided | feature_auth, feature_settings | only core_base_ui's own strings are translated |
 | `error_reporter` | `IErrorReporter` | optional | **absent** — no crash backend chosen: errors are printed and sent nowhere (RULE-67) | — | errors are printed and sent nowhere (RULE-67) |

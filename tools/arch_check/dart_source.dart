@@ -14,7 +14,8 @@
 ///     1-based line and its text from the `//` onwards.
 ///   * [directives] — every `import` / `export` / `part` directive, with each
 ///     URI it names: the first one and every `if (...) 'uri'` configuration
-///     (a conditional import names a package only in the configuration).
+///     (a conditional import names a package only in the configuration),
+///     and the test of each configuration (`dart.library.io`).
 ///     Found in the blanked [code], so a directive-looking line inside a
 ///     block comment or a triple-quoted string is not one, and `import'x';`
 ///     and two directives on one line both count.
@@ -71,7 +72,14 @@ class DartSource {
 
 /// One `import` / `export` / `part` directive.
 class Directive {
-  Directive(this.keyword, this.line, this.uris, this.start, this.end);
+  Directive(
+    this.keyword,
+    this.line,
+    this.uris,
+    this.start,
+    this.end, {
+    this.conditions = const [],
+  });
 
   /// `import`, `export` or `part`.
   final String keyword;
@@ -86,6 +94,13 @@ class Directive {
 
   /// The directive's URI, then each `if (...) 'uri'` configuration's.
   final List<String> uris;
+
+  /// The test of each configuration, in source order — `conditions[i]`
+  /// guards `uris[i + 1]` — as written between the parentheses, with blanks
+  /// trimmed and any string literal blanked (`dart.library.io`, or
+  /// `dart.library.io ==` for `dart.library.io == 'true'`). Empty for a
+  /// plain directive.
+  final List<String> conditions;
 }
 
 /// A URI named by a directive, with the line it was written on.
@@ -180,6 +195,7 @@ class _Scanner {
       final first = _stringAfter(code, m.end);
       if (first == null) continue; // `part of x;`, `import` as an identifier
       final uris = [_strings[first]!.value];
+      final conditions = <String>[];
       final stop = code.indexOf(';', _strings[first]!.end);
       final tail = code.substring(
         _strings[first]!.end,
@@ -190,7 +206,11 @@ class _Scanner {
         final close = _closingParen(code, open);
         if (close == -1) continue;
         final uri = _stringAfter(code, close + 1);
-        if (uri != null) uris.add(_strings[uri]!.value);
+        if (uri == null) continue;
+        uris.add(_strings[uri]!.value);
+        conditions.add(
+          code.substring(open + 1, close).replaceAll(_blanks, ' ').trim(),
+        );
       }
       out.add(
         Directive(
@@ -199,6 +219,7 @@ class _Scanner {
           uris,
           m.start,
           stop == -1 ? code.length : stop + 1,
+          conditions: conditions,
         ),
       );
     }
@@ -211,6 +232,9 @@ class _Scanner {
 
   /// `if (` of a conditional configuration; the match ends after the `(`.
   static final RegExp _configuration = RegExp(r'(?<![\w$])if\s*\(');
+
+  /// A run of blanks inside a configuration's test.
+  static final RegExp _blanks = RegExp(r'\s+');
 
   static bool _isBlank(int unit) =>
       unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;

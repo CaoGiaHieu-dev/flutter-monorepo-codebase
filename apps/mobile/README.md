@@ -102,7 +102,7 @@ The DI smoke test boots every flavor, so a missing registration fails it with "<
 | `dashboard` | `IDashboardRouteModule` | optional | provided | feature_dashboard | the destinations render without any chrome (with two or more tabs none after the first can be reached: C12) |
 | `entry` | `IAppEntryLocation` | optional | provided | feature_onboarding | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | provided | feature_home | after sign-in the router opens its fallback, the first tab |
-| `splash` | `IAppSplashScreen` | optional | provided | feature_splash | the native splash is kept through boot |
+| `splash` | `IAppSplashScreen` | optional | provided | feature_splash | the first frame is held until boot ends: the native launch screen on Android and iOS, an empty page or window elsewhere |
 | `tree_wrappers` | `IAppTreeWrapper` | optional | provided | feature_auth | the widget tree is built unwrapped |
 | `localization` | `IFeatureLocalization` | optional | provided | feature_auth, feature_home, feature_onboarding, feature_settings | only core_base_ui's own strings are translated |
 | `error_reporter` | `IErrorReporter` | optional | **absent** — no crash backend chosen: errors are printed and sent nowhere — implement IErrorReporter in lib/app/, then declare it provided (RULE-67) | — | errors are printed and sent nowhere (RULE-67) |

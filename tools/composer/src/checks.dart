@@ -19,15 +19,15 @@ import 'package_facts.dart';
 /// | V2  | every optional catalog id has a declared state; no unknown id |
 /// | V4  | the members of a bundle share one state |
 /// | V5  | `splash: dart` needs capability `splash` provided |
-/// | V6  | `committed` => the runner folder exists; a runner folder of an undeclared platform is refused |
+/// | V6  | `committed` => the runner folder exists (the folder of an undeclared platform is [checkComposition]'s) |
 /// | V8  | `push: true` needs `core_notifications` composed, the platform in its `push_platforms` and a committed runner; `deep_links: true` needs a committed runner, never on the web; `window` only on a desktop platform |
 /// | V9  | a pinning decision per flavor where a declared platform can pin |
 /// | V14 | no reason is empty, `TODO` or `TBD` |
 ///
 /// Two more run where the app's view is built (`sync` / `verify`), because they
 /// need the composed packages: [checkPlatformSwitches] (V8) and
-/// [checkPackagePlatforms] (V7). [checkComposition] holds V3, V10, V11, V12,
-/// V15 and V16 to the source — the static scan of `tools/shared/contract_scan.dart` and the
+/// [checkPackagePlatforms] (V7). [checkComposition] holds V3, V6's undeclared
+/// runner folders, V10, V11, V12, V15 and V16 to the source — the static scan of `tools/shared/contract_scan.dart` and the
 /// files an app owns.
 ///
 /// V1 (closed vocabularies, types, ranges, `app.kind`) lives in the parser and
@@ -52,7 +52,6 @@ List<String> checkDeclaration({
     appRel,
     appId ?? p.posix.basename(appRel),
     bad,
-    problems.add,
   );
   _pinning(decl, bad);
   return problems;
@@ -193,20 +192,17 @@ void _splash(
   }
 }
 
-/// V6: a `committed` runner is in the repository; a `scaffold` one may or may
-/// not be on disk (`composer runners` writes it, the `.gitignore` region
-/// keeps it out of git — V13); and a runner folder for a platform the
-/// manifest does not declare is refused, because Flutter would build it.
-///
-/// [raw] takes a problem that names the folder itself rather than a key of
-/// the manifest.
+/// V6, the declared half: a `committed` runner is in the repository; a
+/// `scaffold` one may or may not be on disk (`composer runners` writes it,
+/// the `.gitignore` region keeps it out of git — V13). The other half, a
+/// runner folder of a platform the manifest does not declare, is
+/// [_undeclaredRunners]: a source problem, so that `sync` still writes.
 void _runners(
   AppDeclaration decl,
   String appDir,
   String appRel,
   String id,
   void Function(String key, String problem) bad,
-  void Function(String problem) raw,
 ) {
   for (final platform in decl.platforms) {
     final folder = p.posix.join(appRel, platform.name);
@@ -220,15 +216,34 @@ void _runners(
       );
     }
   }
-  final declared = {for (final platform in decl.platforms) platform.name};
+}
+
+/// V6, the undeclared half: a runner folder for a platform the manifest does
+/// not declare is refused by `verify`, because Flutter would build it (boot
+/// problem P01).
+///
+/// A source problem, not a declaration one: removing a platform is "delete
+/// its `platforms:` line, `composer sync`, delete the folder", and `sync`
+/// must still rewrite the facts and the `.gitignore` region while the
+/// folder is there — refusing it, as a malformed manifest is, stalled that
+/// flow at its second step.
+void _undeclaredRunners(
+  AppView view,
+  String root,
+  void Function(String problem) raw,
+) {
+  final declared = {
+    for (final platform in view.declaration.platforms) platform.name,
+  };
   for (final name in kPlatformNames) {
     if (declared.contains(name)) continue;
-    if (!Directory(p.posix.join(appDir, name)).existsSync()) continue;
+    if (!Directory(p.join(root, view.dir, name)).existsSync()) continue;
     raw(
-      '${p.posix.join(appRel, name)}/: a $name runner, but `platforms:` does '
-      'not declare $name — Flutter would build a platform this app does not '
-      'run on (boot problem P01). Declare it (`$name: { runner: committed }`, '
-      'or `scaffold` and delete the folder), or delete the folder',
+      '${p.posix.join(view.dir, name)}/: a $name runner, but `platforms:` '
+      'does not declare $name — Flutter would build a platform this app does '
+      'not run on (boot problem P01). Declare it (`$name: { runner: '
+      'committed }`, or `scaffold` and delete the folder), or delete the '
+      'folder',
     );
   }
 }
@@ -449,14 +464,16 @@ String _origin(AppView view, PackageFacts facts) {
   return 'as an extra dependency';
 }
 
-/// V3, V10, V11, V12, V15 and V16: the declaration held to the source.
+/// V3, V6 (the undeclared half), V10, V11, V12, V15 and V16: the declaration
+/// held to the source.
 ///
 /// | Check | Holds |
 /// |:-:|:--|
 /// | V3  | `capabilities:` equals the code, both directions; every required row has an implementer |
+/// | V6  | no runner folder for a platform `platforms:` does not declare ([_undeclaredRunners]) |
 /// | V10 | what a composed package needs the app to register (`composition.app_provides`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares, and none exists for a flavor the manifest does not declare |
-/// | V12 | the entry point passes the profile; the DI smoke test exists, iterates `appFacts.platforms`, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`); the boot test exists and calls `debugBootStage(`; an app on the web has the `flutter drive` driver (RULE-83) |
+/// | V12 | the entry point passes the profile; the DI smoke test exists, iterates `appFacts.platforms` and boots the loop's platform (`debugAppPlatformOverride`, `registerAppProfile`, `checkAppContract`), and builds every factory (`FactoryRecorder` + `buildEvery`); the boot test exists and calls `debugBootStage(`; an app on the web has the `flutter drive` driver; `dev` is declared and `env.dev` exists, the flavor CI boots (RULE-83) |
 /// | V15 | a committed Android runner has a `productFlavor` per declared flavor, a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-` configurations per declared flavor, and neither names a flavor the manifest does not declare |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 /// | V17 | no member pubspec other than the root's has a top-level `workspace:` key ([checkNestedWorkspaces]) |
@@ -474,6 +491,7 @@ List<String> checkComposition(AppView view, {required String root}) {
   _nativeFlavors(view, bad);
   _groupOrder((key, problem) => bad(manifest, key, problem), view);
   _entryAndSmokeTest(view, root, bad);
+  _undeclaredRunners(view, root, problems.add);
   return problems;
 }
 
@@ -983,12 +1001,60 @@ void _entryAndSmokeTest(
             'await recorder.buildEvery(notBuilt: ...)` (platform_app_shell)',
       );
     }
-    if (!RegExp(r'\bappFacts\s*\.\s*platforms\b').hasMatch(code)) {
+    final loop = _platformLoop.firstMatch(code);
+    if (loop == null) {
       bad(
         smoke,
         'appFacts.platforms',
         'does not iterate appFacts.platforms — boot every declared platform '
             'but the web (RULE-63)',
+      );
+    } else {
+      // A loop that pins one platform inside boots that one on every pass:
+      // the loop variable has to reach the shell, the profile and the check.
+      final v = loop.group(1)!;
+      final missing = [
+        if (!RegExp('\\bdebugAppPlatformOverride\\s*=\\s*$v\\b').hasMatch(code))
+          '`debugAppPlatformOverride = $v`',
+        if (!_callPasses(code, 'registerAppProfile', 'platform', v))
+          '`registerAppProfile(appProfile, platform: $v)`',
+        if (!_callPasses(code, 'checkAppContract', 'platform', v))
+          '`checkAppContract(appProfile, flavor: flavor, platform: $v)`',
+      ];
+      if (missing.isNotEmpty) {
+        bad(
+          smoke,
+          'appFacts.platforms',
+          'iterates appFacts.platforms but never boots `$v` — without '
+              '${missing.join(', ')} every pass boots one platform. Name the '
+              'loop variable to the shell, the profile and the check '
+              '(RULE-63)',
+        );
+      }
+    }
+  }
+
+  // RULE-83: CI boots every declared platform as the dev flavor, with
+  // env.dev (`describe --ci-matrix`, pr_quality_check.yml,
+  // platforms_full.yml): an app without either fails each boot there — P02,
+  // or a missing `--dart-define-from-file` — instead of here.
+  if (!view.declaration.flavors.containsKey('dev')) {
+    bad(
+      view.manifestPath,
+      'flavors.dev',
+      'not declared — CI boots every declared platform as the dev flavor '
+          '(`--flavor dev` or `--dart-define=APP_FLAVOR=dev`, with env.dev); '
+          'declare `dev:` under `flavors:` (RULE-83)',
+    );
+  } else {
+    final envDev = p.posix.join(view.dir, kEnvFiles['dev'] ?? 'env.dev');
+    if (!File(p.join(root, envDev)).existsSync()) {
+      bad(
+        envDev,
+        'file',
+        'missing — CI boots every declared platform with '
+            '`--dart-define-from-file=env.dev`; commit it with the keys '
+            '`env:` declares (the values may be empty) (RULE-83)',
       );
     }
   }
@@ -1038,6 +1104,24 @@ void _entryAndSmokeTest(
 /// The text between the parenthesis at [open] and its match, nested argument
 /// lists blanked, so a `profile:` inside a nested call is not mistaken for an
 /// argument of the outer one.
+/// `for (final <v> in …appFacts.platforms…)` — group 1 is the loop variable.
+final RegExp _platformLoop = RegExp(
+  r'\bfor\s*\(\s*(?:final|var)\s+(?:[\w<>?]+\s+)?(\w+)\s+in\s+[^;{]*?'
+  r'\bappFacts\s*\.\s*platforms\b',
+);
+
+/// Whether some call of [function] in [code] passes [value] (an identifier)
+/// as its named argument [name].
+bool _callPasses(String code, String function, String name, String value) {
+  for (final call in RegExp('\\b$function\\s*\\(').allMatches(code)) {
+    final args = _arguments(code, call.end - 1);
+    if (RegExp('(^|[,(\\s])$name\\s*:\\s*$value\\b').hasMatch(args)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 String _arguments(String code, int open) {
   final out = StringBuffer();
   var depth = 0;

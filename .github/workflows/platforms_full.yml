@@ -23,9 +23,15 @@ on:
       - "platform/**"
       - "modules/**"
       - "tools/composer/**"
+      # Every leg runs configure.dart: its steps, the barrels it regenerates
+      # and the toolchain it shells out through.
+      - "tools/workspace_setup/**"
+      - "tools/shared/**"
+      - "tools/barrel_generator/**"
       - "apps/**"
       - "pubspec_dependencies.yaml"
       - ".fvmrc"
+      - ".github/workflows/platforms_full.yml"
   merge_group:
   schedule:
     - cron: "17 3 * * 1"
@@ -38,9 +44,12 @@ permissions:
   contents: read
 
 # A new push to a labelled PR cancels its older run. Adding some other label
-# runs nothing, so that run gets a group of its own and cancels nothing.
+# runs nothing, so that run gets a group of its own and cancels nothing. The
+# event is in the group: GitHub cancels a *pending* run whenever a newer one
+# queues in its group, so a weekly run sharing main's group with pushes could
+# be dropped silently (a cancelled run is not a failure: no issue opens).
 concurrency:
-  group: platforms-full-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:platforms') && github.run_id || github.ref }}
+  group: platforms-full-${{ github.event_name }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'ci:platforms') && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -144,20 +153,26 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # Before configure: its last step (`composer runners`) is what reads
+      # this cache, and what fills it on a miss (saved when the job ends).
+      - name: The sqlite3.wasm cache (composer runners)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flutter_monorepo/sqlite3
+          key: sqlite3-wasm-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
       # Exactly what an adopter runs on a fresh clone: codegen, the Firebase
       # stubs, then `composer runners` (every gitignored scaffold runner).
       - name: Set up the workspace (codegen, stubs) and generate the runners
         run: dart tools/workspace_setup/configure.dart --stub-firebase
 
-      # The caches are restored after configure: its flutter clean wipes
-      # .dart_tool and build/.
-      - name: Native build-hook downloads (sqlite3) and the wasm cache
+      # The other caches are restored after configure: its flutter clean
+      # wipes .dart_tool and build/.
+      - name: Native build-hook downloads (sqlite3)
         uses: actions/cache@v6
         with:
-          path: |
-            .dart_tool/hooks_runner/shared
-            ~/.cache/flutter_monorepo/sqlite3
-          key: hooks-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+          path: .dart_tool/hooks_runner/shared
+          key: hooks-runner-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
 
       - name: CocoaPods
         if: matrix.platform == 'ios'
@@ -249,16 +264,20 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: The sqlite3.wasm cache (composer runners)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/flutter_monorepo/sqlite3
+          key: sqlite3-wasm-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+
       - name: Set up the workspace (codegen, stubs) and generate the runners
         run: dart tools/workspace_setup/configure.dart --stub-firebase
 
-      - name: Native build-hook downloads (sqlite3) and the wasm cache
-        uses: actions/cache@v6
+      - name: Native build-hook downloads (sqlite3)
+        uses: actions/cache@v6      # after configure: its flutter clean wipes .dart_tool
         with:
-          path: |
-            .dart_tool/hooks_runner/shared
-            ~/.cache/flutter_monorepo/sqlite3
-          key: hooks-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
+          path: .dart_tool/hooks_runner/shared
+          key: hooks-runner-${{ runner.os }}-${{ hashFiles('pubspec_dependencies.yaml') }}
 
       - name: Build every web app (release, then Wasm)
         env:

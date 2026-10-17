@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../arch_check/dart_source.dart';
 import '../arch_check/native_imports.dart';
 import '../arch_check/platform_forks.dart';
 import 'support/tool_harness.dart';
@@ -2188,15 +2189,108 @@ void main() {
       expectViolation(run, 'R22', 'platform/x/lib/n.dart:1');
     });
 
-    test("a configuration's own URI is not judged", () async {
-      final run = await check({
-        'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
-        'platform/x/lib/a.dart': "import 'stub.dart' if (dart.library.io) 'package:path_provider/path_provider.dart';\n",
-        'platform/x/lib/stub.dart': 'int s = 1;\n',
+    test(
+      "a configuration's URI that no web build loads is not judged",
+      () async {
+        final run = await check({
+          'platform/x/pubspec.yaml': pubspec('core_x', deps: _nativeDeps),
+          'platform/x/lib/a.dart': "import 'stub.dart' if (dart.library.io) 'package:path_provider/path_provider.dart';\n",
+          'platform/x/lib/stub.dart': 'int s = 1;\n',
+        });
+        // The configurable import itself is R17's business, not R22's.
+        expect(run.output, isNot(contains('R22 — ')));
+        expect(run.output, contains('R17 — '));
+      },
+    );
+
+    test("a configuration's URI that the web loads is judged, even in an "
+        'allow-listed file', () async {
+      final files = database()
+        ..[factory] =
+            "import 'connection/web_connection.dart'\n"
+            "    if (dart.library.js_interop) 'package:drift/native.dart';\n";
+      final run = await check(files);
+      expectViolation(run, 'R22', '$factory:1');
+      expect(run.output, contains('imports package:drift/native.dart'));
+    });
+
+    group('the native side is read from the condition, not the position', () {
+      const probe = 'platform/infra/database/lib/src/ffi_probe.dart';
+      const stub = 'platform/infra/database/lib/src/ffi_probe_stub.dart';
+
+      Map<String, String> withProbe(String directive, {required String ffi}) =>
+          database()
+            ..[factory] =
+                "import 'connection/native_connection.dart'\n"
+                "    if (dart.library.js_interop) 'connection/web_connection.dart';\n"
+                '$directive\n'
+            ..[ffi] = "import 'dart:ffi';\n"
+            ..[ffi == probe ? stub : probe] = 'int s = 1;\n';
+
+      test('`if (dart.library.io)`: the default target is what the web '
+          'compiles, so dart:ffi there fails', () async {
+        final run = await check(
+          withProbe(
+            "import 'ffi_probe.dart' if (dart.library.io) 'ffi_probe_stub.dart' as probe;",
+            ffi: probe,
+          ),
+        );
+        expectViolation(run, 'R22', '$probe:1');
       });
-      // The configurable import itself is R17's business, not R22's.
-      expect(run.output, isNot(contains('R22 — ')));
-      expect(run.output, contains('R17 — '));
+
+      test('`if (dart.library.io)`: the conditional target is the native '
+          'side, so dart:ffi there is clean', () async {
+        final run = await check(
+          withProbe(
+            "import 'ffi_probe_stub.dart' if (dart.library.io) 'ffi_probe.dart' as probe;",
+            ffi: probe,
+          ),
+        );
+        expectClean(run, 'R22');
+      });
+
+      test('a condition not known to fail on the web (`dart.library.ui`) '
+          'leaves its target judged', () async {
+        final run = await check(
+          withProbe(
+            "import 'ffi_probe_stub.dart' if (dart.library.ui) 'ffi_probe.dart' as probe;",
+            ffi: probe,
+          ),
+        );
+        expectViolation(run, 'R22', '$probe:1');
+      });
+    });
+
+    test('webMayLoad follows the first configuration that holds', () {
+      List<bool> loads(String directive) =>
+          webMayLoad(DartSource.scan(directive).directives.single);
+
+      expect(loads("import 'a.dart';"), [true]);
+      expect(
+        loads("import 'n.dart' if (dart.library.js_interop) 'w.dart';"),
+        [false, true],
+      );
+      expect(
+        loads("import 'w.dart' if (dart.library.io) 'n.dart';"),
+        [true, false],
+      );
+      expect(
+        loads(
+          "import 'd.dart' if (dart.library.ffi) 'f.dart' "
+          "if (dart.library.html) 'h.dart' if (dart.library.io) 'i.dart';",
+        ),
+        [false, false, true, false],
+      );
+      // Not known on the web: its target may load, and the rest stay
+      // reachable.
+      expect(
+        loads("import 'd.dart' if (dart.library.ui) 'u.dart';"),
+        [true, true],
+      );
+      expect(
+        loads("import 'd.dart' if (dart.library.io == 'true') 'i.dart';"),
+        [true, true],
+      );
     });
 
     test('a package whose platforms: leave out web is clean', () async {

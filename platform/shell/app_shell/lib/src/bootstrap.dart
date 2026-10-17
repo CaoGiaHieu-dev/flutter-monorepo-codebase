@@ -277,8 +277,11 @@ Future<void> _boot({
   );
   if (!goesOn) return;
 
-  // The platform's declared `splash` decides — iOS keeps its native splash
-  // for the whole boot by default, so no Dart splash is built there.
+  // The platform's declared `splash` decides — iOS keeps its native launch
+  // screen for the whole boot by default, so no Dart splash is built there.
+  // `SplashMode.native` holds the first frame until boot ends: the launch
+  // screen stays up on Android and iOS, and on the web and the desktop
+  // nothing is painted meanwhile.
   final platformFacts =
       profile.facts.platformFor(runtime.platform) ??
       const PlatformFacts.today();
@@ -287,7 +290,7 @@ Future<void> _boot({
   await MainScope(
     // Resolved through `core_di` rather than importing the splash feature:
     // with no implementation registered this stays null and `MainScope`
-    // falls back to the native splash.
+    // holds the first frame instead (the native path).
     splashScreen: usesDartSplash
         ? getItOrNull<IAppSplashScreen>()?.build()
         : null,

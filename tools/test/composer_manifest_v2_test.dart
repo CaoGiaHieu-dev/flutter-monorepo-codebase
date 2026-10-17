@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import 'support/composer_fixture.dart';
@@ -16,7 +18,7 @@ import 'support/tool_harness.dart';
 /// | V2  | every optional catalog id has a state; no unknown id |
 /// | V4  | the members of a bundle share one state |
 /// | V5  | `splash: dart` needs capability `splash` provided |
-/// | V6  | `committed` => the runner folder exists; a runner folder of an undeclared platform is refused |
+/// | V6  | `committed` => the runner folder exists; a runner folder of an undeclared platform fails `verify` (`sync` still writes) |
 /// | V9  | a pin decision per flavor where a declared platform can pin |
 /// | V13 | the `facts`, `report`, `modules` and `.gitignore` `runners` regions equal regeneration |
 /// | V14 | no reason is empty, `TODO` or `TBD` |
@@ -638,6 +640,118 @@ void main() {
         ),
       );
       expect(ws.read('pubspec.yaml'), isNot(contains('apps/demo')));
+    });
+
+    test('removing a platform: its line, `sync` (which still writes while '
+        'the folder is there), then the folder', () async {
+      final ws = workspace(
+        manifest: demoManifest(
+          platforms:
+              'platforms:\n'
+              '  android: { runner: committed }\n'
+              '  linux: { runner: scaffold }\n',
+        ),
+        extra: {'apps/demo/linux/CMakeLists.txt': '#\n'},
+      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      expect(ws.read('apps/demo/.gitignore'), contains('/linux/'));
+
+      // 1. The platforms line goes; the generated folder is still on disk.
+      ws.write({'apps/demo/app_manifest.yaml': demoManifest()});
+      // 2. `sync` rewrites the facts and the .gitignore region, and names
+      //    the folder that is left.
+      final sync = await run(ws, ['sync']);
+      expect(sync, exitsWith(0));
+      expect(
+        sync.output,
+        contains('apps/demo/linux/: a linux runner, but `platforms:` does not'),
+      );
+      expect(ws.read('apps/demo/.gitignore'), isNot(contains('/linux/')));
+      expect(
+        ws.read('apps/demo/lib/app/app_profile.dart'),
+        isNot(contains('AppPlatform.linux')),
+      );
+      // `verify` fails while the folder exists …
+      expect(await run(ws, ['verify']), exitsWith(1));
+      // 3. … and passes once it is gone.
+      Directory(p.join(ws.root, 'apps/demo/linux')).deleteSync(recursive: true);
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+  });
+
+  group('ejecting a runner', () {
+    const ejected =
+        'apps/demo/android/ is ejected (`runner: committed`) but is still the '
+        'runner `flutter create` wrote: deep_links (no URL scheme or intent '
+        'filter yet) now derives true. Until its native setup is done, write '
+        '`deep_links: false` under platforms.android in '
+        'apps/demo/app_manifest.yaml, and delete it once the runner has it';
+
+    /// The demo app as it was before the eject: android generated.
+    TempWorkspace generated() => workspace(
+      manifest: demoManifest(
+        platforms: 'platforms:\n  android: { runner: scaffold }\n',
+      ),
+    );
+
+    test(
+      'the sync that ejects it warns about what now derives on, once',
+      () async {
+        final ws = generated();
+        expect(await run(ws, ['sync']), exitsWith(0));
+        expect(ws.read('apps/demo/.gitignore'), contains('/android/'));
+
+        // runner: committed, the folder kept: the eject.
+        ws.write({'apps/demo/app_manifest.yaml': demoManifest()});
+        final eject = await run(ws, ['sync']);
+        expect(eject, exitsWith(0));
+        expect(eject.output, contains(ejected));
+        expect(ws.read('apps/demo/.gitignore'), isNot(contains('/android/')));
+
+        // The region no longer lists it: the next sync says nothing.
+        final next = await run(ws, ['sync']);
+        expect(next, exitsWith(0));
+        expect(next.output, isNot(contains('is ejected')));
+      },
+    );
+
+    test('a switch the manifest writes is a decision: no warning', () async {
+      final ws = generated();
+      expect(await run(ws, ['sync']), exitsWith(0));
+      ws.write({
+        'apps/demo/app_manifest.yaml': demoManifest(
+          platforms:
+              'platforms:\n'
+              '  android: { runner: committed, deep_links: false }\n',
+        ),
+      });
+      final eject = await run(ws, ['sync']);
+      expect(eject, exitsWith(0));
+      expect(eject.output, isNot(contains('is ejected')));
+    });
+  });
+
+  group('an app made before generated runners', () {
+    test('a .gitignore without the runners markers is refused, naming the '
+        'two lines to add', () async {
+      final ws = workspace(
+        extra: {'apps/demo/.gitignore': '.dart_tool/\n'},
+      );
+      final result = await run(ws, ['sync']);
+      expect(result, exitsWith(1));
+      expect(
+        result.output,
+        contains(
+          'apps/demo/.gitignore has no `# composer:managed:runners — '
+          'generated from app_manifest.yaml` marker — an app made before '
+          'generated runners has none: add these two lines at the end of '
+          'apps/demo/.gitignore, then run sync:\n'
+          '      # composer:managed:runners — generated from app_manifest.yaml\n'
+          '      # composer:end:runners',
+        ),
+      );
+      ws.write({'apps/demo/.gitignore': kFixtureGitignore});
+      expect(await run(ws, ['sync']), exitsWith(0));
     });
   });
 

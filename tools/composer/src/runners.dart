@@ -480,6 +480,19 @@ Future<bool> _sqliteWasm({
       ? parseAssetHashes(hashesFile.readAsStringSync())
       : null;
   if (hashes == null) {
+    // Nothing to check a download against: the hand-placed binary the error
+    // asks for is what the app gets, named as unverified on every run — a
+    // run that kept failing after it was placed would block configure.
+    final placed = File(p.join(web, 'sqlite3.wasm'));
+    if (placed.existsSync()) {
+      warning(
+        '$rel/web/sqlite3.wasm: not verified — sqlite3 '
+        '${_packageVersion(sqlite)} ships no asset hash table at '
+        '$kSqliteAssetHashes, so the file in place is used as it is; make '
+        'sure it is the release of that version',
+      );
+      return true;
+    }
     error(
       'sqlite3 ${_packageVersion(sqlite)} ships no asset hash table at '
       '$kSqliteAssetHashes — place a matching sqlite3.wasm in $rel/web/ by '

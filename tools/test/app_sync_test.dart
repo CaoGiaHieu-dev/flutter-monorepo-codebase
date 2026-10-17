@@ -743,6 +743,91 @@ void main() {
       );
     });
 
+    test('the keyring boot proves the Secret Service holds what the boot '
+        'stored, not only that the app booted', () {
+      final job = jobs(workflow('pr_quality_check.yml')).values.firstWhere(
+        (j) => matrixInclude(j).contains('platform_apps'),
+      );
+      final keyring = steps(job)
+          .where(bootsLinux)
+          .firstWhere(
+            (s) => (s['env'] as YamlMap?)?['DBUS_SESSION_BUS_ADDRESS'] == null,
+          );
+      final script = run(keyring);
+      // The memory fallback boots too: only the store tells them apart.
+      expect(script, contains('org.freedesktop.Secret.Collection'));
+      expect(script, contains('string:Items'));
+      expect(
+        script.indexOf('string:Items'),
+        greaterThan(script.indexOf('boot_test.dart')),
+        reason: 'the collection is read after the boot',
+      );
+    });
+
+    test('the sqlite3.wasm cache is restored before configure, which reads '
+        'and fills it', () {
+      final late = <String>[];
+      for (final name in ['pr_quality_check.yml', 'platforms_full.yml']) {
+        for (final entry in jobs(workflow(name)).entries) {
+          final all = steps(entry.value);
+          final configure = all.indexWhere(
+            (s) => run(s).contains('configure.dart'),
+          );
+          for (var i = 0; i < all.length; i++) {
+            final path = '${(all[i]['with'] as YamlMap?)?['path'] ?? ''}';
+            if (!path.contains('flutter_monorepo/sqlite3')) continue;
+            if (configure != -1 && i > configure) {
+              late.add('$name: ${entry.key}');
+            }
+          }
+        }
+      }
+      expect(late, isEmpty);
+    });
+
+    test('a push to main that changes what every leg runs triggers the full '
+        'matrix', () {
+      final on = workflow('platforms_full.yml')['on'] as YamlMap;
+      final paths = [
+        for (final path in ((on['push'] as YamlMap)['paths'] as YamlList))
+          '$path',
+      ];
+      expect(
+        paths,
+        containsAll([
+          'tools/workspace_setup/**',
+          'tools/shared/**',
+          'tools/barrel_generator/**',
+          '.github/workflows/platforms_full.yml',
+        ]),
+      );
+    });
+
+    test('a scheduled run never shares a concurrency group with pushes', () {
+      final concurrency =
+          workflow('platforms_full.yml')['concurrency'] as YamlMap;
+      expect('${concurrency['group']}', contains('github.event_name'));
+    });
+
+    test('the Android-only builds and the review generate no runner', () {
+      String configure(String name, String job) => steps(
+        jobs(workflow(name))[job]!,
+      ).map(run).firstWhere((r) => r.contains('configure.dart'));
+
+      expect(
+        configure('pr_quality_check.yml', 'build'),
+        contains('--no-runners'),
+      );
+      for (final name in ['flutter_build.yml', 'code_review.yml']) {
+        for (final job in jobs(workflow(name)).values) {
+          for (final step in steps(job)) {
+            if (!run(step).contains('configure.dart')) continue;
+            expect(run(step), contains('--no-runners'), reason: name);
+          }
+        }
+      }
+    });
+
     test('every job that runs boot_test.dart sets timeout-minutes', () {
       final missing = <String>[];
       for (final name in ['pr_quality_check.yml', 'platforms_full.yml']) {

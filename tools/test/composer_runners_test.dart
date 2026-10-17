@@ -351,6 +351,31 @@ void main() {
     );
   });
 
+  test('with no hash table, a sqlite3.wasm placed by hand is used and named '
+      'unverified: the run exits 0', () async {
+    File(
+      p.join(root.path, 'pub/sqlite3-9.9.9', kSqliteAssetHashes),
+    ).deleteSync();
+    _write(root, 'apps/demo/web/sqlite3.wasm', 'placed by hand');
+
+    expect(await generate([app(database: true)]), 0);
+    expect(errors, isEmpty);
+    expect(
+      warnings.join('\n'),
+      contains(
+        'apps/demo/web/sqlite3.wasm: not verified — sqlite3 9.9.9 ships no '
+        'asset hash table at $kSqliteAssetHashes',
+      ),
+    );
+    expect(fetched, isEmpty);
+    expect(
+      File(appFile('web/sqlite3.wasm')).readAsStringSync(),
+      'placed by hand',
+    );
+    // The worker is still compiled.
+    expect(File(appFile('web/drift_worker.js')).existsSync(), isTrue);
+  });
+
   test('a download whose sha256 differs is refused: nothing in web/ or the '
       'cache, exit 1', () async {
     final code = await generate([

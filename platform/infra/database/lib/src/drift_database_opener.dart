@@ -35,8 +35,9 @@ abstract final class DriftDatabaseOpener {
   /// matches [DatabaseConstants.CORRUPTION_ERROR_MARKERS] causes the file to
   /// be **moved aside** (see
   /// [DatabaseConnectionFactory.quarantineDatabaseFile]) and reopened empty.
-  /// On the web there is no file to move: the quarantine does nothing and the
-  /// reopen meets the same database.
+  /// When nothing could be moved — always on the web, where a database is
+  /// not a file — the original error is rethrown: a reopen would meet the
+  /// same database, and nothing was lost.
   ///
   /// Recovery is deliberately narrow. Any failure that also looks like an
   /// environment problem — no permission, full disk, transient I/O, listed in
@@ -54,17 +55,29 @@ abstract final class DriftDatabaseOpener {
     } catch (error, stackTrace) {
       if (!isCorruptionError(error)) rethrow;
 
+      final moved = await DatabaseConnectionFactory.quarantineDatabaseFile(
+        fileName: fileName,
+      );
+      if (!moved) {
+        DynamicLogger.log(
+          'Database "$fileName" looks corrupt, but there is no file to move '
+          'aside (on the web the browser keeps it): it is left as it is and '
+          'the error stands. Clearing the site data starts it afresh. '
+          'Error: $error',
+          tag: 'core_database',
+          level: LogLevel.ERROR,
+          stackTrace: stackTrace,
+        );
+        rethrow;
+      }
+
       DynamicLogger.log(
-        'Database file "$fileName" is corrupt and will be quarantined as '
-        '"$fileName${DatabaseConstants.CORRUPT_FILE_SUFFIX}", then recreated '
+        'Database file "$fileName" is corrupt: quarantined as '
+        '"$fileName${DatabaseConstants.CORRUPT_FILE_SUFFIX}" and recreated '
         'empty. Stored data is lost. Error: $error',
         tag: 'core_database',
         level: LogLevel.ERROR,
         stackTrace: stackTrace,
-      );
-
-      await DatabaseConnectionFactory.quarantineDatabaseFile(
-        fileName: fileName,
       );
       return _openVerified(build, fileName: fileName, readPool: readPool);
     }

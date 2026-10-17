@@ -137,7 +137,9 @@ const List<ShellContract<Object>> SHELL_CONTRACTS = [
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
     consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart',
-    whenAbsent: 'the native splash is kept through boot',
+    whenAbsent:
+        'the first frame is held until boot ends: the native launch screen '
+        'on Android and iOS, an empty page or window elsewhere',
   ),
   ShellContract<IAppTreeWrapper>(
     id: 'tree_wrappers',

@@ -1482,6 +1482,71 @@ List<RunnerApp> _runnerApps(String root) {
   ];
 }
 
+/// What a runner that was just ejected switches on before its native setup
+/// exists. [previousRunners] is the `runners` region of the app's
+/// `.gitignore` as it stands — the platforms the last `sync` saw as
+/// generated — or null when there is none to read.
+///
+/// A platform that is `committed` now but still listed there was ejected
+/// since: `flutter create` wrote it, so it has no google-services.json,
+/// aps-environment or URL scheme, yet push and deep links derive on for a
+/// committed runner where the platform has them. Said once — the `sync` that
+/// drops the platform from the region — and only for a derived `true`: a
+/// value the manifest writes is a decision.
+List<String> _ejectWarnings(AppView view, String? previousRunners) {
+  if (previousRunners == null) return const [];
+  final generated = {
+    for (final line in previousRunners.split('\n'))
+      if (RegExp(r'^/(\w+)/$').firstMatch(line.trim()) case final m?)
+        m.group(1)!,
+  };
+  final out = <String>[];
+  for (final derived in derivePlatforms(view)) {
+    final declared = view.declaration.platform(derived.name);
+    if (declared == null || declared.isScaffold) continue;
+    if (!generated.contains(derived.name)) continue;
+    final push = derived.push.value && derived.push.source != 'manifest';
+    final links =
+        derived.deepLinks.value && derived.deepLinks.source != 'manifest';
+    if (!push && !links) continue;
+    final on = [
+      if (push)
+        'push (no google-services.json, GoogleService-Info.plist or '
+            'aps-environment yet)',
+      if (links) 'deep_links (no URL scheme or intent filter yet)',
+    ];
+    final off = [
+      if (push) '`push: false`',
+      if (links) '`deep_links: false`',
+    ];
+    out.add(
+      '${view.dir}/${derived.name}/ is ejected (`runner: committed`) but is '
+      'still the runner `flutter create` wrote: ${on.join(' and ')} now '
+      'derive${on.length == 1 ? 's' : ''} true. Until its native setup is '
+      'done, write ${off.join(' and ')} under platforms.${derived.name} in '
+      '${view.manifestPath}, and delete '
+      '${off.length == 1 ? 'it' : 'them'} once the runner has it',
+    );
+  }
+  return out;
+}
+
+/// The text between the [region] markers of the file at [path], or null
+/// when the file or a marker is missing.
+String? _regionBody(String path, String comment, String region) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
+  final lines = file.readAsLinesSync();
+  final i = lines.indexWhere(
+    (l) => l.contains('$comment ${_beginMarker(region)}'),
+  );
+  final j = lines.indexWhere(
+    (l) => l.contains('$comment ${_endMarker(region)}'),
+  );
+  if (i == -1 || j == -1 || j < i) return null;
+  return lines.sublist(i + 1, j).join('\n');
+}
+
 /// The `runners` region of an app's `.gitignore`: one `/<p>/` per platform
 /// declared `runner: scaffold`, in canonical order — a generated runner is
 /// never committed (RULE-83).
@@ -1692,7 +1757,8 @@ void _sync(
   // leaving the other regions rewritten around it.
   final regions = <_Region>[];
   final switchProblems = <String>[];
-  // What only the source can say (V3, V10, V11, V12, V13, V15, V16, V17): `verify`
+  // What only the source can say (V3, V6's undeclared runner folders, V10,
+  // V11, V12, V13, V15, V16, V17): `verify`
   // fails on them, `sync` says so and still writes — the generated files do not depend on
   // them, and a half-finished edit must stay possible to regenerate.
   final sourceProblems = <String>[];
@@ -1720,6 +1786,12 @@ void _sync(
     switchProblems.addAll(checkPlatformSwitches(view));
     switchProblems.addAll(checkPackagePlatforms(view));
     sourceProblems.addAll(checkComposition(view, root: root));
+    warnings.addAll(
+      _ejectWarnings(
+        view,
+        _regionBody(p.posix.join(app.dir, '.gitignore'), '#', 'runners'),
+      ),
+    );
     regions
       ..add(
         _Region(
@@ -1842,7 +1914,7 @@ void _sync(
     if (sourceProblems.isNotEmpty) {
       OutputFormatter.printError(
         '${sourceProblems.length} problem(s) between app_manifest.yaml and '
-        'the source (V3, V10, V11, V12, V13, V15, V16, V17). Fix the line each one '
+        'the source (V3, V6, V10, V11, V12, V13, V15, V16, V17). Fix the line each one '
         'names; `sync` does not change them.',
       );
     }
@@ -2133,16 +2205,23 @@ class _Region {
 String? _regionProblem(_Region region, String root) {
   final file = File(region.path);
   final rel = p.posix.relative(region.path, from: root);
-  if (!file.existsSync()) {
-    return '$rel does not exist (needed for the `${region.region}` region)';
-  }
-  final lines = file.readAsLinesSync();
   final begin = '${region.comment} ${_beginMarker(region.region)}';
   final end = '${region.comment} ${_endMarker(region.region)}';
+  // An app made before generated runners has never had this region, so
+  // there is nothing in git to restore: say which two lines to add.
+  final addRunners = region.region == 'runners'
+      ? ' — an app made before generated runners has none: add these two '
+            'lines at the end of $rel, then run sync:\n      $begin\n      $end'
+      : '';
+  if (!file.existsSync()) {
+    return '$rel does not exist (needed for the `${region.region}` region)'
+        '$addRunners';
+  }
+  final lines = file.readAsLinesSync();
   final i = lines.indexWhere((l) => l.contains(begin));
   final j = lines.indexWhere((l) => l.contains(end));
-  if (i == -1) return '$rel has no `$begin` marker';
-  if (j == -1) return '$rel has no `$end` marker';
+  if (i == -1) return '$rel has no `$begin` marker$addRunners';
+  if (j == -1) return '$rel has no `$end` marker$addRunners';
   if (j < i) return '$rel has `$end` before `$begin`';
   return null;
 }
@@ -2301,7 +2380,9 @@ WHAT VERIFY HOLDS THE DECLARATION TO
        template names follow the canonical order
   V17  no member pubspec but the root's has a top-level `workspace:` key
        (a nested workspace node, RULE-16)
-  V6 refuses a runner folder of a platform `platforms:` does not declare.
+  V6 refuses a committed runner whose folder is missing; a runner folder of a
+  platform `platforms:` does not declare fails `verify` (`sync` still writes,
+  so a platform can be removed: its line, `sync`, then the folder).
   V7 and V8 (push and deep links need a committed runner; deep links are
   refused on the web) refuse before anything is written, in `sync` too.
   V3, V10, V11, V12, V13, V15, V16 and V17 fail `verify`; `sync` prints them

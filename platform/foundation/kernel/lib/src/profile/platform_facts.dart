@@ -14,8 +14,9 @@ enum SecureStoragePolicy {
   required,
 
   /// Keep secure values in memory for this run only, write nothing secure
-  /// to disk, and say so once (WARNING). A Linux session may run no Secret
-  /// Service at all.
+  /// to disk, and say so once (WARNING). Preferences sealed with a key the
+  /// store cannot read stay untouched on disk while the run uses defaults
+  /// kept in memory. A Linux session may run no Secret Service at all.
   memoryFallback,
 }
 

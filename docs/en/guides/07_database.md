@@ -51,7 +51,7 @@ dev_dependencies:
     sdk: flutter              # for the in-memory database tests (step 12)
 ```
 
-Add the rest of a data package as usual (`domain_core`, `data_core`, your `domain_*`, `freezed_annotation` / `freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies — do not repeat them. Versions live only in the catalog `pubspec_dependencies.yaml` (RULE-74): `dart tools/dependency_sync.dart` fills in an entry written with no version (`drift:`) and rewrites a mismatched one. Then `flutter pub get`.
+Add the rest of a data package as usual (`domain_core`, `data_core`, your `domain_*`, `freezed_annotation` / `freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies — do not repeat them, and never import them, `package:drift/native.dart` or `dart:ffi` from your `lib/`: the package then breaks every web build of an app that links it, while `flutter analyze` stays clean. `arch_check` R22 refuses it (RULE-82); `core_database`'s configurable import is the one place they are reached ([§ 13](#13-the-web)). Versions live only in the catalog `pubspec_dependencies.yaml` (RULE-74): `dart tools/dependency_sync.dart` fills in an entry written with no version (`drift:`) and rewrites a mismatched one. Then `flutter pub get`.
 
 ## 3. Define the table
 
@@ -125,7 +125,7 @@ class CacheConstants {
 ```
 
 > [!CAUTION]
-> Name the file after its **owning package**, not after the app. Several databases coexist in the documents directory; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
+> Name the file after its **owning package**, not after the app. Several databases coexist in the app's private directory — the documents directory on Android and iOS, the application-support directory on macOS, Windows and Linux (on the desktop "documents" is the user's shared folder), the browser's storage for the origin on the web; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
 
 ## 6. Declare the database class
 
@@ -133,7 +133,6 @@ class CacheConstants {
 // modules/cache/data/lib/src/database/cache_database.dart
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../utils/cache_constants.dart';
@@ -162,8 +161,8 @@ class CacheDatabase extends _$CacheDatabase {
   @override
   final int schemaVersion;
 
-  /// Opens the database on a background isolate, with corruption recovery
-  /// ([DriftDatabaseOpener]).
+  /// Opens the database — on a background isolate natively, in drift's wasm
+  /// worker on the web — with corruption recovery ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -173,19 +172,18 @@ class CacheDatabase extends _$CacheDatabase {
     );
   }
 
-  /// In-memory database for tests. [executor] and [schemaVersion] let an
-  /// upgrade test reopen a hand-written old file so the [migrations] run.
+  /// A database over [executor], for tests — `NativeDatabase.memory()` for
+  /// an in-memory one. The test passes the executor, so this library never
+  /// imports `drift/native` (`dart:ffi`), which no web build can compile.
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file so
+  /// the [migrations] run.
   @visibleForTesting
-  factory CacheDatabase.forTesting([
-    QueryExecutor? executor,
+  factory CacheDatabase.forTesting(
+    QueryExecutor executor, [
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
     int schemaVersion = 1,
   ]) {
-    return CacheDatabase._(
-      executor ?? NativeDatabase.memory(),
-      migrations,
-      schemaVersion,
-    );
+    return CacheDatabase._(executor, migrations, schemaVersion);
   }
 
   @override
@@ -200,6 +198,7 @@ Two things to copy exactly:
 
 - **Migrations are passed in, never looked up inside the class.** That keeps the database free of service-locator calls and directly constructible in tests.
 - **`migration` delegates to `driftMigrationStrategy`.** Writing your own `MigrationStrategy` means re-deriving the `PRAGMA` settings — and a package that forgets `foreign_keys = ON` silently loses referential integrity.
+- **`forTesting` takes the executor; the library never imports `drift/native`.** The test passes `NativeDatabase.memory()` (or a file) from `test/`, so the database class compiles for the web too (R22).
 
 ## 7. Register the database in your DI module
 
@@ -414,10 +413,10 @@ class AddExpiresAtToCacheEntries
 
 ## 12. Test the database
 
-`CacheDatabase.forTesting()` gives an in-memory database on the current isolate — no `path_provider`, no isolate, no file:
+`CacheDatabase.forTesting(NativeDatabase.memory())` gives an in-memory database on the current isolate — no `path_provider`, no isolate, no file. The test imports `package:drift/native.dart` itself; `test/` is the one place a web-capable package may:
 
 ```dart
-final database = CacheDatabase.forTesting();
+    final database = CacheDatabase.forTesting(NativeDatabase.memory());
 ```
 
 The existing tests are split to follow the code:
@@ -425,8 +424,8 @@ The existing tests are split to follow the code:
 | Package | File | Covers |
 |---|---|---|
 | `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry, and the upgrade against a real file: every step replays and keeps the rows, a failing step rolls the earlier ones back, and the opened file has `foreign_keys` on and the WAL journal |
-| `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
-| `core_database` | `database_connection_factory_test.dart` | Read-pool connections carry the busy timeout, which `beforeOpen` sets on the writer only |
+| `core_database` | `drift_database_opener_test.dart` | Corruption recovery — a quarantined file is reopened empty; when nothing could be moved, the original error stands with no reopen — and the corruption predicate directly, including the case where an environment marker vetoes a corruption match |
+| `core_database` | `database_connection_factory_test.dart` | Read-pool connections carry the busy timeout, which `beforeOpen` sets on the writer only; the database directory per platform (documents on Android and iOS, application support on the desktop); the quarantine of a file and its sidecars, and `false` when there is nothing to move |
 | `core_database` | `database_handle_test.dart` | `DatabaseHandle.transaction` commits its block and returns its value; a block that throws rolls back what it wrote |
 | `data_cache` | `cache_database_test.dart` | One **real-file** upgrade: a hand-written old-version file (`user_version = 1`) reopened as version 2 replays its step and keeps its rows |
 | `data_cache` | `cache_entry_repository_test.dart` | The repository over a real in-memory database (`DatabaseHandle` → DAO → model → entity): a saved value comes back as an entity and a missing key as `null`; a throwing data source becomes a `Failure`, never an exception |
@@ -435,6 +434,27 @@ Two habits worth copying:
 
 - **Test the corruption predicate directly.** It decides whether a user's database may be moved aside — verifying it only through a real corrupt file is not enough.
 - **Test pragmas on a real file.** An in-memory database reports `journal_mode = memory`, so it cannot prove WAL is on. `migration_test.dart` opens a real file for that reason.
+
+## 13. The web
+
+Nothing in your package changes for the web: `DriftDatabaseOpener.open` and `CacheDatabase.open` are the same calls. `core_database` picks the connection through a configurable import in `database_connection_factory.dart` (allow-listed for R17, the reference for R22):
+
+```dart
+import 'connection/native_connection.dart'
+    if (dart.library.js_interop) 'connection/web_connection.dart'
+    as connection;
+```
+
+Natively, `connection/native_connection.dart` opens the file on background drift isolates. On the web, `connection/web_connection.dart` opens drift's wasm build of SQLite in a worker (`WasmDatabase.open`), stored in whichever of the browser's storages it offers — the boot logs which, at `INFO`, with the browser features it missed. The barrel exports neither target, only the factory (RULE-75).
+
+**Two assets** must sit next to the app's `index.html`: `sqlite3.wasm` and `drift_worker.js`. They are opened by relative URIs, so the browser resolves them against `<base href>` and an app served under a sub-path still finds them. `dart tools/composer/composer.dart runners` writes both into the app's generated web runner when the app links `core_database` — composed, or reached through a composed package's `dependencies:`:
+
+- **`sqlite3.wasm`** is the binary of the release the *resolved* `sqlite3` package names, checked against the sha256 that package ships in its `lib/src/hook/asset_hashes.dart`. It is downloaded once from the `sqlite3.dart` GitHub release and cached under `$XDG_CACHE_HOME` (else `~/.cache`; `%LOCALAPPDATA%` on Windows), then `flutter_monorepo/sqlite3/<tag>/`. Every copy is held to the hash: a download that differs is refused, a cache that differs is deleted, and a file already in place that matches is never rewritten. Offline (or with `--offline`, and no cached copy), the run warns and the web build has no database: run `dart tools/composer/composer.dart runners --app <id> --platform web` online, or place the matching file by hand. If the resolved `sqlite3` ships no hash table, nothing can be verified: place the `sqlite3.wasm` released for that version in the web runner by hand, and `runners` uses it with a *not verified* warning on every run.
+- **`drift_worker.js`** is compiled with `dart compile js -O4` from `platform/infra/database/web/drift_worker.dart` (`WasmDatabase.workerMainForOpen()`), in a temporary directory, and copied in only when its bytes differ. The source sits outside `lib/`, so the package barrel never exports it.
+
+**No quarantine on the web.** A database there is not a file that can be moved aside: `DatabaseConnectionFactory.quarantineDatabaseFile` returns `false`, and the opener rethrows the original error — no reopen, no "data is lost" log — until the site's data is cleared.
+
+**Proven on Chromium only.** The web boot test runs headless Chrome; other browsers are not exercised here.
 
 ---
 
@@ -475,10 +495,13 @@ Review checklist:
 | Relations are not enforced | A hand-written `MigrationStrategy` skipped `foreign_keys = ON` | Delegate to `driftMigrationStrategy` (step 6) |
 | The file was moved to `<name>.corrupt` | The opener detected a corrupt database and quarantined it | The bytes are kept for recovery; see [`../architecture/02_core.md` § 8](../architecture/02_core.md#corruption-recovery-quarantine-never-delete) |
 | A test cannot prove WAL is on | In-memory databases report `journal_mode = memory` | Test pragmas on a real file (step 12) |
+| `arch_check` R22: *imports package:drift/native.dart, which uses dart:ffi …* | A `lib/` file of a web-capable package imports a native-only library | Move the import to `test/`, or take an executor as `forTesting` does (step 6) |
+| The web build boots, then the database fails to open | `sqlite3.wasm` or `drift_worker.js` is missing next to `index.html`, or the server sends the wasm without `application/wasm` | Run `composer runners --app <id> --platform web`; serve `.wasm` as `application/wasm` ([§ 13](#13-the-web)) |
+| A corrupt database on the web keeps failing at boot | The web cannot quarantine | Clear the site's data in the browser ([§ 13](#13-the-web)) |
 
 ## Related
 
-- Rules: RULE-41 (return models, never rows), RULE-46 (each package owns its database), RULE-47 (migrations typed to their database) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Rules: RULE-41 (return models, never rows), RULE-46 (each package owns its database), RULE-47 (migrations typed to their database), RULE-82 (no native-only library in a web-capable `lib/`, R22) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--relational-storage-drift--sqlite) — the design behind the mechanism
 - [`06_storage.md`](06_storage.md) — key-value storage, and when to prefer it
 - [`02_new_domain_data.md`](02_new_domain_data.md) — the repository and model layers above the DAO

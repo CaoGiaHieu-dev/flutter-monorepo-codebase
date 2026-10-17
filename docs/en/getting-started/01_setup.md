@@ -15,6 +15,10 @@
 | JDK | **17 or newer** (builds on 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` is the bytecode target, not a ceiling |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
+| Chrome | only to run or boot an app on the **web** | the boot test drives it through a chromedriver of the same build |
+| Linux desktop toolchain | only for **Linux**: `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev`, and a running Secret Service (gnome-keyring, KWallet) | the packages CI installs (`.github/workflows/pr_quality_check.yml`, job `platforms`); without a Secret Service secure values stay in memory for the run ([`06_storage.md`](../guides/06_storage.md)) |
+| Visual Studio 2022 | only for **Windows**: the "Desktop development with C++" workload with the ATL component | `flutter_secure_storage`'s Windows build needs ATL |
+| Xcode | only for **macOS** desktop (CocoaPods too for `apps/mobile`'s iOS) | — |
 | Ruby ≥ 3.2 | only for Fastlane | `bundle install` writes `Gemfile.lock` (git-ignored); see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, a Google account, a Firebase project | only for **real** Firebase config (§3) | the Firebase CLI is an npm package; skip all three if you use the §3 stubs |
 
@@ -68,6 +72,7 @@ dart tools/workspace_setup/configure.dart
 4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding and settings features).
 5. `dart run build_runner build --workspace` — injectable, freezed, json_serializable, retrofit, go_router_builder, drift, flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because they have no barrel. On a fresh clone it changes nothing: the barrels are committed.
+7. `dart tools/composer/composer.dart runners` — the runner of every platform an app declares `runner: scaffold` (`apps/admin`'s web and desktop runners, `apps/mobile`'s `web/` and `linux/`): `flutter create` in a temporary directory, `flutter pub get`, then a small patch set (the macOS network entitlement; `sqlite3.wasm` and `drift_worker.js` for mobile's web database). git ignores them (RULE-83). This step needs the network once, for `sqlite3.wasm`; `--no-runners` skips it (an Android-only build, an offline machine), and `dart tools/composer/composer.dart runners` writes them later.
 
 It uses `fvm` automatically when your machine is set up for it. There is no `configure.sh` or `configure.bat` wrapper — a Dart script runs identically on every platform.
 
@@ -108,9 +113,9 @@ Those three files are **generated per-project and git-ignored** (`apps/mobile/.g
 They belong to the **app**, not to `platform/`: Firebase options name one bundle ID, so each app that uses Firebase owns its own `lib/firebase/`. Until they exist, `flutter analyze` reports:
 
 ```
-error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:4:8 • uri_does_not_exist
-error • Target of URI doesn't exist: 'firebase_options_prod.dart' • apps/mobile/lib/firebase/firebase_module.dart:5:8 • uri_does_not_exist
-error • Target of URI doesn't exist: 'firebase_options_staging.dart' • apps/mobile/lib/firebase/firebase_module.dart:6:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:5:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_prod.dart' • apps/mobile/lib/firebase/firebase_module.dart:6:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_staging.dart' • apps/mobile/lib/firebase/firebase_module.dart:7:8 • uri_does_not_exist
 ```
 
 You have two ways out: a real Firebase project (§3.1), or compile-only stubs (§3.2).
@@ -282,13 +287,20 @@ Which keys an app reads, and which flavors must have them non-empty, is declared
 Both `flutter run` and `flutter build` must be invoked **from `apps/mobile/`**. The workspace root has no `android/` or `ios/` project, so a `-t apps/mobile/lib/main.dart` run from the root cannot work.
 
 > [!NOTE]
-> **`apps/mobile` is Android + iOS only.** It commits no `linux/`, `macos/`, `windows/` or `web/`
-> runner, so `flutter run -d linux` or `flutter build linux` there stops with *No Linux desktop
-> project configured*. For a desktop build, use the second app: [`apps/admin/README.md`](../../../apps/admin/README.md)
-> generates its desktop runners and runs it. To give an app a platform it lacks, run
-> `flutter create --platforms=linux .` (or `macos`, `windows`) **inside that app's directory** —
-> never at the workspace root — and delete the `test/widget_test.dart` and `analysis_options.yaml`
-> it writes, as that README explains. A desktop run accepts `--flavor`, though this repo configures flavors natively for Android and iOS only; the **web** has no `--flavor` option at all — pass `--dart-define=APP_FLAVOR=<flavor>` there (the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`; the shell reads `APP_FLAVOR` on the web only). An app declares the platforms it runs on in its manifest (`platforms:`), and `describe --app <id>` prints the exact `flutter create` line for each one still to be created.
+> **`apps/mobile` runs on Android, iOS, the web and Linux.** Its `android/` and `ios/` runners are
+> committed, with native flavors; its `web/` and `linux/` runners are generated by step 7 of
+> `configure.dart` and ignored by git, like every runner of `apps/admin` (web, macOS, Windows, Linux).
+> A generated runner has no native flavors, so name the flavor with `--dart-define=APP_FLAVOR=<flavor>`
+> instead of `--flavor` (the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`; the shell
+> reads `APP_FLAVOR` wherever the tool set no flavor). Keep the web port fixed — `localStorage` and
+> IndexedDB belong to the origin, so a new port is a first launch:
+>
+> `flutter run -d chrome --web-port 5320 --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev` (admin: 5310)
+> · `flutter run -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev`
+>
+> An app declares the platforms it runs on in its manifest (`platforms:`); to add, eject or remove
+> one, and to boot it as CI does, see [`13_app_composition.md` § 7](../guides/13_app_composition.md#7-recipes).
+> Never run `flutter create` at the workspace root.
 
 ### From the CLI
 
@@ -383,7 +395,7 @@ Confirm the file name on a device first (`adb shell run-as <applicationId> ls sh
 
 ### From VS Code
 
-`.vscode/launch.json` already defines five configurations — **App (Dev)**, **App (Staging)**, **App (Prod)** for `apps/mobile`, and **Admin (Web, Dev)** and **Admin (Desktop, Dev)** for `apps/admin`. Pick one from the Run and Debug panel. The App ones set `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project); the Admin ones run `apps/admin/lib/main.dart` with its `env.dev`, in Chrome or on the desktop, and need the matching `web/` or desktop runner to be scaffolded first: the recipe is in [`apps/admin/README.md`](../../../apps/admin/README.md).
+`.vscode/launch.json` already defines seven configurations — **App (Dev)**, **App (Staging)**, **App (Prod)**, **Mobile (Web, Dev)** and **Mobile (Linux, Dev)** for `apps/mobile`, and **Admin (Web, Dev)** and **Admin (Desktop, Dev)** for `apps/admin`. Pick one from the Run and Debug panel. The App ones set `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project); the web and desktop ones pass `env.dev` and `--dart-define APP_FLAVOR=dev`, the web ones a fixed port (admin 5310, mobile 5320), and need the generated runners that `configure.dart` writes (or `dart tools/composer/composer.dart runners --app <id>`).
 
 ---
 
@@ -401,6 +413,7 @@ If `flutter analyze` is not clean:
 | `Target of URI doesn't exist: 'firebase_options_dev.dart'` (and `_prod`, `_staging`) in `firebase_module.dart` | The gitignored Firebase options are missing | [Step 3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it), real or stubbed |
 | `Target of URI doesn't exist` for a file under `lib/src/gen/`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` | gen-l10n has not run: the barrels export its gitignored output | Run `dart tools/workspace_setup/configure.dart` (or `flutter gen-l10n` in the package that reports it) |
 | `Undefined class '_$…'`, `… .g.dart` / `.freezed.dart` / `.module.dart` not found | build_runner has not run, or is stale | Run `dart tools/workspace_setup/configure.dart` (or `dart run build_runner build --workspace` if setup already ran once) |
+| `configure.dart` stops at its last step, `composer runners`, naming a failed `flutter create` or `flutter pub get` | No network, or a Flutter SDK without that platform enabled (`flutter config`) | Fix the cause and run `dart tools/composer/composer.dart runners` again — it repairs what is missing; or `configure.dart --no-runners` when you only build Android |
 
 ---
 
@@ -423,7 +436,7 @@ The template ships under placeholder names, and a few identifiers in it belong t
 | Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root). On iOS the flavored build configurations use their own icon sets — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` in `Runner/Assets.xcassets`, written by `icons_launcher` from each flavor's yaml — through `ASSETCATALOG_COMPILER_APPICON_NAME` in `project.pbxproj`; the unflavored configurations keep the stock `AppIcon`. So a changed image reaches an iOS build only through a flavor |
 | Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb` — keep the same keys in both files (`arch_check` R21). The splash has no text |
 
-`apps/admin` has no native project yet. When you create its runners ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)), pass your own reverse domain to `flutter create --org` instead of `com.example`.
+Every generated runner takes its application or bundle ID from `app.org` in the app's manifest (`com.example` as shipped): set your own reverse domain there, then regenerate with `dart tools/composer/composer.dart runners --app <id> --force` ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)).
 
 ### 8.2 Names to leave alone
 

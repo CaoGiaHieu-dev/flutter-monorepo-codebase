@@ -786,20 +786,18 @@ A random IV per write means writing the same value twice produces different ciph
 
 ```dart
 // platform/infra/storage/lib/src/impl/secure_storage_impl.dart
-if (masterKey == null) {
-  // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = EncryptedStorage.generateKey();
-  try {
-    await _storage.write(
-      key: StorageConstants.SECURE_MASTER_KEY_ID,
-      value: newKey,
-    );
-    masterKey = newKey;
-  } catch (e) {
-    // … logged
-    rethrow;
-  }
+// Generate a new 32-byte (256-bit) random key for AES
+final newKey = EncryptedStorage.generateKey();
+try {
+  await _storage.write(
+    key: StorageConstants.SECURE_MASTER_KEY_ID,
+    value: newKey,
+  );
+} catch (e) {
+  // … logged
+  rethrow;
 }
+return newKey;
 ```
 
 **RAM masking.** Neither the master key nor a cached value sits in the heap as a plain, greppable array. Both are XOR-masked with a random mask and revealed only for the instant they are used — `StorageValue` keeps its in-memory value as `ObfuscatedBytes`, and the master key receives the same treatment:
@@ -847,7 +845,7 @@ static Future<String?> readKeyWithRetry(
 
 | Failure | What happens |
 | :-- | :-- |
-| Platform error reading the master key | retried (3 attempts); if it persists, `init` **rethrows** with the store untouched — generating a fresh key would orphan every value sealed with the unreadable one |
+| Platform error reading the master key | retried (3 attempts); if it persists, `platforms.<p>.secure_storage` decides: `required` makes `init` **rethrow** with the store untouched, and the boot stops (B01), because generating a fresh key would orphan every value sealed with the unreadable one; `memory_fallback` keeps this run's secure values in memory under a fresh key, writes nothing secure to disk and logs one WARNING ([`../guides/06_storage.md`](../guides/06_storage.md)) |
 | Master key present but unusable (not a 256-bit base64 key) | only that key is replaced; values sealed with it fail to decrypt and are dropped one by one by `read()` |
 | Corruption of the plugin's own storage | handled natively: on Android `AndroidOptions.resetOnError` (on by default) resets what it cannot decrypt before the call returns |
 | Platform error in `read(key)` | returns `null` **and keeps the value** — it is still there for the next read |
@@ -862,11 +860,11 @@ static Future<String?> readKeyWithRetry(
 | Platform error reading the key | retried (3 attempts) before anything else is decided |
 | Still failing, no stored preferences | a new key is kept in SharedPreferences — there is nothing it could orphan |
 | Still failing, and a key in SharedPreferences opens the stored preferences | that key is used (a device where secure storage is unavailable) |
-| Still failing, and the stored preferences depend on the unreadable key | **rethrows**, nothing written or deleted — the values open again once the platform recovers |
+| Still failing, and the stored preferences depend on the unreadable key | `required`: logs an ERROR and **rethrows**, nothing written or deleted, and the values open again once the platform recovers; `memory_fallback`: the stored values stay on disk untouched, this run serves defaults from memory under a fresh key that is never persisted, and one WARNING is logged |
 | Readable again while a SharedPreferences key exists | whichever key decrypts the stored values wins; a winning SharedPreferences key is moved into secure storage and removed from SharedPreferences |
 | Key absent or unusable (not a 256-bit base64 key) | a new key is generated — in secure storage, or in SharedPreferences if secure storage refuses the write; values sealed with a lost key drop one by one in `read()` |
 
-`StorageManager.initialize` runs the secure backend first, so a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/infra/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
+`StorageManager.initialize` runs the secure backend first, so under `required` a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/infra/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
 
 #### The plugin's cipher options are pinned
 
@@ -906,7 +904,7 @@ This is forced by Drift, not a preference. `@DriftDatabase(tables: [...])` is re
 | Export | Kind | Where | What it does |
 |---|---|---|---|
 | `DriftDatabaseOpener` | `abstract final class` | `src/drift_database_opener.dart` | Opens any `GeneratedDatabase` on a background isolate, **verifies** the connection, quarantines a corrupt file |
-| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Resolves the file path in app documents, builds the background executor, quarantines files |
+| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Builds the executor through a configurable import — a file in the app's private directory, on background isolates, natively (`src/connection/native_connection.dart`); drift's wasm worker on the web — and quarantines files (`false` on the web) |
 | `IDatabaseMigration<TDb>` | abstract class | `src/migration/` | Contract a package implements to contribute **one** schema step |
 | `DatabaseMigrationRunner` | class | `src/migration/` | Sorts, validates and replays those steps |
 | `driftMigrationStrategy(...)` | function | `src/migration/` | The shared `MigrationStrategy`: migration dispatch + the per-connection `PRAGMA`s |
@@ -1012,7 +1010,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Readers run concurrently with a writer. Required by any read pool (`readPool > 0`; the default is `1`); avoids "database is locked" under contention. |
 | `busy_timeout = 5000` | Waits for a held lock instead of failing instantly with `SQLITE_BUSY`. Default is `0`. |
 
-`beforeOpen` runs on the **writer** connection only. The read pool — one more connection per reader, each on its own isolate — never sees it, so `DatabaseConnectionFactory` also passes drift a `setup` callback that applies `busy_timeout` to every connection it opens (`platform/infra/database/test/database_connection_factory_test.dart` reads it back through a reader). `journal_mode` needs no such help: WAL is stored in the file. `foreign_keys` is only enforced on writes, which never reach a reader.
+`beforeOpen` runs on the **writer** connection only. The read pool — one more connection per reader, each on its own isolate — never sees it, so the native connection (`src/connection/native_connection.dart`) also passes drift a `setup` callback that applies `busy_timeout` to every connection it opens (`platform/infra/database/test/database_connection_factory_test.dart` reads it back through a reader). `journal_mode` needs no such help: WAL is stored in the file. `foreign_keys` is only enforced on writes, which never reach a reader.
 
 WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — so a test that asserts WAL has to run against a **real file** (the template's own tests no longer assert the pragmas; [`07_database.md`](../guides/07_database.md) § 12 says when to add one).
 
@@ -1047,11 +1045,11 @@ Three deliberate decisions:
 **The file is renamed, never deleted.**
 
 ```dart
-// platform/infra/database/lib/src/database_connection_factory.dart
+// platform/infra/database/lib/src/connection/native_connection.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
-/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
-/// an older one is replaced so repeated failures cannot fill the disk.
+/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept; an
+/// older one is replaced so repeated failures cannot fill the disk.
 ```
 
 The `-wal` / `-shm` sidecars move with it, to `<fileName>.corrupt-wal` / `.corrupt-shm`: they belong to the quarantined database and must not be applied to the new one, and the WAL holds committed transactions not yet checkpointed — deleting it would lose the newest data.
@@ -1136,26 +1134,30 @@ Practical usage for both branches: [`../guides/03_state_management.md`](../guide
 
 ---
 
-## 11. Web builds — status
+## 11. Platforms — status
 
-Neither app commits a `web/` folder. `apps/admin` declares the web platform with `runner: scaffold` (the folder is created with `flutter create --platforms=web .`); `apps/mobile` does not declare it. Measured with `flutter build web`:
+No app commits a web or desktop runner: every web, macOS, Windows and Linux runner is `runner: scaffold`, generated by `dart tools/composer/composer.dart runners` (which `tools/workspace_setup/configure.dart` runs last) and ignored by git (RULE-83). Only `apps/mobile`'s `android/` and `ios/` are committed. Every app proves each platform it declares with `integration_test/boot_test.dart`: per PR for the web and Linux, in `platforms_full.yml` for the rest ([`../operations/01_cicd.md`](../operations/01_cicd.md)).
 
-| App | Compiles |
-|:--|:--|
-| `apps/admin` (auth + settings) | yes once `web/` is scaffolded (dart2js; the Wasm dry run passes too) |
-| `apps/mobile` (every sample module) | **no** — `core_database` imports `package:drift/native.dart`, which pulls `sqlite3`'s `dart:ffi` |
+| App | android | ios | web | macos | windows | linux |
+|:--|:--|:--|:--|:--|:--|:--|
+| `apps/mobile` (every sample module) | committed | committed | generated: drift on wasm, push and deep links off | — | — | generated: push and deep links off, `secure_storage: memory_fallback` |
+| `apps/admin` (auth + settings) | — | — | generated | generated, network-client entitlement | generated | generated, `memory_fallback` |
 
-`flutter build web` has no `--flavor` option: name the flavor with `--dart-define=APP_FLAVOR=<flavor>`, or `AppConfig.appFlavor` is `dev` in a debug build and `prod` otherwise. A web app also needs a secure context (`https` or `localhost`) for `flutter_secure_storage`'s WebCrypto store.
+A generated runner has no native flavors, so its builds name the flavor with `--dart-define=APP_FLAVOR=<flavor>` — read wherever the Flutter tool set none, the web included; the tool's `--flavor` still wins (`AppConfig.declaredFlavorName`). Without either, `AppConfig.appFlavor` is `dev` in a debug build and `prod` otherwise. A web app also needs a secure context (`https` or `localhost`) for `flutter_secure_storage`'s WebCrypto store.
 
-What makes the shared boot path web-safe:
+What makes the shared boot path work on every platform:
 
-- `dart:io` **compiles** on the web; only *calling* most of it fails. The platform is read in one place, `resolveAppPlatform()`, and boot decisions come from the app's declared `PlatformFacts` (the Dart splash is the platform's `splash` mode, not a fork on `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` wraps every page in `RouteAwareWidget` on every platform, so screen analytics fire on the web too, and only its page type differs there (a plain `MaterialPage`, because the browser owns the transition), `MainScope` skips `FlutterNativeSplash.remove()`, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
+- `dart:io` **compiles** on the web; only *calling* most of it fails. The platform is read in one place, `resolveAppPlatform()`, and boot decisions come from the app's declared `PlatformFacts` (the Dart splash is the platform's `splash` mode, not a fork on `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` wraps every page in `RouteAwareWidget` on every platform, so screen analytics fire on the web too, and only its page type differs there (a plain `MaterialPage`, because the browser owns the transition), and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
+- `MainScope` without a Dart splash holds the first frame (`deferFirstFrame`) while the boot runs and releases it in a `finally`, on every platform: the native launch screen stays up on Android and iOS, nothing half-built is painted elsewhere, and a failed boot still shows its error screen. The web once skipped that release and stayed a blank page; no splash plugin is involved any more ([`06_app_shell.md`](06_app_shell.md#the-two-splash-paths)).
 - `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates: the browser owns TLS, so neither pinning nor the dev-flavor bypass can apply. It holds the package's client as an `Object` and returns it only after an `is HttpClient` test (an `UnsupportedError` otherwise), because on the web `HttpSecurityPinningClient` is an `http.BaseClient`, not an `HttpClient` (a direct return or a subclass fails `flutter build web` while `flutter analyze` is clean). Tests pass `platform: AppPlatform.web` to `initBeforeRunApp`.
+- `core_database` opens drift through a configurable import: a file on background isolates natively — in the documents directory on Android and iOS, the application-support directory on the desktop — and drift's wasm build in a worker on the web, with `sqlite3.wasm` and `drift_worker.js` beside `index.html` ([`../guides/07_database.md`](../guides/07_database.md#13-the-web)). `arch_check` R22 keeps `dart:ffi` and the other native-only libraries out of every web build (RULE-82).
+- `core_notifications` links on every platform; push is initialised only where the derived `push` is on, which needs the platform in its `composition.push_platforms` (`android`, `ios`, `macos`, `web`) and a committed runner. `apps/mobile`'s `FirebaseModule` reads the generated options only where push is on, so a web or Linux boot never asks Firebase for a platform it has no app for.
 
 Known gaps:
 
-- `apps/mobile` needs a web database before it can compile: drift's `WasmDatabase` (the `sqlite3.wasm` + drift worker assets), opened through a conditional import in `core_database`'s connection factory.
-- `core_notifications` (`apps/mobile` only) initialises Firebase with the app's per-flavor options, which describe no web app; `push` defaults to off on the web.
+- macOS, Windows, iOS and the Android emulator boot only in `platforms_full.yml` (on `main`, the merge queue, weekly, the `ci:platforms` label and by hand), not per PR.
+- On the web a corrupt database cannot be quarantined: the original error stands until the site's data is cleared ([`../guides/07_database.md`](../guides/07_database.md#13-the-web)).
+- Push on the web needs a messaging service worker the template does not ship; `push` derives off there.
 
 ---
 

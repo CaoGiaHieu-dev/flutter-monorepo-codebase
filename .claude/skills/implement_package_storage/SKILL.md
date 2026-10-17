@@ -13,7 +13,7 @@ launches".
 > (RULE-44), registered as a singleton (RULE-45).
 
 **Guide:** [`docs/en/guides/06_storage.md`](../../../docs/en/guides/06_storage.md).
-**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-09, RULE-44, RULE-45, RULE-74.
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-09, RULE-44, RULE-45, RULE-74, RULE-80.
 Cite them; do not restate them.
 
 ## Decide the owner first
@@ -100,7 +100,18 @@ class ProfileLocalDataSource {
 
 `AuthLocalDataSource` (`modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart`) is the
 real one, with a single `secure` value (the token). Storage types: `StorageType.pref` (SharedPreferences — settings, flags)
-and `StorageType.secure` (Keychain / KeyStore — tokens, PII). Both seal every value with AES-256-CBC.
+and `StorageType.secure` (the platform's secure store — the Keychain, the KeyStore, the macOS login keychain, a Secret
+Service on Linux, `localStorage` on the web — tokens, PII). Both seal every value with AES-256-CBC.
+
+**No secure store on the platform** (a Linux session with no Secret Service): the app decides per platform in its
+manifest, `platforms.<p>.secure_storage` (RULE-80; derived `memory_fallback` on Linux, `required` elsewhere).
+`required` stops the boot (B01) with nothing deleted. `memory_fallback` keeps this run's secure values in memory under a
+fresh key and logs one WARNING naming the key; when its stored preferences depend on the unreadable key,
+`PrefStorageImpl` leaves them untouched on disk and serves defaults for the run. So under `memory_fallback` a secure value
+written in such a run is gone at the next start, and a preference may be too — an owner must not assume a write survived a
+restart there. A locked keyring blocks on its prompt; no code can time out of it. On
+the web the store is `localStorage`, readable by any script in the origin: an XSS reads a stored token. Details:
+[`06_storage.md` § 1](../../../docs/en/guides/06_storage.md#what-secure-is-on-each-platform-and-what-happens-without-one).
 
 - `String`, `num`, `bool`, `Map<String, dynamic>` and typed lists read back without a `reviver`. An enum or a
   custom type needs `reviver: (key, value) { … }`, called **once** per decode with the decoded root, never with
@@ -176,7 +187,7 @@ These implementations live in `platform/shell/adapters`, shared by every app —
 
 - [ ] Key lives in the owning package's `utils/`, not `core_common`
 - [ ] `StorageValue` is private and declared inside the class that owns the data
-- [ ] `secure` for tokens and PII, `pref` for settings and flags
+- [ ] `secure` for tokens and PII, `pref` for settings and flags; nothing relies on a write surviving a run under `secure_storage: memory_fallback`
 - [ ] `reviver` for enums and custom types
 - [ ] Added to the `@PostConstruct(preResolve: true)` hydration
 - [ ] Owner registered as a singleton, never `@injectable`

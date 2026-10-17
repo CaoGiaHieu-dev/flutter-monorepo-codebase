@@ -42,7 +42,10 @@ Make it lazy — `@LazySingleton(as: NetworkConfig)` on `NetworkConfigImpl`
 `ISessionGateway` at call time with `getItOrNull`, so it builds whether or not an auth module is composed.
 
 `flutter analyze` cannot see this (RULE-13). Each app's `test/di_smoke_test.dart` boots the real graph for
-every flavor, builds every lazy singleton, builds every `@injectable` factory one by one (`FactoryRecorder.buildEvery`
+every declared platform but the web, times every flavor — each pass sets `debugAppPlatformOverride` and
+`debugDefaultTargetPlatformOverride` and calls `registerAppProfile(appProfile, platform: platform)`, so a
+registration that reads `PlatformFacts` (push, the secure-storage policy, `FirebaseModule`'s options) is built as
+that platform builds it — builds every lazy singleton, builds every `@injectable` factory one by one (`FactoryRecorder.buildEvery`
 in `platform_app_shell`; GetIt's own `findAll(callFactories: true)` builds them all-or-nothing with `null`
 arguments and names no registration), and holds the graph to the app's declaration with `checkAppContract`
 (RULE-63). A failure names the type:

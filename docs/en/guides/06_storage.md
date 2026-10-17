@@ -31,7 +31,29 @@ enum StorageType {
 | Cached user profile / PII | "Has seen onboarding" flags |
 | Anything an attacker with the device would want | Non-sensitive UI preferences |
 
-`secure` is backed by Keychain (iOS) / KeyStore (Android) and is slower. `pref` is backed by SharedPreferences. Both backends (`SecureStorageImpl`, `PrefStorageImpl`) extend `EncryptedStorage`, which seals every value with AES-256-CBC before it is written, so `pref` is not plaintext on disk. The sealing is confidentiality only — AES-CBC has no authentication, so a modified value is not detected as tampered with; do not use storage to prove who wrote a value. You never touch a backend directly: you ask `StorageManager.getStorage(type)` for the `StorageInterface` and wrap it in a `StorageValue`.
+`secure` is backed by the platform's secure store (next section) and is slower. `pref` is backed by SharedPreferences. Both backends (`SecureStorageImpl`, `PrefStorageImpl`) extend `EncryptedStorage`, which seals every value with AES-256-CBC before it is written, so `pref` is not plaintext on disk. The sealing is confidentiality only — AES-CBC has no authentication, so a modified value is not detected as tampered with; do not use storage to prove who wrote a value. You never touch a backend directly: you ask `StorageManager.getStorage(type)` for the `StorageInterface` and wrap it in a `StorageValue`.
+
+### What `secure` is on each platform, and what happens without one
+
+| Platform | `secure` is | Notes |
+|:--|:--|:--|
+| Android | the KeyStore | the cipher pair is pinned ([`02_core.md` § 7](../architecture/02_core.md#the-plugins-cipher-options-are-pinned)) |
+| iOS | the Keychain, readable after the first unlock | a background launch before the first unlock fails the read; it is retried, never wiped |
+| macOS | the **login** keychain (`usesDataProtectionKeychain: false`, first unlock) | the data-protection keychain needs a keychain-access-groups entitlement and a signing team, which a generated runner does not carry |
+| Windows | `flutter_secure_storage`'s Windows store | building it needs Visual Studio 2022 with "Desktop development with C++" and the ATL component |
+| Linux | a Secret Service (gnome-keyring, KWallet) through libsecret | a session may run none: see `memory_fallback` below |
+| Web | the browser's `localStorage`, sealed by the plugin with the browser's crypto API | needs a secure context (`https` or `localhost`); anything running in the page's origin can read it — an XSS can read a stored token, so keep injected script out (a Content-Security-Policy) or decide not to persist the session there |
+
+Both backends keep their master key in this store. What they do when the platform offers **no** secure store at all — the master-key read keeps failing after its retries, or the write is refused — is the app's decision per platform, `platforms.<p>.secure_storage` in its manifest (RULE-80; derived `memory_fallback` on Linux, `required` everywhere else — [`13_app_composition.md` § 3](13_app_composition.md#3-the-manifest)):
+
+| | `required` | `memory_fallback` |
+|:--|:--|:--|
+| `SecureStorageImpl` | rethrows with nothing deleted; the boot stops (`B01`) | keeps this run's secure values in memory under a fresh key, writes nothing secure to disk, and logs one WARNING, *Secure storage is unavailable …*, naming `platforms.<p>.secure_storage` |
+| `PrefStorageImpl` | uses its SharedPreferences fallback key when that key opens the stored values (or creates one when nothing is stored); otherwise logs an ERROR and rethrows with every preference intact | the same fallback first; otherwise leaves the stored preferences on disk untouched, serves defaults for this run from memory under a fresh key that is never persisted, and logs one WARNING |
+
+So under `memory_fallback` a sign-in lasts until the app quits. Preferences survive when SharedPreferences holds a key that opens them, or when nothing was stored yet (a key is created there). Only preferences sealed with the unreadable secure-store key are left on disk untouched while the run uses defaults, and settings changed in such a run are not kept; the next run with a Secret Service reads them back. The Android and iOS default stays `required` on purpose: a locked Keychain is a reason to stop, never to start empty.
+
+**The Linux keyring prompt.** A session whose login keyring is locked, or not created yet, answers the first secure read with a prompt, and libsecret blocks the platform thread until someone answers it — no code in the app can bypass or time out of it. Unlock the keyring at login, or, in CI, start one unlocked or point the session bus nowhere ([`13_app_composition.md` § 7](13_app_composition.md#run-and-boot-a-platform)).
 
 ## 2. Depend on `core_storage`
 
@@ -264,11 +286,14 @@ Review checklist:
 | A value set just before the app was killed is missing on the next launch | The setter (or an un-awaited `save`) starts the write and the process ended first | `await` `save` / `remove` where the value must survive (step 7) |
 | `… is not registered` at boot for the owner | Codegen has not run since the annotation was added | `dart run build_runner build --workspace` (step 6) |
 | Another package imports your data package to read the value | No boundary contract | Declare an interface (`core_di`, or the owner's `<id>_api`) and implement it in the owner (step 9) |
+| Settings reset for one Linux run; the log says *Secure storage is unavailable* | No Secret Service in that session, and the policy is `memory_fallback` | Nothing was lost: start and unlock a Secret Service (gnome-keyring, KWallet) and the stored values come back next run |
+| Boot stops with `B01` on a desktop or a CI machine; the log names the secure store | No secure store and the policy is `required` | Provide the store, or declare `secure_storage: memory_fallback` for that platform if a run without one is acceptable |
+| A Linux run hangs before the first frame | A keyring prompt is waiting for an answer | Answer it; unlock the keyring at login |
 | Every stored value is gone after upgrading from `flutter_secure_storage` 9.x or older | 11.x dropped the pre-10 ciphers | Ship a 10.x release first ([`../architecture/02_core.md` § 7](../architecture/02_core.md#the-plugins-cipher-options-are-pinned)) |
 
 ## Related
 
-- Rules: RULE-09 (keys in `utils/`), RULE-44 (no shared keys, interface placement), RULE-45 (singleton owner, hydrated), RULE-14 (second interface via `@module`), RULE-74 (versions only in the catalog) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Rules: RULE-09 (keys in `utils/`), RULE-44 (no shared keys, interface placement), RULE-45 (singleton owner, hydrated), RULE-14 (second interface via `@module`), RULE-74 (versions only in the catalog), RULE-80 (the per-platform `secure_storage` decision) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--encrypted-keyvalue-storage) — encryption, RAM masking, failure handling, current owners
 - [`05_di.md`](05_di.md) — singleton vs factory, `@PostConstruct`, module ordering
 - [`07_database.md`](07_database.md) — when a relational table beats a key-value pair

@@ -14,7 +14,7 @@ Use this skill to add a table, store a list locally, query rows offline, or add 
 
 Reference implementation: `modules/cache/data` (`data_cache`) — sample code with no runtime consumer; copy its
 shape. **Guide:** [`docs/en/guides/07_database.md`](../../../docs/en/guides/07_database.md).
-**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-09, RULE-41, RULE-46, RULE-47, RULE-74.
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-09, RULE-41, RULE-46, RULE-47, RULE-74, RULE-82 (R22).
 Cite them; do not restate them.
 
 ## Database or key-value storage?
@@ -58,7 +58,11 @@ dev_dependencies:
 ```
 
 Add the rest of a data package as usual (`data_core`, `domain_core`, your `domain_*`, `freezed_annotation` /
-`freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies: do not repeat them.
+`freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies: do not repeat them —
+and never import them, `package:drift/native.dart` or `dart:ffi` from your `lib/`. Every web build of an app that
+links the package would fail while `flutter analyze` stays clean; `arch_check` R22 refuses it. `core_database`'s
+configurable import (`database_connection_factory.dart`: `connection/native_connection.dart` by default,
+`connection/web_connection.dart` under `dart.library.js_interop`) is the one place they are reached.
 
 ### Step 1: Define the table
 
@@ -138,7 +142,6 @@ rows already on devices unreachable.
 // modules/cache/data/lib/src/database/cache_database.dart
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../utils/cache_constants.dart';
@@ -167,8 +170,8 @@ class CacheDatabase extends _$CacheDatabase {
   @override
   final int schemaVersion;
 
-  /// Opens the database on a background isolate, with corruption recovery
-  /// ([DriftDatabaseOpener]).
+  /// Opens the database — on a background isolate natively, in drift's wasm
+  /// worker on the web — with corruption recovery ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -178,19 +181,18 @@ class CacheDatabase extends _$CacheDatabase {
     );
   }
 
-  /// In-memory database for tests. [executor] and [schemaVersion] let an
-  /// upgrade test reopen a hand-written old file so the [migrations] run.
+  /// A database over [executor], for tests — `NativeDatabase.memory()` for
+  /// an in-memory one. The test passes the executor, so this library never
+  /// imports `drift/native` (`dart:ffi`), which no web build can compile.
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file so
+  /// the [migrations] run.
   @visibleForTesting
-  factory CacheDatabase.forTesting([
-    QueryExecutor? executor,
+  factory CacheDatabase.forTesting(
+    QueryExecutor executor, [
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
     int schemaVersion = 1,
   ]) {
-    return CacheDatabase._(
-      executor ?? NativeDatabase.memory(),
-      migrations,
-      schemaVersion,
-    );
+    return CacheDatabase._(executor, migrations, schemaVersion);
   }
 
   @override
@@ -203,8 +205,11 @@ class CacheDatabase extends _$CacheDatabase {
   constructible in tests.
 - `migration` delegates to `driftMigrationStrategy` (per-connection `PRAGMA`s: `foreign_keys`, WAL,
   `busy_timeout`; replays contributed steps). Do not hand-roll a `MigrationStrategy`.
-- `DriftDatabaseOpener.open` opens on a background isolate, verifies the connection and quarantines — never
-  deletes — a corrupt file.
+- `DriftDatabaseOpener.open` opens on a background isolate natively (in drift's wasm worker on the web), verifies the
+  connection and quarantines — never deletes — a corrupt file. On the web nothing can be moved aside: the original
+  error stands until the site's data is cleared.
+- `forTesting` takes the executor: the test passes `NativeDatabase.memory()` from `test/`, so this library never
+  imports `drift/native` (R22).
 
 ### Step 5: Register it in the package's DI module
 
@@ -353,7 +358,8 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration<CacheDatabase> {
 
 ## Tests
 
-`CacheDatabase.forTesting()` is an in-memory database on the current isolate (no file, no isolate). Put the
+`CacheDatabase.forTesting(NativeDatabase.memory())` is an in-memory database on the current isolate (no file, no
+isolate); the test imports `package:drift/native.dart` itself — `test/` is where a web-capable package may. Put the
 tests in the owning package's `test/`, following `modules/cache/data/test/` (`cache_database_test.dart`: an old
 file upgrading through its step and keeping its rows; `cache_entry_repository_test.dart`: a real in-memory round
 trip through the repository, and a throwing data source becoming a `Failure`). Test pragmas on a real
@@ -398,6 +404,16 @@ test('v1 -> v2 adds expires_at and keeps the rows', () async {
 });
 ```
 
+## The web
+
+Nothing in the package changes. An app on the web that links `core_database` needs `sqlite3.wasm` and
+`drift_worker.js` next to its `index.html`; `dart tools/composer/composer.dart runners --app <id>` writes both into
+the app's generated web runner — the wasm checked against the sha256 the resolved `sqlite3` ships (cached under
+`~/.cache/flutter_monorepo/sqlite3/<tag>/`; offline it warns), the worker compiled from
+`platform/infra/database/web/drift_worker.dart`. When the resolved `sqlite3` ships no hash table, a `sqlite3.wasm`
+placed by hand is used with a *not verified* warning. Only Chromium is exercised (the web boot test). Details:
+[`07_database.md` § 13](../../../docs/en/guides/07_database.md#13-the-web).
+
 ## Checklist
 
 - [ ] Tables, DAO, database class and data source all live in the **owning package**
@@ -408,6 +424,7 @@ test('v1 -> v2 adds expires_at and keeps the rows', () async {
 - [ ] Data sources take `IDatabaseHandle<TDb>` and return a **Model** (`fromRow`), never a Drift row
 - [ ] Schema change = column + `schemaVersion` bump + `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` step + an upgrade test
 - [ ] `downgrade` implemented, or throws a descriptive error when irreversible
+- [ ] No `drift/native`, `sqlite3/sqlite3.dart`, `path_provider` or `dart:ffi` import in `lib/` (R22); `forTesting` takes the executor
 
 ## Related
 
@@ -424,5 +441,6 @@ dart tools/arch_check/check.dart
 dart tools/composer/composer.dart verify
 cd modules/<module>/data && flutter test
 cd apps/mobile && flutter test test/di_smoke_test.dart   # the @preResolve open succeeds in the real graph
+cd apps/mobile && flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev   # and on the web with flutter drive (RULE-83)
 cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77
 ```

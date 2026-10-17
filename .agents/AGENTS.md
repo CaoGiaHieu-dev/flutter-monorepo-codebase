@@ -20,12 +20,13 @@ groups). `tools/` holds the CI gates and generators.
 | The agent brief — the rules that get violated, layout, commands, workflows, the task → guide table | [`CLAUDE.md`](../CLAUDE.md) |
 | Architecture and how-to guides | [`docs/en/README.md`](../docs/en/README.md) |
 | Every tool in `tools/`, its arguments and exit codes | [`docs/en/reference/03_tooling.md`](../docs/en/reference/03_tooling.md) |
-| Configuring an app — platforms, flavors, pins, languages, hooks, capabilities; a third app | [`docs/en/guides/13_app_composition.md`](../docs/en/guides/13_app_composition.md), skill `configure_app` |
+| Configuring an app — platforms (add, eject, remove, boot), flavors, pins, languages, hooks, capabilities; a third app | [`docs/en/guides/13_app_composition.md`](../docs/en/guides/13_app_composition.md), skill `configure_app` |
 | Task recipes (skills) | [`.claude/skills/`](../.claude/skills/) — each `SKILL.md` is plain Markdown any agent can follow |
 | Documentation contract, commits, PR checks | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 
 ## Before you finish
 
 Run the gates `CLAUDE.md` lists under **Commands** for what you touched, and the debug APK build after
-a DI, dependency or type-location change (RULE-77). Docs change in the same PR as the code, in
+a DI, dependency or type-location change (RULE-77), and the boot test of each platform a platform-touching change
+touches (RULE-83). Docs change in the same PR as the code, in
 `docs/en` and `docs/vi` (RULE-79).

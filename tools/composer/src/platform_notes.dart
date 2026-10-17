@@ -20,7 +20,9 @@ const Map<String, List<String>> kPlatformNotes = {
   ],
   'linux': [
     'With no Secret Service, secure values are kept in memory for the run '
-        '(`secure_storage: memory_fallback`, derived). A fresh session with '
+        '(`secure_storage: memory_fallback`, derived), and preferences '
+        'sealed with a key it cannot read stay on disk while the run uses '
+        'defaults. A fresh session with '
         'a locked or new keyring blocks the app behind the keyring prompt '
         'until it is answered; no code can avoid it. Dev and prod share one '
         'application id, so one support directory and one keyring '

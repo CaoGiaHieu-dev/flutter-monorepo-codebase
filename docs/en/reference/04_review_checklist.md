@@ -14,9 +14,9 @@ The same gates `.github/workflows/pr_quality_check.yml` runs, in its order. Gate
 
 ```bash
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R21
+dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R22
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
-dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrels
+dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrels, generated runners
 git status --short -- '*.dart'                       # barrel drift — CI fails on any change or untracked .dart file here
 flutter analyze                                      # Gate 2 — static analysis, 0 issues
 # Gate 3 — `flutter test` in every package that has a test/ directory (apps/*: the DI smoke test)
@@ -30,7 +30,8 @@ dart tools/unused_checker/check_unused_packages.dart # declared but never import
 - [ ] **RULE-76** — no generated file (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) was hand-edited or committed
 - [ ] **RULE-75** — the barrel generator was re-run, after codegen, if a `lib/` file was added, renamed or deleted; no hand-added `export`
 - [ ] **RULE-77** — a DI, dependency or type-move change was followed by the debug APK build (CI's `build` job)
-- [ ] **RULE-80 · RULE-81 · RULE-82** — a per-app value is declared in `apps/<id>/` (manifest, profile, hook), not a constant in `platform/`; a module that registers a catalogued contract is declared `provided` in each app that composes it; no new platform fork outside the R17 allow-list
+- [ ] **RULE-80 · RULE-81 · RULE-82** — a per-app value is declared in `apps/<id>/` (manifest, profile, hook), not a constant in `platform/`; a module that registers a catalogued contract is declared `provided` in each app that composes it; no new platform fork outside the R17 allow-list; no native-only library in a web-capable `lib/` (R22)
+- [ ] **RULE-83** — a platform-touching change ran the boot test of the platforms it touches; no generated runner was committed
 
 ---
 
@@ -88,7 +89,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 
 - [ ] **RULE-44** — a new key lives in the owning package's `utils/`; the owner declares its own `StorageValue<T>`, picks `secure` / `pref` deliberately, and shares it only through a `core_di` interface
 - [ ] **RULE-45** — the storage owner is a singleton with `@PostConstruct(preResolve: true)`, never `@injectable`
-- [ ] **RULE-46** — new tables and DAOs live in the owning package's own database
+- [ ] **RULE-46** — new tables and DAOs live in the owning package's own database; its `lib/` never imports `drift/native` (`forTesting` takes the executor, R22)
 - [ ] **RULE-47** — a schema change bumped `schemaVersion` and registered `IDatabaseMigration<YourDatabase>`; the open carries `@Order(1)`
 - [ ] **RULE-48** — a change touching networking leaves each flavor's `ssl_pinning` decision in `app_manifest.yaml` intact (pins, or `disabled` with a reason) and says whether the pins are filled
 
@@ -103,7 +104,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 - [ ] **RULE-13 · RULE-63** — no eager `@Singleton` depends on a later group; a plugin touched during DI has its test double in the smoke tests; a factory needing a non-nullable `@factoryParam` is listed with its reason
 - [ ] **RULE-14** — a second interface on one implementation is bound through a `@module`
 
-**Verify** — the DI smoke test boots the real graph for every flavor:
+**Verify** — the DI smoke test boots the real graph for every declared platform but the web, times every flavor:
 
 ```bash
 cd apps/mobile && flutter test test/di_smoke_test.dart

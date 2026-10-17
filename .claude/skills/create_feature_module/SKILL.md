@@ -126,6 +126,11 @@ The app must still build after any feature package is deleted. Confirm:
   product-neutral `core_di` contract (RULE-08), both resolved with `getItOrNull` / `getAllOrEmpty` and a fallback
   (RULE-12, `arch_check` R8).
 
+A module that persists data — on the web too — follows [`implement_package_database`](../implement_package_database/SKILL.md)
+(its own Drift database through `core_database`, never `drift/native` in `lib/`, R22) or
+[`implement_package_storage`](../implement_package_storage/SKILL.md); every app that composes it must still boot on
+each platform it declares (RULE-83).
+
 To remove a module (manifest line, `composer sync`, **delete `modules/<name>/<layer>/`**, `pub get`, `build_runner`,
 or `remove_sample` for a shipped sample): [`remove_module`](../remove_module/SKILL.md).
 

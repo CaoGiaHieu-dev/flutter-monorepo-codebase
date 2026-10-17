@@ -16,6 +16,7 @@
         ├─ added/renamed/deleted a file in lib/?  ──► dart tools/barrel_generator/generate.dart <pkg>/lib
         │
         ├─ edited an app_manifest.yaml?  ──► dart tools/composer/composer.dart sync
+        │       └─ added a platform, or upgraded Flutter?  ──► dart tools/composer/composer.dart runners --app <id> [--force]
         │
         ├─ edited pubspec_dependencies.yaml?  ──► dart tools/dependency_sync.dart
         │
@@ -166,7 +167,7 @@ Tests live at `<package>/test/`, wherever the package lives. The loop finds them
 An undeclared import is caught by `arch_check` (R5); the unused checker covers the reverse.
 
 > [!CAUTION]
-> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The Gate 3 loop catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor and builds every factory (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 8 shows how to read the generated files to find the culprit.
+> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The Gate 3 loop catches it — each app's `test/di_smoke_test.dart` boots the real graph for every declared platform but the web, times every flavor, and builds every factory (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 8 shows how to read the generated files to find the culprit.
 
 ### Optional: prove the app still builds
 
@@ -176,6 +177,28 @@ Static analysis passing does not mean the Android build passes (Gradle/Kotlin er
 cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
+
+### Run and boot the web and desktop
+
+The web and desktop runners are generated (`configure.dart` writes them; `dart tools/composer/composer.dart runners --app <id>` regenerates), so they take the flavor as a define, not `--flavor`. A fixed web port keeps the browser's storage between runs — admin 5310, mobile 5320:
+
+```bash
+cd apps/mobile
+flutter run -d chrome --web-port 5320 --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+flutter run -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+```
+
+A change that touches a platform — the shell's boot, storage, the database, a runner, the composer — runs the boot test of each platform it touches (RULE-83). It waits until the first screen is drawn, so it fails on a blank page that every unit test passes:
+
+```bash
+cd apps/mobile
+flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart \
+  -d web-server --browser-name=chrome --headless --chrome-binary=<chrome> \
+  --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev
+```
+
+The web boot needs a chromedriver of the same build as that Chrome on port 4444; the Linux one a display and a Secret Service. Both, and the CI recipe, are in [`../guides/13_app_composition.md` § 7](../guides/13_app_composition.md#run-and-boot-a-platform).
 
 ---
 
@@ -189,6 +212,8 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Edited an `app_manifest.yaml`, or a `composer:managed` region, by hand | `composer verify` fails (Gate 0) | Edit only the manifest, then `dart tools/composer/composer.dart sync` (RULE-16) |
 | Ran `pub get` inside a sub-package | Stray `pubspec.lock` files | Delete them, run `flutter pub get` at the root |
 | Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd apps/mobile` first |
+| Named the flavor with `--flavor` on the web or a generated runner | The web has no `--flavor` option; a generated runner has no native flavors to select | `--dart-define=APP_FLAVOR=<flavor>`, as CI does on every generated runner |
+| Ran `flutter run -d chrome` without `--web-port` | Every run is a first launch: the browser's storage belongs to the origin | `--web-port 5310` (admin) or `5320` (mobile) |
 | Hardcoded a version in a package pubspec | `dependency_sync --check` fails | Move it to `pubspec_dependencies.yaml`, re-sync |
 | Imported a package without declaring it | Compiles locally (workspace shares `package_config.json`), breaks when extracted | Declare it in that package's `pubspec.yaml` (`dependencies:`, not `dev_dependencies:`); verify with `dart tools/arch_check/check.dart` (R5). The unused checker covers the reverse — declared but never imported |
 | Registered a screen controller as a singleton | State leaks between screen visits | Feature controllers are `@injectable` (RULE-10) — see [../guides/05_di.md](../guides/05_di.md) |

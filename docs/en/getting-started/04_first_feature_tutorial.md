@@ -702,7 +702,7 @@ dart tools/dependency_sync.dart --check           # ✅ Success: All packages ..
 dart tools/unused_checker/check_unused_packages.dart   # ✅ Success! No unused packages found across all workspace modules.
 ```
 
-The DI smoke test boots the real DI graph of `apps/mobile` for every flavor. It is what proves your new registrations resolve (RULE-63).
+The DI smoke test boots the real DI graph of `apps/mobile` for every declared platform but the web (Android, iOS and Linux), times every flavor. It is what proves your new registrations resolve (RULE-63).
 
 Finish with a real build, because a clean analyze is not a build (RULE-77):
 

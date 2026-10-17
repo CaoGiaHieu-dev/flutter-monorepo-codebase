@@ -9,19 +9,20 @@ This page answers: **what pipelines exist, what each one does, which secrets the
 
 ## 1. Pipeline inventory
 
-Five pipelines ship with the template — four on GitHub Actions, one on Azure DevOps.
+Six pipelines ship with the template — five on GitHub Actions, one on Azure DevOps.
 
 | Pipeline | File | Trigger | Output |
 |:---|:---|:---|:---|
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Manual (`workflow_dispatch`) | Signed release APK → Firebase App Distribution, plus its obfuscation symbols as an artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR to `main`/`develop`/`master` + manual | Markdown report artifact + PR comments |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Manual (`workflow_dispatch`) | Delegates to Fastlane lanes |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — the merge gate; then a debug dev APK build and two module-generator smoke tests |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — the merge gate; then a debug dev APK build, the web and Linux boot of every app that declares them, and two module-generator smoke tests |
+| Platforms (full matrix) | `.github/workflows/platforms_full.yml` | Push to `main` (path-filtered), the merge queue, weekly, a PR labelled `ci:platforms`, manual | Boot tests on macOS, Windows, the iOS simulator and the Android emulator; web release and Wasm builds ([§6](#the-platform-boots-rule-83)) |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK + obfuscation symbols artifacts → Firebase |
 
-The three GitHub workflows that build or check the repository (`pr_quality_check.yml`, `flutter_build.yml`, `fastlane.yml`) declare a top-level `permissions: contents: read`: none of them writes to the repository.
+The four GitHub workflows that build or check the repository (`pr_quality_check.yml`, `platforms_full.yml`, `flutter_build.yml`, `fastlane.yml`) declare a top-level `permissions: contents: read`: none of them writes to the repository. `platforms_full.yml`'s `report` job alone adds `issues: write` and `actions: read`, to open the issue for a failed scheduled run.
 
-`pr_quality_check.yml` is the only pipeline that gates a merge. Its first job runs six numbered gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — with the gate tools' own test suite right after Gate 1, a barrel-drift check after code generation, a blocking unused-dependency audit, and one advisory step (the coverage report). Three more jobs build the app (a debug `dev` APK), which no gate can prove, and smoke-test the module generator twice. See [§6](#6-the-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. Its first job runs six numbered gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — with the gate tools' own test suite right after Gate 1, a barrel-drift check after code generation, a blocking unused-dependency audit, and one advisory step (the coverage report). Four more jobs build the app (a debug `dev` APK), which no gate can prove, boot it on the web and Linux (`platforms`, RULE-83), and smoke-test the module generator twice. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -53,7 +54,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 
    A missing secret fails this step with an error naming it — before any codegen or Gradle time is spent. It runs **before** code generation because `build_runner` must be able to resolve `firebase_module.dart`'s imports.
 5. **Get dependencies** — `flutter pub get`. Lock files are generated and not committed; the versions come from `pubspec_dependencies.yaml` and the Flutter version from `.fvmrc`.
-6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation, `build_runner` and the barrel pass for the whole workspace.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart --no-runners`. This single Dart script does pub get, l10n generation, `build_runner` and the barrel pass for the whole workspace; `--no-runners` skips its last step, the generated web and desktop runners, which an Android build from the committed `android/` never reads.
 7. **Build APK** — note the `cd apps/mobile` on its own line first:
    ```bash
    cd apps/mobile
@@ -76,7 +77,7 @@ The artifact path is built from the flavor (`app-$FLAVOR-release.apk`), so it st
 
 ### Cost note
 
-The job runs on `macos-latest` even though it only builds Android. macOS runners are billed at a much higher multiplier than Linux on GitHub-hosted plans. Unless you intend to add the (currently commented-out) iOS build back into this same job, `ubuntu-latest` builds Android just as well and far cheaper.
+The job runs on `ubuntu-latest`: it builds Android only, and a macOS runner is billed at a much higher multiplier. Adding the (commented-out) iOS build back into this job would need `macos-latest` again — or a job of its own, as `platforms_full.yml` does for its iOS leg.
 
 ---
 
@@ -96,7 +97,7 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 ### Flutter version pinning
 
-Dependency installation runs `dart tools/workspace_setup/configure.dart --stub-firebase`: the git-ignored `firebase_options_*.dart` files are absent on a clean checkout and `build_runner` must resolve `firebase_module.dart`'s imports, as in `pr_quality_check.yml`; the review only reads Dart, so the compile-only stubs are enough. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
+Dependency installation runs `dart tools/workspace_setup/configure.dart --stub-firebase --no-runners` (the review reads Dart only, so no generated runner is needed): the git-ignored `firebase_options_*.dart` files are absent on a clean checkout and `build_runner` must resolve `firebase_module.dart`'s imports, as in `pr_quality_check.yml`; the review only reads Dart, so the compile-only stubs are enough. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
 
 ### The "Annotate critical issues (advisory)" step does not fail
 
@@ -172,12 +173,12 @@ The iOS build and iOS distribute tasks are present but fully commented out.
 
 `pr_quality_check.yml` runs on every pull request to `main`, `develop` or `master`. It is the only pipeline that can block a merge.
 
-Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get`** → Gate 0 → Gate 1 (`arch_check`, then the gate tools' tests) → `dart tools/workspace_setup/configure.dart --stub-firebase` (the compile-only Firebase stubs first, then clean, pub get, gen-l10n, `build_runner`, barrels) → the barrel-drift check → Gate 2 → Gate 3 → the coverage report → Gate 4 → Gate 5 → the unused-dependency audit. No lock file is committed, so what holds a PR to the declared versions is Gate 4 (`dependency_sync --check`: every pubspec equals the catalog).
+Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get`** → Gate 0 → Gate 1 (`arch_check`, then the gate tools' tests) → `dart tools/workspace_setup/configure.dart --stub-firebase` (the compile-only Firebase stubs first, then clean, pub get, gen-l10n, `build_runner`, barrels) → the barrel-drift check → Gate 2 → Gate 3 → the coverage report → Gate 4 → Gate 5 → the unused-dependency audit → `composer describe --ci-matrix pr`, whose one line of JSON is the job's `platform_apps` output (the matrix of the `platforms` job). The configure step also generates every app's `runner: scaffold` runners (its step 7, `composer runners`), which git ignores, so the barrel-drift check never sees them. No lock file is committed, so what holds a PR to the declared versions is Gate 4 (`dependency_sync --check`: every pubspec equals the catalog).
 
 | # | Gate | Command | Blocking |
 |:--|:---|:---|:---|
 | 0 | Composition and generated facts match every app's manifest, and its declaration matches the source | `dart tools/composer/composer.dart verify` | yes |
-| 1 | Architecture rules (R1–R21) | `dart tools/arch_check/check.dart` | yes |
+| 1 | Architecture rules (R1–R22) | `dart tools/arch_check/check.dart` | yes |
 | 1 | …and the gate tools' own tests | `cd tools && dart test` | yes |
 | — | Barrels match the generator (RULE-75) | after `configure.dart`: fails if any tracked `*.dart` file changed or an untracked one appeared (`git diff --exit-code -- '*.dart'`, `git ls-files --others --exclude-standard -- '*.dart'`) | yes |
 | 2 | Static analysis — strict modes on, 0 issues incl. infos ([rules § 16](../reference/01_rules.md)) | `flutter analyze` | yes |
@@ -187,7 +188,7 @@ Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter p
 | 5 | Documentation accuracy and en ↔ vi parity | `dart tools/docs_check/check.dart` | yes |
 | — | Unused dependency audit (RULE-06) | `dart tools/unused_checker/check_unused_packages.dart` | yes |
 
-Gate 0 does more than regenerate: it holds each app's declaration — the `capabilities:` it claims, the platforms its packages run on, the `FirebaseOptions` its push needs, its env files, its entry point and smoke test — to the source ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), and the smoke test it requires is what Gate 3 later runs for every flavor. Gates 0 and 1 run first on purpose: they only read manifests, imports, pubspecs and source and need no codegen — `pub get` is enough, since `tools/` is a workspace member — so a composition or layering mistake fails right after dependency resolution instead of after the full setup, analyze and test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
+Gate 0 does more than regenerate: it holds each app's declaration — the `capabilities:` it claims, the platforms its packages run on, the `FirebaseOptions` its push needs, its env files, its entry point, smoke test and boot test, its runners — to the source ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), and the smoke test it requires is what Gate 3 later runs for every declared platform but the web, times every flavor. Gates 0 and 1 run first on purpose: they only read manifests, imports, pubspecs and source and need no codegen — `pub get` is enough, since `tools/` is a workspace member — so a composition or layering mistake fails right after dependency resolution instead of after the full setup, analyze and test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
 Every gate is a script under `tools/`, and a gate that has quietly stopped failing looks exactly like a clean PR. So the gates have tests of their own, in `tools/test/`, run as the second half of Gate 1: each test builds a throwaway workspace in a temp directory, runs the tool against it as a subprocess and asserts the exit code and output — a clean and a violating fixture for every `arch_check` rule, the `composer` checks, `dependency_sync --check`, `docs_check`, the barrel generator, `bootstrap`, the module generator's argument checks, `remove_sample`, the Firebase stubs and the coverage report. Change a gate, add a case there ([`../reference/03_tooling.md`](../reference/03_tooling.md#tests-for-the-tools-toolstest)). Like Gates 0 and 1 they need no codegen, which is why they run before the setup rather than in Gate 3.
 
@@ -200,7 +201,7 @@ Each package runs with `--coverage`, which leaves `<package>/coverage/lcov.info`
 > [!IMPORTANT]
 > A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. Move a type between packages and a `.freezed.dart` file can end up referencing a symbol it cannot see: analyze stays green while the APK build fails. Only a real build catches that class of error.
 
-That is what the fourth job, **`build`**, is for. It is not a numbered gate — it `needs: quality`, so it starts only once every gate has passed and a layering or analyze failure never pays for a Gradle build — but it is part of the same required check run, and a red build fails the workflow. It sets up **Java 17** (AGP 9 / Gradle 9 need 17+, and 17 matches the app's `jvmTarget`), Flutter from `.fvmrc`, runs `flutter pub get`, then `configure.dart --stub-firebase`, whose compile-only Firebase stubs — the three options files plus one `apps/mobile/android/app/src/<flavor>/google-services.json` per flavor, the stub from [`../getting-started/01_setup.md` §3.2](../getting-started/01_setup.md#32-no-firebase-project-yet-use-stubs), with the package name read from `build.gradle.kts` — are what a Gradle build needs, then, from `apps/mobile/`:
+That is what the fourth job, **`build`**, is for. It is not a numbered gate — it `needs: quality`, so it starts only once every gate has passed and a layering or analyze failure never pays for a Gradle build — but it is part of the same required check run, and a red build fails the workflow. It sets up **Java 17** (AGP 9 / Gradle 9 need 17+, and 17 matches the app's `jvmTarget`), Flutter from `.fvmrc`, runs `flutter pub get`, then `configure.dart --stub-firebase --no-runners` (the APK is built from the committed `android/`, so no generated runner is needed), whose compile-only Firebase stubs — the three options files plus one `apps/mobile/android/app/src/<flavor>/google-services.json` per flavor, the stub from [`../getting-started/01_setup.md` §3.2](../getting-started/01_setup.md#32-no-firebase-project-yet-use-stubs), with the package name read from `build.gradle.kts` — are what a Gradle build needs, then, from `apps/mobile/`:
 
 ```bash
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
@@ -227,12 +228,35 @@ dart tools/module_generator/generate.dart 1 smoke_n "" 3 3    # feature with no 
 dart tools/module_generator/generate.dart 3 smoke_nd         # data package whose domain does not exist
 dart tools/module_generator/generate.dart 4 smoke_core       # core package
 dart tools/module_generator/generate.dart 5 smoke_custom acme  # custom package
-dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+dart tools/composer/composer.dart new smoke_app --platforms android,ios,web,linux --modules smoke_p,smoke_d
 ```
 
-— a different state-management template and route contribution, the API-package wiring, a domain/data pair, the paths no other step renders (a feature with no state management and no route, a data package without a domain, a core package and a custom one), and a whole new app that composes the first four. `composer new` runs neither `pub get` nor codegen, so the job then runs `flutter pub get`, `dart run build_runner build --workspace` and the barrel generator for the new packages (RULE-75), and holds the result to `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, the own tests of the new `feature_smoke_p` and `feature_smoke_n` packages, the new app's `flutter test` (its DI smoke test and profile test), the DI smoke tests of `apps/mobile` and `apps/admin` (which now compose the new modules too), and `check_unused_packages`, which fails only when the unused dependency is in one of the generated packages. The API, domain and data packages generate no `test/`, so they are not run. Nothing is committed; the checkout is thrown away.
+— a different state-management template and route contribution, the API-package wiring, a domain/data pair, the paths no other step renders (a feature with no state management and no route, a data package without a domain, a core package and a custom one), and a whole new app that composes the first four. `composer new` runs neither `pub get` nor codegen and generates no runner, so the job then runs `flutter pub get`, `dart run build_runner build --workspace`, the barrel generator for the new packages (RULE-75) and `composer runners --app smoke_app --platform web`, and holds the result to `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, the own tests of the new `feature_smoke_p` and `feature_smoke_n` packages, the new app's `flutter test` (its DI smoke test and profile test), the DI smoke tests of `apps/mobile` and `apps/admin` (which now compose the new modules too), `check_unused_packages`, which fails only when the unused dependency is in one of the generated packages, and last the new app's boot test in headless Chrome — the same step as the `platforms` job. The API, domain and data packages generate no `test/`, so they are not run. Nothing is committed; the checkout is thrown away.
 
-Make **all four** jobs required status checks in the branch protection rule.
+Make **all five** jobs required status checks in the branch protection rule (`platforms` runs once per app, so each of its runs is a check of its own; it is skipped when no app declares the web or Linux).
+
+### The platform boots (RULE-83)
+
+A build is not a boot: admin's web build compiled, analysed clean and passed every unit test while it showed a blank page. Each app keeps `integration_test/boot_test.dart`, which runs `main()` on a device of one platform and fails unless `debugBootStage()` reaches `BootStage.shown` — the first screen drawn, not merely built ([`../reference/01_rules.md` § 21](../reference/01_rules.md#21-apps-and-composition)). No workflow lists apps or platforms: the rows come from the manifests through `dart tools/composer/composer.dart describe --ci-matrix pr|full`, so a new app or platform needs no workflow edit. Every boot is the `dev` flavor with `env.dev`, which is why composer V12 requires both.
+
+**Per PR — the `platforms` job of `pr_quality_check.yml`.** One job per app that declares the web or Linux (`--ci-matrix pr`: `{"app", "web", "linux"}`), after `quality`, on ubuntu, with a 40-minute timeout — a Linux keyring prompt never ends on its own. It runs `flutter pub get`, restores the `sqlite3.wasm` cache, runs `configure.dart --stub-firebase` (which generates the runners, the web database assets included), restores the build-hook cache, then:
+
+- **the web** — `browser-actions/setup-chrome` installs Chrome and the chromedriver of the same build; the driver listens on port 4444 and `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/boot_test.dart -d web-server --browser-name=chrome --headless --chrome-binary=<that Chrome>` boots the app with `--dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev`;
+- **Linux, twice**, with the Linux toolchain (`clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev`), Xvfb, `dbus-x11` and `gnome-keyring` installed, each in fresh XDG directories: once under `xvfb-run -a dbus-run-session` with `gnome-keyring-daemon --unlock --components=secrets`, after which the step asks the Secret Service's default collection over D-Bus for an item and fails if the boot stored none (a fallback to memory would otherwise pass unnoticed); once with `DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus`, where libsecret fails at once and `secure_storage: memory_fallback` keeps secure values in memory — the app must still boot.
+
+**The full matrix — `platforms_full.yml`.** The platforms a PR does not boot. Its `plan` job prints `--ci-matrix full` (one row per app and declared Android, iOS, Windows or macOS: `{"app", "platform", "os", "flavor", "boot"}`) and the apps that declare the web; then:
+
+| Job | Does |
+|:--|:--|
+| `boot` | per row, on the row's `os`: macOS and Windows run the boot test; iOS builds for the simulator, then boots on an iPhone simulator; Android builds the debug APK, then boots on an emulator (API 34, x86_64, KVM enabled). `flavor` is `--flavor dev` for a committed Android or iOS runner, else `--dart-define=APP_FLAVOR=dev`. A row with `boot: firebase` (the derived push is on) boots only when `FIREBASE_CONFIG_ARCHIVE` is set; without it the leg builds and posts a notice |
+| `web-release` | every web app, `flutter build web --release`, then with `--wasm` — compile only: a tree-shaking, minification or dart2wasm regression never shows in the PR's debug boot |
+| `report` | on a **scheduled** failure only: opens the issue "Platforms (full matrix) failing", or comments on it while it is open, with the failed jobs and the run URL |
+
+It runs on a push to `main` that touches `platform/**`, `modules/**`, `tools/composer/**`, `tools/workspace_setup/**`, `tools/shared/**`, `tools/barrel_generator/**`, `apps/**`, `pubspec_dependencies.yaml`, `.fvmrc` or the workflow file itself; on `merge_group`; weekly, Monday 03:17 UTC (no lockfile is committed, so this catches dependency float, and runner-image drift); on a pull request while it carries the label `ci:platforms` (when the label is added, then on every push); and by hand (`workflow_dispatch`). The concurrency group includes the event name, so a pending weekly run is never cancelled by a push to `main`; on a pull request a new push cancels the older run. GitHub has no `ci:platforms` label by default: create it once, and run the workflow by hand once before you rely on it — macOS, Windows, iOS and the emulator are not run anywhere else.
+
+**Caches.** No lockfile is committed, so every `subosito/flutter-action` keys its pub cache on `pubspec_dependencies.yaml` and every `pubspec.yaml` (`pub-cache-key`); the default key hashes `**/pubspec.lock` and would never change. The `sqlite3.wasm` cache (`~/.cache/flutter_monorepo/sqlite3`, key `sqlite3-wasm-<os>-<hash of pubspec_dependencies.yaml>`) is restored **before** `configure.dart`, whose last step reads it and fills it on a miss; the build-hook cache (`.dart_tool/hooks_runner/shared`, key `hooks-runner-…`) is restored **after**, because `configure.dart`'s `flutter clean` deletes `.dart_tool/`. `composer runners` checks the wasm's sha256 on every copy, so an edited cache fails. `platforms_full.yml` also caches Gradle (`setup-java` `cache: gradle`), CocoaPods (`apps/<id>/ios/Pods`, on the app's `Podfile` and the catalog) and Windows' `build/windows/x64/extracted`. Codegen output is never cached: every leg runs `configure.dart` as an adopter does.
+
+The jobs that need no generated runner — `build` here and `flutter_build.yml` (both build Android from the committed runner) and `code_review.yml` (it reads Dart only) — run `configure.dart --no-runners`. The index of every workflow, and the exact commands for one platform locally, are in `.github/workflows/README.md` and [`../guides/13_app_composition.md` § 7](../guides/13_app_composition.md#run-and-boot-a-platform).
 
 **Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 0–5 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
@@ -258,7 +282,8 @@ Every file below is gitignored, so a clean runner has none of them; the release 
 | `APP_STORE_CONNECT_API_KEY_P8_B64` | `paths.app_store_connect_key_filepath` from `Config.yaml` — which must end in `AuthKey_<api_key_id>.p8`, or the step fails | `fastlane.yml` — `distribute_store` + iOS | `base64 -w0 AuthKey_XXXX.p8` |
 | `FIREBASE_ANDROID_APP_ID` | — | `flutter_build.yml` | Firebase App ID, e.g. `1:1234567890:android:abcdef` |
 | `GEMINI_API_KEY` | — | `code_review.yml` | Create at <https://aistudio.google.com/app/apikey> |
-| `GITHUB_TOKEN` | — | `code_review.yml` | Provided automatically by GitHub — do not create it |
+| `GITHUB_TOKEN` | — | `code_review.yml`, `platforms_full.yml` (`report`) | Provided automatically by GitHub — do not create it |
+| `FIREBASE_CONFIG_ARCHIVE` | extracted into `apps/<id>/` before `configure.dart` (which then stubs only what is still absent) | `platforms_full.yml` — optional: without it the legs where push is on (`boot: firebase`) build but do not boot | `cd apps/mobile && tar -czf - lib/firebase/firebase_options_*.dart android/app/src/*/google-services.json ios/flavors/*/GoogleService-Info.plist \| base64 -w0` |
 
 Add them under **Settings → Secrets and variables → Actions → New repository secret**.
 
@@ -329,7 +354,7 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 3 smoke_nd
 #    dart tools/module_generator/generate.dart 4 smoke_core
 #    dart tools/module_generator/generate.dart 5 smoke_custom acme
-#    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+#    dart tools/composer/composer.dart new smoke_app --platforms android,ios,web,linux --modules smoke_p,smoke_d
 #    flutter pub get && dart run build_runner build --workspace
 #    (for each of modules/smoke_p/{feature,api} modules/smoke_d/{domain,data} modules/smoke_n/feature
 #     modules/smoke_nd/data platform/infra/smoke_core platform/infra/smoke_custom: barrel_generator <dir>/lib)
@@ -338,6 +363,12 @@ dart tools/unused_checker/check_unused_packages.dart
 #    (cd modules/smoke_p/feature && flutter test) && (cd modules/smoke_n/feature && flutter test)
 #    (cd apps/smoke_app && flutter test)
 #    (cd apps/mobile && flutter test) && (cd apps/admin && flutter test)   # the existing apps still boot
+#    dart tools/composer/composer.dart runners --app smoke_app --platform web, then its web boot (below)
+
+# 4b. The platforms job: the boot test of each app on the web and Linux
+#     (chromedriver of your Chrome's build on port 4444 for the web; a display
+#     and a Secret Service for Linux — guide 13 § 7)
+(cd apps/admin && flutter test integration_test/boot_test.dart -d linux --dart-define-from-file=env.dev --dart-define=APP_FLAVOR=dev)
 
 # 5. The build job of pr_quality_check.yml (needs the Firebase stubs or real
 #    files — see below) — note the cd
@@ -364,7 +395,7 @@ Open items, in rough priority order:
 - [ ] `flutter_build.yml` — run the six `pr_quality_check.yml` gates before building, so a manual dispatch cannot ship unverified code
 - [ ] `flutter_build.yml` / `fastlane.yml` — add staging keystore secrets, restore `apps/mobile/android/key-stg.properties` from them and drop the `allowDevKeystoreForStaging` opt-in, so staging stops being signed with the public dev key ([§2](#2-flutter_buildyml--build-and-distribute))
 - [ ] `code_review.yml` — decide whether to uncomment `exit 1` (only after you trust the reviewer's false-positive rate)
-- [ ] `flutter_build.yml` — consider `ubuntu-latest` instead of `macos-latest` for Android-only builds
+- [ ] `platforms_full.yml` — create the `ci:platforms` label and run the workflow once by hand: its macOS, Windows, iOS and emulator legs have never run in this repository
 - [ ] `flutter_build.yml` — make `FIREBASE_ANDROID_APP_ID` per flavor ([§2](#2-flutter_buildyml--build-and-distribute))
 - [ ] `fastlane.yml` — set up iOS code signing (e.g. `match`) if iOS is to build on GitHub-hosted runners
 

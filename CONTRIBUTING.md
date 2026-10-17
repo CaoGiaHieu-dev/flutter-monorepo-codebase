@@ -42,7 +42,7 @@ in its order. Run them from the repository root:
 ```bash
 flutter pub get                                     # lock files are generated, never committed
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R21
+dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R22
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
 dart tools/workspace_setup/configure.dart --stub-firebase   # codegen (skip if you just ran it)
 # CI then fails on barrel drift (RULE-75): on a clean checkout, the line above must leave no tracked

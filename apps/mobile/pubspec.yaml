@@ -67,7 +67,7 @@ dependencies:
   # composed modules, which declare their own. This list used to name 17
   # packages left over from when the shell lived in this package; the app
   # imports two of them.
-  firebase_core: "^4.13.0"     # lib/firebase/firebase_module.dart
+  firebase_core: ^5.0.0     # lib/firebase/firebase_module.dart
   injectable: ^3.0.0           # lib/di/injection.dart
 
 dev_dependencies:

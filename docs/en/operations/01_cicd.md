@@ -45,7 +45,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 
 1. **Checkout** — `actions/checkout@v7`.
 2. **Set Up Java** — Oracle distribution, **Java 17**. Matches `sourceCompatibility`/`targetCompatibility` in `apps/mobile/android/app/build.gradle.kts`.
-3. **Set Up Flutter** — `subosito/flutter-action@v2` with `flutter-version-file: .fvmrc`, so the version is the one `.fvmrc` pins (**`3.47.4`** today) — the same single source `pr_quality_check.yml` and `code_review.yml` read. Channel `stable`, cache enabled.
+3. **Set Up Flutter** — `subosito/flutter-action@v2` with `flutter-version-file: .fvmrc`, so the version is the one `.fvmrc` pins (**`3.47.9`** today) — the same single source `pr_quality_check.yml` and `code_review.yml` read. Channel `stable`, cache enabled.
 4. **Restore gitignored build inputs from secrets** — for the chosen flavor only, each from a base64 secret ([§7](#7-secrets)):
    - `firebase_options_<flavor>.dart` in `apps/mobile/lib/firebase/`; the two other flavors get a compile-only stub, because `firebase_module.dart` imports all three and injectable registers only the built flavor's options;
    - `apps/mobile/android/app/src/<flavor>/google-services.json` — the `com.google.gms.google-services` Gradle plugin fails the build without it;

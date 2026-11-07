@@ -93,9 +93,9 @@ class PubspecGenerator {
   /// The root `pubspec.yaml`'s `environment:` — every workspace member
   /// declares the same one, so a new package copies it instead of carrying a
   /// literal in the template that drifts from `.fvmrc` (it once said
-  /// `>=3.47.0` while the repo pinned 3.47.4).
+  /// `>=3.47.0` while the repo pinned 3.47.9).
   static ({String sdk, String flutter}) _rootEnvironment() {
-    const fallback = (sdk: '>=3.13.3 <4.0.0', flutter: '>=3.47.4');
+    const fallback = (sdk: '>=3.13.3 <4.0.0', flutter: '>=3.47.9');
     try {
       final env = (loadYaml(
         File('pubspec.yaml').readAsStringSync(),

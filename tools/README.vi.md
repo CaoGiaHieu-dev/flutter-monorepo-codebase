@@ -923,7 +923,7 @@ Khi sửa một gate, hãy thêm case lẽ ra đã bắt được bug đó (RULE
 ## 🔑 Prerequisites
 
 - **Dart SDK**: >= 3.13.3
-- **Flutter SDK**: >= 3.47.4 (`.fvmrc` ghim `3.47.4`; FVM là tùy chọn)
+- **Flutter SDK**: >= 3.47.9 (`.fvmrc` ghim `3.47.9`; FVM là tùy chọn)
 - **Ruby**: chỉ cho Fastlane và build CI/CD (workflow Fastlane cài 3.3)
 - **Gemini API Key**: Chỉ cần cho Code Review Tool
 - **Firebase CLI** (`npm install -g firebase-tools`, đã `firebase login`): Chỉ cần cho `firebase_config.dart`

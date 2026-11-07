@@ -366,7 +366,7 @@ Trừ khi bạn truyền `skip_setup:true`, mọi lane đều gọi `setup_flutt
 | `flutter_version` | Có FVM | Không có FVM |
 |:---|:---|:---|
 | `stable` (hoặc rỗng) | `fvm install` — bản `.fvmrc` ghim | `flutter` trên PATH, giữ nguyên |
-| cụ thể, ví dụ `3.47.4` | phải bằng bản `.fvmrc` ghim, không thì lane dừng (chuyển phiên bản sẽ ghi đè `.fvmrc` đang được track) | phải bằng `flutter --version`, không thì lane dừng |
+| cụ thể, ví dụ `3.47.9` | phải bằng bản `.fvmrc` ghim, không thì lane dừng (chuyển phiên bản sẽ ghi đè `.fvmrc` đang được track) | phải bằng `flutter --version`, không thì lane dừng |
 
 Không có gì bị nâng cấp ngầm. `flutter_upgrade:true` (phải tự bật, chỉ khi không dùng FVM) chạy `flutter channel stable` + `flutter upgrade --force` trước. `flutter precache --ios` chỉ chạy cho bản build iOS trên macOS.
 

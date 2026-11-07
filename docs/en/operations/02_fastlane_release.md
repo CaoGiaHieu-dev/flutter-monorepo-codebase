@@ -365,7 +365,7 @@ Unless you pass `skip_setup:true`, every lane calls `setup_flutter_environment`.
 | `flutter_version` | With FVM | Without FVM |
 |:---|:---|:---|
 | `stable` (or empty) | `fvm install` — the `.fvmrc` pin | the `flutter` on PATH, as is |
-| exact, e.g. `3.47.4` | must equal the `.fvmrc` pin, else the lane stops (switching would rewrite the tracked `.fvmrc`) | must equal `flutter --version`, else the lane stops |
+| exact, e.g. `3.47.9` | must equal the `.fvmrc` pin, else the lane stops (switching would rewrite the tracked `.fvmrc`) | must equal `flutter --version`, else the lane stops |
 
 Nothing is upgraded implicitly. `flutter_upgrade:true` (opt-in, non-FVM only) runs `flutter channel stable` + `flutter upgrade --force` first. `flutter precache --ios` runs only for iOS builds on macOS.
 

@@ -12,10 +12,10 @@
 # Flutter configuration
 # `stable` = use whatever Flutter this machine resolves (the .fvmrc pin when
 # fvm is installed, otherwise the flutter on PATH). An exact version (e.g.
-# "3.47.4") must match that Flutter or the lane stops. Nothing is upgraded
+# "3.47.9") must match that Flutter or the lane stops. Nothing is upgraded
 # unless you pass `flutter_upgrade:true`.
 flutter:
-  default_version: "stable" # e.g., "3.47.4", "stable"
+  default_version: "stable" # e.g., "3.47.9", "stable"
 
 # Default app version to use if not specified when building
 default_app_version: "1.0.0" # e.g., "1.0.0"

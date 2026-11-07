@@ -11,7 +11,7 @@
 
 | Thành phần | Phiên bản | Con số này lấy từ đâu |
 | :--- | :--- | :--- |
-| Flutter SDK | **3.47.4** trở lên | `pubspec.yaml` → `environment.flutter: ">=3.47.4"` |
+| Flutter SDK | **3.47.9** trở lên | `pubspec.yaml` → `environment.flutter: ">=3.47.9"` |
 | Dart SDK | **3.13.3** trở lên | `pubspec.yaml` → `environment.sdk: ">=3.13.3 <4.0.0"` |
 | JDK | **17 trở lên** (build được trên 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` là mức bytecode đích, không phải giới hạn trên |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
@@ -29,7 +29,7 @@ Repo có ghim sẵn phiên bản Flutter trong `.fvmrc`:
 
 ```json
 {
-  "flutter": "3.47.4"
+  "flutter": "3.47.9"
 }
 ```
 
@@ -39,10 +39,10 @@ Bạn dùng đường nào cũng được — chọn một và giữ nhất quá
 # Đường A — FVM (khuyến nghị khi làm nhóm, cả team dùng đúng 1 phiên bản)
 dart pub global activate fvm
 fvm install            # cài đúng phiên bản ghi trong .fvmrc
-fvm flutter --version  # phải in ra 3.47.4
+fvm flutter --version  # phải in ra 3.47.9
 
 # Đường B — Flutter SDK cài toàn cục
-flutter --version      # phải >= 3.47.4
+flutter --version      # phải >= 3.47.9
 ```
 
 > [!NOTE]

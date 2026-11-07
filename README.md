@@ -525,7 +525,7 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 ## 🚀 Initialization & Local Development Guide
 
 ### 1. Environment Preparation
-- **Flutter**: >= 3.47.4 (Stable)
+- **Flutter**: >= 3.47.9 (Stable)
 - **Dart SDK**: >= 3.13.3
 - **JDK**: 17 or newer (CI builds with 17; `apps/mobile/android/app/build.gradle.kts` targets Java 17 bytecode, which is not a ceiling)
 - **Ruby**: >= 3.2 (for Fastlane)

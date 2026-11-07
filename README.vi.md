@@ -525,7 +525,7 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 ## 🚀 Hướng Dẫn Khởi Tạo & Phát Triển Cục Bộ
 
 ### 1. Chuẩn Bị Môi Trường
-- **Flutter**: >= 3.47.4 (Stable)
+- **Flutter**: >= 3.47.9 (Stable)
 - **Dart SDK**: >= 3.13.3
 - **JDK**: 17 trở lên (CI build với 17; `apps/mobile/android/app/build.gradle.kts` nhắm bytecode Java 17, đó không phải mức trần)
 - **Ruby**: >= 3.2 (cho Fastlane)

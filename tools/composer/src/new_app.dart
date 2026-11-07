@@ -693,7 +693,7 @@ Map<String, String> _catalogVersions(String? root) {
 /// The root `pubspec.yaml`'s `environment:`, which every workspace member
 /// copies.
 ({String sdk, String flutter}) _rootEnvironment(String? root) {
-  const fallback = (sdk: '>=3.13.3 <4.0.0', flutter: '>=3.47.4');
+  const fallback = (sdk: '>=3.13.3 <4.0.0', flutter: '>=3.47.9');
   if (root == null) return fallback;
   try {
     final doc = loadYaml(File(p.join(root, 'pubspec.yaml')).readAsStringSync());

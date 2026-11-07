@@ -929,7 +929,7 @@ When you change a gate, add the case that would have caught the bug (RULE-64).
 ## 🔑 Prerequisites
 
 - **Dart SDK**: >= 3.13.3
-- **Flutter SDK**: >= 3.47.4 (`.fvmrc` pins `3.47.4`; FVM is optional)
+- **Flutter SDK**: >= 3.47.9 (`.fvmrc` pins `3.47.9`; FVM is optional)
 - **Ruby**: only for Fastlane and CI/CD builds (the Fastlane workflow sets up 3.3)
 - **Gemini API key**: Only for the code review tool
 - **Firebase CLI** (`npm install -g firebase-tools`, logged in with `firebase login`): Only for `firebase_config.dart`

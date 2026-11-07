@@ -410,7 +410,7 @@ modules: []
 
     TempWorkspace generationWorkspace({Map<String, String> extra = const {}}) =>
         TempWorkspace.create({
-          'pubspec.yaml': 'name: ws\nenvironment:\n  sdk: ">=3.13.3 <4.0.0"\n  flutter: ">=3.47.4"\nworkspace:\n  - apps/mobile\n',
+          'pubspec.yaml': 'name: ws\nenvironment:\n  sdk: ">=3.13.3 <4.0.0"\n  flutter: ">=3.47.9"\nworkspace:\n  - apps/mobile\n',
           'apps/mobile/app_manifest.yaml': '''
 app:
   id: mobile

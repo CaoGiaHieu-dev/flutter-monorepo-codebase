@@ -46,7 +46,7 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 
 1. **Checkout** — `actions/checkout@v7`.
 2. **Set Up Java** — bản Oracle, **Java 17**. Khớp với `sourceCompatibility`/`targetCompatibility` trong `apps/mobile/android/app/build.gradle.kts`.
-3. **Set Up Flutter** — `subosito/flutter-action@v2` với `flutter-version-file: .fvmrc`, nên phiên bản là bản `.fvmrc` ghim (hiện là **`3.47.4`**) — cùng một nguồn duy nhất mà `pr_quality_check.yml` và `code_review.yml` đọc. Kênh `stable`, bật cache.
+3. **Set Up Flutter** — `subosito/flutter-action@v2` với `flutter-version-file: .fvmrc`, nên phiên bản là bản `.fvmrc` ghim (hiện là **`3.47.9`**) — cùng một nguồn duy nhất mà `pr_quality_check.yml` và `code_review.yml` đọc. Kênh `stable`, bật cache.
 4. **Restore gitignored build inputs from secrets** — chỉ cho flavor được chọn, mỗi file lấy từ một secret base64 ([§7](#7-secrets)):
    - `firebase_options_<flavor>.dart` trong `apps/mobile/lib/firebase/`; hai flavor còn lại nhận một stub chỉ để biên dịch, vì `firebase_module.dart` import cả ba file còn injectable chỉ đăng ký options của flavor đang build;
    - `apps/mobile/android/app/src/<flavor>/google-services.json` — thiếu nó thì plugin Gradle `com.google.gms.google-services` làm build fail;
